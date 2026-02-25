@@ -293,6 +293,73 @@ Custom Hook (usePerpetualToken)
 
 ## 六、修复记录
 
+### 2026-02-14 (前端性能优化 + 首页数据修复)
+
+**修复 1: 无限循环 (PerpetualTradingTerminal 60次/秒 re-render)**
+- 原因: `useUnifiedWebSocket.ts` useEffect deps 包含 `onConnect/onDisconnect/onError` 函数引用，每次 render 创建新函数 → deps 变化 → 重新执行 → 再次 render
+- 修复: 使用 `useRef` 存储回调函数引用，useEffect deps 从 `[enabled, onConnect, onDisconnect]` 改为 `[enabled]`
+- 文件: `frontend/src/hooks/common/useUnifiedWebSocket.ts`
+
+**修复 2: WebSocket 自动连接恢复**
+- 原因: `providers.tsx` 使用 `useAutoConnectWebSocket` (死代码，hardcoded `isConnected: false`)
+- 修复: 改用 `useUnifiedWebSocket({ enabled: true })` (真实 WS 管理器)
+- 文件: `frontend/src/app/providers.tsx`
+
+**修复 3: 移除不正确的永续交易警告横幅**
+- 原因: 横幅检查 `poolState?.perpEnabled` (链上状态)，但永续合约通过 Matching Engine 运行，不依赖链上标志
+- 修复: 移除黄色警告横幅，badge 始终显示绿色 "Perpetual"
+- 文件: `frontend/src/components/perpetual/PerpetualTradingTerminal.tsx`
+
+**修复 4: 高频 store 更新导致级联 re-render**
+- 原因: `tradingDataStore.setOrderBook/addRecentTrade/setTokenStats` 每次都 merge `lastUpdated: Date.now()`，所有订阅 store 的组件 re-render
+- 修复: 移除高频 setter 中的 `lastUpdated`，仅保留在低频 setter (setPositions) 中
+- 文件: `frontend/src/lib/stores/tradingDataStore.ts`, `frontend/src/hooks/common/useUnifiedWebSocket.ts`
+
+**修复 5: 首页代币卡片 volume/traders/priceChange 显示为 0**
+- 原因: MarketOverview 仅依赖 WS market_data，但 volume 来自永续交易 (trades24h)，无永续交易时为 0
+- 修复: 添加 HTTP fallback 从 `/api/v1/market/tickers` 获取数据；使用 WS trades24h 作为交易笔数
+- 文件: `frontend/src/components/discovery/MarketOverview.tsx`
+
+**修复 6: 降低 HTTP 轮询频率**
+- WalletBalanceContext: 15s → 60s
+- useMarketData: 5s → 30s
+- 文件: `frontend/src/contexts/WalletBalanceContext.tsx`, `frontend/src/hooks/common/useMarketData.ts`
+
+**修复 7: 现货交易页面所有数据显示 $0 (ABI 字段不匹配)**
+- 原因: `usePoolState.ts` 中 TokenFactory ABI 的 `getPoolState` 声明了 12 个 struct 字段（含 `lendingEnabled: bool`），但部署的合约只返回 11 个字段。viem 严格校验 boolean 值，误将 `metadataURI` 的 string 长度字节 (24=0x18) 解析为 bool → `InvalidBytesBooleanError`
+- 修复: 从 ABI、`PoolState` 接口、`rawState` 类型中移除 `lendingEnabled` 字段（11 个字段匹配合约）。同步清理 `useTokenList.ts` 中的 `lendingEnabled` 引用
+- 文件: `frontend/src/hooks/spot/usePoolState.ts`, `frontend/src/hooks/common/useTokenList.ts`
+
+**修复 8: K线图表黑屏 (无历史数据时链上价格兜底)**
+- 原因: K线数据存储在 Redis 中，本地开发需要 Redis 运行。Redis 未启动或无历史交易时，API 返回空数据 → `wsChartData` 为空 → 图表显示黑色遮罩
+- 修复: 在 `TokenPriceChart.tsx` 中添加 `usePoolState` 链上价格兜底。当 WS K线为空且链上有价格时，生成种子蜡烛（seed candle）使图表显示当前价格线而非黑屏
+- 文件: `frontend/src/components/spot/TokenPriceChart.tsx`
+
+**修复 9: 清理诊断日志**
+- 移除 `usePoolState.ts`、`TradingTerminal.tsx`、`TokenPriceChart.tsx`、`page.tsx` 中为排查问题临时添加的 `console.log` 诊断代码
+- 文件: 上述 4 个文件
+
+**⚠️ 不可回退的关键修复 (回退会导致严重问题):**
+1. `useUnifiedWebSocket.ts` 的 useRef 回调模式 — 回退会导致无限循环
+2. `providers.tsx` 使用 `useUnifiedWebSocket` — 回退会断开 WS 连接
+3. `tradingDataStore.ts` 高频 setter 不设置 `lastUpdated` — 回退会导致级联 re-render
+4. `useUnifiedWebSocket.ts` 的 `handleMessage` 不调用 `store.setLastUpdated()` — 回退同上
+5. `usePoolState.ts` ABI 保持 11 个字段 — 添加回 `lendingEnabled` 会导致 InvalidBytesBooleanError
+
+**修改的文件:**
+- `frontend/src/hooks/common/useUnifiedWebSocket.ts` — useRef 回调 + 移除 handleMessage 中的 setLastUpdated
+- `frontend/src/app/providers.tsx` — 改用 useUnifiedWebSocket
+- `frontend/src/components/perpetual/PerpetualTradingTerminal.tsx` — 移除警告横幅
+- `frontend/src/lib/stores/tradingDataStore.ts` — 高频 setter 移除 lastUpdated
+- `frontend/src/components/discovery/MarketOverview.tsx` — HTTP fallback + uniqueTraders
+- `frontend/src/contexts/WalletBalanceContext.tsx` — 轮询频率降低
+- `frontend/src/hooks/common/useMarketData.ts` — 轮询频率降低
+- `frontend/src/hooks/spot/usePoolState.ts` — ABI 修复 (移除 lendingEnabled) + 移除诊断日志
+- `frontend/src/hooks/common/useTokenList.ts` — 移除 lendingEnabled 引用
+- `frontend/src/components/spot/TokenPriceChart.tsx` — 链上价格种子蜡烛兜底 + 移除诊断日志
+- `frontend/src/components/common/TradingTerminal.tsx` — 移除诊断日志
+- `frontend/src/app/trade/[address]/page.tsx` — 移除诊断日志
+
 ### 2026-02-10 (V2 全项目安全审计修复 — 11 个发现)
 
 **V1 架构已确认废弃，以下修复全部针对 V2 架构。**
@@ -460,9 +527,179 @@ cast send $SETTLEMENT_ADDRESS "setAuthorizedMatcher(address,bool)" $MATCHER_ADDR
 
 ---
 
-**最后更新**: 2026-02-10
+**最后更新**: 2026-02-25
 **下次修改前必须先读取本文件**
-**V2 Settlement 架构已添加！V1 已废弃！**
+**V2 Settlement 架构已添加！SettlementV2 (Merkle) 已部署！**
+
+---
+
+## 十一、SettlementV2 Merkle 提款系统 (2026-02-25)
+
+### 合约部署信息
+
+| 合约 | 地址 | 网络 |
+|------|------|------|
+| SettlementV2 | `0x08c3c611f3d0b506Ee494634a212C4d12CC5Fc6A` | Base Sepolia |
+| Collateral (WETH) | `0x4200000000000000000000000000000000000006` | Base Sepolia |
+| Platform Signer | `0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE` | — |
+
+### 架构说明 (dYdX v3 模式)
+
+```
+用户 deposit WETH → SettlementV2
+         ↓
+链下撮合引擎交易 → mode2PnLAdjustments 更新
+         ↓
+snapshot 模块采集用户权益 → 构建 Merkle tree → 提交 root 到链上
+         ↓
+用户请求提款 → 后端生成 proof + EIP-712 签名
+         ↓
+前端提交到链上 → SettlementV2 验证 proof + 签名 → 转账 WETH
+```
+
+### V1 → V2 资金迁移策略
+
+**策略: V1/V2 共存 + 自然迁移（不做强制迁移）**
+
+1. **新用户**: 直接通过前端 deposit WETH 到 SettlementV2
+2. **老用户**: V1 (Settlement) 余额继续可用，可通过 V1 `withdraw()` 提出后重新 deposit 到 V2
+3. **后端智能路由**: `server.ts` 根据 `SETTLEMENT_V2_ADDRESS` 环境变量自动选择路径：
+   - 有 V2 地址 → Merkle 模式（snapshot → submitRoot → 用户 proof 提款）
+   - 无 V2 地址 → V1 模式（无链上提交，仅链下记账）
+4. **batchSettlePnL 保留**: 作为 V1 补充工具，`/api/admin/settle-pnl` 端点继续可用
+5. **前端**: deposit/withdraw UI 统一指向 V2 合约
+
+### 关键文件
+
+| 层 | 文件 | 用途 |
+|---|------|------|
+| 合约 | `SettlementV2.sol` | Merkle 验证 + EIP-712 提款 |
+| 后端 | `snapshot.ts` | 定期快照 + Merkle tree + submitRoot |
+| 后端 | `withdraw.ts` | 生成 proof + EIP-712 签名 |
+| 后端 | `merkle.ts` | Merkle tree 构建 + proof |
+| 后端 | `server.ts` | V2 智能路由 + 提款 API |
+| 前端 | `usePerpetualV2.ts` | deposit + withdraw hooks |
+| 前端 | `contracts.ts` | SETTLEMENT_V2 地址 + ABI |
+
+---
+
+## 十、Batch 5 安全审计修复记录
+
+### 2026-02-24 (全面系统安全审计 — P0 资金安全修复)
+
+**P0-1: 禁用 SKIP_SIGNATURE_VERIFY 测试开关**
+- 风险: 环境变量 `SKIP_SIGNATURE_VERIFY=true` 时任何人可伪造任意用户订单
+- 修复: 改为仅在 `NODE_ENV=test` + `SKIP_SIGNATURE_VERIFY=true` 同时满足时才生效
+- 启动时打印醒目警告
+- 文件: `backend/src/matching/server.ts`
+
+**P0-4: emergencyRescue 双花修复**
+- 风险: 紧急救援发送 ETH 但不扣减 `balances` 映射 → 用户可再次 `withdraw()` 双花
+- 修复: 先从 `balances[user]` 扣除，不足部分从 `lockedBalances[user]` 扣除
+- 添加 `require(available + locked >= amount)` 检查
+- 文件: `contracts/src/common/Vault.sol`
+
+**P0-2: PriceFeed Uniswap V2 价格源（毕业后价格链修复）**
+- 风险: 代币毕业到 Uniswap V2 后，PriceFeed 价格冻结 → 永续合约用过时价格交易/清算
+- 修复:
+  - `PriceFeed.sol`: 新增 `updateTokenPriceFromUniswap(token)` — 无权限限制，任何 Keeper 可调用刷新价格
+  - `PriceFeed.sol`: 新增 `tokenUniswapPair` 映射 + `setTokenUniswapPair()` 设置函数
+  - `TokenFactory.sol`: `_graduate()` 成功后存储 `uniswapPairs[tokenAddress] = pairAddress`
+  - `TokenFactory.sol`: 毕业时自动通知 PriceFeed 设置 Uniswap Pair
+  - `IPriceFeed.sol`: 接口新增 `updateTokenPriceFromUniswap`, `setTokenUniswapPair`, `tokenUniswapPair`, `setWETH`
+  - 后端 `server.ts`: 已有 Uniswap V2 价格读取逻辑（`graduatedTokens` Map + `getReserves()`）
+- 文件: `PriceFeed.sol`, `IPriceFeed.sol`, `TokenFactory.sol`
+
+**P0-3: 保险基金耗尽处理（验证已实现）**
+- Settlement.sol `_settleProfit()`: 已处理保险基金不足 → 支付可用余额 + 发出 `ADLTriggered` 事件
+- Vault.sol: 已有 `pendingProfits` + `claimPendingProfit()` + `claimPartialPendingProfit()` (H-016)
+- Liquidation.sol: 已有 `_handleInsuranceShortfall()` → 触发 ADL → 暂停交易
+
+**验证结果:**
+- `forge build --force` ✅ 编译成功
+- `forge test` ✅ 345 tests passed, 0 failed
+- `npx next build` ✅ 13 pages compiled
+
+**修改的文件:**
+- `backend/src/matching/server.ts` — P0-1 签名验证改为 NODE_ENV=test 限定 + 启动警告
+- `contracts/src/common/Vault.sol` — P0-4 emergencyRescue 添加余额扣减
+- `contracts/src/common/PriceFeed.sol` — P0-2 新增 Uniswap V2 价格读取 + Pair 映射
+- `contracts/src/interfaces/IPriceFeed.sol` — P0-2 接口更新
+- `contracts/src/spot/TokenFactory.sol` — P0-2 毕业时存储 Pair + 通知 PriceFeed
+
+**⚠️ 部署注意:**
+- PriceFeed 需要重新部署并调用 `setWETH(0x4200000000000000000000000000000000000006)`
+- TokenFactory 需要重新部署（新增 `uniswapPairs` 映射）
+- Vault 需要重新部署（emergencyRescue 逻辑变更）
+- 已毕业代币需要 owner 手动调用 `PriceFeed.setTokenUniswapPair(token, pair)` 设置 Pair
+
+### 2026-02-24 (Phase 2: P1 功能正确性修复)
+
+**P1-1: 精度统一到 1e18（验证已实现）**
+- Settlement.sol 已有 `_toStandardDecimals` / `_fromStandardDecimals` 处理非 18 位代币
+- 无需额外修改
+
+**P1-2: 合约层滑点保护（验证已实现）**
+- TokenFactory.sol `buy()` 和 `sell()` 已有 `require(tokensOut >= minTokensOut)` / `require(ethOut >= minEthOut)` 检查
+- 无需额外修改
+
+**P1-3: 活跃仓位提款延迟**
+- 风险: 用户有活跃仓位（locked 资金）时立即提款可能影响系统偿付能力
+- 修复:
+  - 新增 `withdrawalDelay` 可配置延迟（owner 设置，最大 7 天）
+  - 新增 `WithdrawRequest` 结构体 + `pendingWithdrawals` 映射
+  - 修改 `withdraw()`: 有 locked 资金且 delay>0 时，提款进入 pending 队列
+  - 新增 `executeWithdraw()`: 超过延迟时间后可执行
+  - 新增 `cancelWithdraw()`: 用户可取消待处理提款
+  - 新增事件: `WithdrawRequested`, `WithdrawExecuted`, `WithdrawCancelled`, `WithdrawalDelaySet`
+  - 新增错误: `WithdrawNotReady`, `NoPendingWithdraw`, `WithdrawDelayTooLong`
+- 文件: `contracts/src/common/Vault.sol`
+
+**P1-4: 链上 ADL 超时触发**
+- 风险: `ADLTriggered` 事件后如果撮合引擎宕机/未响应，系统陷入僵局
+- 修复:
+  - 新增状态: `adlActive` (bool) + `lastADLTriggerTime` (uint256)
+  - `_settleProfit()` 保险基金耗尽时自动激活 ADL 状态
+  - 新增 `forceADL(pairId)`: 任何人可在 5 分钟超时后强制平仓指定仓位
+  - 新增 `resolveADL()`: matcher/owner 可手动解除 ADL 状态
+  - `executeADL()` 执行后自动重置 ADL 状态
+  - 保险基金恢复时自动解除 ADL 状态
+  - 新增常量: `ADL_TIMEOUT = 5 minutes`
+  - 新增事件: `ForceADLExecuted`, `ADLResolved`
+  - 新增错误: `NoActiveADL`, `ADLTimeoutNotReached`
+- 文件: `contracts/src/perpetual/Settlement.sol`
+
+**P1-5: Redis 订单镜像到 PostgreSQL**
+- 风险: Redis 重启/崩溃后所有待处理订单丢失
+- 修复:
+  - 安装 `postgres` 包 (Bun 兼容)
+  - 重写 `database/postgres.ts`: 实际 PostgreSQL 连接 + 自动创建 `perp_order_mirror` 表
+  - 新增 `OrderMirrorRepo`: upsert / updateStatus / getActiveOrders / countActive
+  - 订单提交后异步 upsert 到 PostgreSQL (不阻塞撮合)
+  - 订单状态变更 (`broadcastOrderUpdate`) 时异步更新 PostgreSQL
+  - 订单取消时异步更新 PostgreSQL 状态为 CANCELED
+  - 启动时: Redis 有订单 → 使用 Redis; Redis 空 → 从 PostgreSQL 恢复
+  - PostgreSQL 不可用时系统正常运行 (仅 Redis)
+- 文件: `backend/src/matching/database/postgres.ts`, `backend/src/matching/server.ts`
+
+**验证结果:**
+- `forge build --force` ✅ 编译成功
+- `forge test` ✅ 345 tests passed, 0 failed
+- `npx next build` ✅ 13 pages compiled
+- `bun build --no-bundle server.ts` ✅ 转译成功
+
+**修改的文件:**
+- `contracts/src/common/Vault.sol` — P1-3 提款延迟机制
+- `contracts/src/perpetual/Settlement.sol` — P1-4 ADL 超时触发 + forceADL + resolveADL
+- `backend/src/matching/database/postgres.ts` — P1-5 PostgreSQL 实际连接 + OrderMirrorRepo
+- `backend/src/matching/server.ts` — P1-5 导入 PostgreSQL + 订单镜像写入 + 启动恢复逻辑
+- `backend/src/matching/package.json` — P1-5 新增 `postgres` 依赖
+
+**⚠️ 部署注意:**
+- Settlement 需重新部署（P1-4 新增 ADL 状态变量和 forceADL 函数）
+- Vault 需重新部署（P1-3 新增提款延迟逻辑）
+- 后端需配置 `DATABASE_URL` 环境变量启用 PostgreSQL 镜像
+- PostgreSQL 镜像是可选的 — 未配置时系统仍使用 Redis-only 模式
 
 ---
 
@@ -641,4 +878,83 @@ cast call 0x246c4A147F8b7Afb2b4b820284f11F5119553106 "balanceOf(address)" <user>
 
 # Mint 测试 USDT（任何人都可以）
 cast send 0x246c4A147F8b7Afb2b4b820284f11F5119553106 "mint(address,uint256)" <user> 10000000000 --rpc-url $RPC_URL
+```
+
+---
+
+## 十二、安全审计状态
+
+> **更新时间**: 2026-02-25
+
+### 当前状态: ⚠️ 待外部审计
+
+### 已完成的安全措施
+
+| 措施 | 状态 | 说明 |
+|------|------|------|
+| Ownable2Step | ✅ | SettlementV2 使用两步所有权转移 |
+| ReentrancyGuard | ✅ | 所有资金操作函数 |
+| EIP-712 签名验证 | ✅ | 提现需要平台签名 + Merkle proof |
+| Nonce 防重放 | ✅ | 每次提现递增用户 nonce |
+| SafeERC20 | ✅ | 所有 ERC20 操作使用安全包装 |
+| API 速率限制 | ✅ | 内存滑窗 100/20/5 req/s |
+| Nginx TLS | ✅ | TLS 1.2/1.3 + 安全头 |
+| Redis 高可用 | ✅ | Sentinel 模式支持 |
+| 外部安全审计 | ❌ | 未进行 |
+
+### 审计重点领域
+
+1. **Merkle Proof 验证** (`SettlementV2.sol`)
+   - `withdraw()` 函数的 Merkle proof 验证逻辑
+   - 叶子节点构造: `keccak256(abi.encodePacked(user, equity))`
+   - 状态根更新权限控制
+
+2. **EIP-712 签名安全** (`SettlementV2.sol`)
+   - 域分隔符 (domain separator) 正确性
+   - 签名重放防护 (nonce + deadline)
+   - 签名者权限管理
+
+3. **权限管理**
+   - Owner → Ownable2Step (两步转移)
+   - `authorizedUpdaters` 映射管理
+   - `platformSigner` 更新流程
+
+4. **资金安全**
+   - `totalWithdrawn[user] + amount <= userEquity` 校验
+   - 合约持有资金与 Merkle 树总量一致性
+   - 重入保护 (ReentrancyGuard)
+
+### 推荐审计机构
+
+| 机构 | 类型 | 适合场景 |
+|------|------|----------|
+| Code4rena | 竞赛审计 | 社区审计，成本较低 |
+| Sherlock | 竞赛审计 | DeFi 专精，有保险保障 |
+| Trail of Bits | 私人审计 | 深度审计，顶级声誉 |
+| OpenZeppelin | 私人审计 | 行业标准，全面覆盖 |
+
+### 审计前风险缓解
+
+在外部审计完成前，建议采取以下措施:
+
+1. **存款上限**: 设置单用户最大存款额 (如 10 ETH)
+2. **余额监控**: 监控合约 WETH 余额与 Merkle 树总额的一致性
+3. **紧急暂停**: 发现异常时立即暂停合约 (需添加 Pausable)
+4. **渐进式发布**: 先限制白名单用户测试，逐步开放
+
+### BaseScan 合约验证
+
+```bash
+# 获取 API Key: https://basescan.org/register
+# 设置到 contracts/.env: BASESCAN_API_KEY=your_key_here
+
+# 验证 SettlementV2 (Ownable2Step 版本)
+forge verify-contract 0x2A9b7ba5c4E03C17fe2E5DF0F889410E5a778358 \
+  src/perpetual/SettlementV2.sol:SettlementV2 \
+  --chain base_sepolia \
+  --constructor-args $(cast abi-encode "constructor(address,address,address)" \
+    0x4200000000000000000000000000000000000006 \
+    0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE \
+    0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE) \
+  --watch
 ```
