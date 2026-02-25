@@ -111,13 +111,13 @@ class WebSocketManager {
 
     this.isConnecting = true;
     const wsUrl = getWsUrl();
-    console.log("[UnifiedWS] Connecting to:", wsUrl);
+    // connecting
 
     try {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log("[UnifiedWS] Connected");
+        // connected
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.lastPong = Date.now();
@@ -141,7 +141,7 @@ class WebSocketManager {
       };
 
       this.ws.onclose = () => {
-        console.log("[UnifiedWS] Disconnected");
+        // disconnected
         this.isConnecting = false;
         this.stopPing();
 
@@ -194,8 +194,6 @@ class WebSocketManager {
     try {
       const msg = JSON.parse(data) as WSMessage;
       const store = useTradingDataStore.getState();
-
-      store.setLastUpdated(Date.now());
 
       switch (msg.type) {
         case "orderbook":
@@ -395,10 +393,6 @@ class WebSocketManager {
       MAX_RECONNECT_DELAY
     );
 
-    console.log(
-      `[UnifiedWS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
-    );
-
     this.reconnectTimeout = setTimeout(() => {
       this.connect();
     }, delay);
@@ -481,6 +475,15 @@ class WebSocketManager {
     }
   }
 
+  /**
+   * 批量订阅多个 token（用于首页一次性订阅所有 token）
+   */
+  subscribeAll(tokens: Address[]): void {
+    for (const token of tokens) {
+      this.subscribe(token);
+    }
+  }
+
   unsubscribe(token: Address): void {
     const normalizedToken = token.toLowerCase() as Address;
     if (this.subscribedTokens.has(normalizedToken)) {
@@ -530,6 +533,18 @@ class WebSocketManager {
 }
 
 // ============================================================
+// Global accessor (for non-hook contexts like MarketOverview)
+// ============================================================
+
+/**
+ * 获取 WebSocketManager 单例（非 hook，可在任意上下文调用）
+ * 注意：如果 WebSocket 尚未初始化，返回 null
+ */
+export function getWebSocketManager(): WebSocketManager | null {
+  return WebSocketManager.getInstance();
+}
+
+// ============================================================
 // Hook
 // ============================================================
 
@@ -548,6 +563,15 @@ export function useUnifiedWebSocket(
   const managerRef = useRef<WebSocketManager | null>(null);
   const isConnected = useTradingDataStore((state) => state.wsConnected);
 
+  // Stable refs for callbacks — prevents infinite re-render loop
+  // (function refs change every render; useRef keeps a stable container)
+  const onConnectRef = useRef(onConnect);
+  const onDisconnectRef = useRef(onDisconnect);
+  const onErrorRef = useRef(onError);
+  onConnectRef.current = onConnect;
+  onDisconnectRef.current = onDisconnect;
+  onErrorRef.current = onError;
+
   // Initialize manager
   useEffect(() => {
     if (!enabled) return;
@@ -558,16 +582,16 @@ export function useUnifiedWebSocket(
     // Listen for connection changes
     const removeListener = managerRef.current.addListener((connected) => {
       if (connected) {
-        onConnect?.();
+        onConnectRef.current?.();
       } else {
-        onDisconnect?.();
+        onDisconnectRef.current?.();
       }
     });
 
     return () => {
       removeListener();
     };
-  }, [enabled, onConnect, onDisconnect]);
+  }, [enabled]);
 
   // Subscribe to token when it changes
   useEffect(() => {
@@ -599,9 +623,9 @@ export function useUnifiedWebSocket(
   const wsError = useTradingDataStore((state) => state.wsError);
   useEffect(() => {
     if (wsError) {
-      onError?.(wsError);
+      onErrorRef.current?.(wsError);
     }
-  }, [wsError, onError]);
+  }, [wsError]);
 
   // Actions
   const reconnect = useCallback(() => {

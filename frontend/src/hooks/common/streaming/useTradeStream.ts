@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * @deprecated 此 hook 使用 System A (WebSocketClient) 的 useWebSocketMessage/useWebSocketConnection,
+ * 但 trade 事件只通过 System B (WebSocketManager) 接收。subscribeInstrument() 是 no-op。
+ * 除非 System A 被其他 hook (如 useWebSocketKlines) 连接，否则此 hook 不会收到任何数据。
+ *
+ * TODO: 迁移到 System B (tradingDataStore) 或统一 WebSocket 系统后重写。
+ */
+
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {

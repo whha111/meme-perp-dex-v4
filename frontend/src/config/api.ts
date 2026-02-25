@@ -32,3 +32,6 @@ export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532);
 
 // Settlement 合约地址
 export const SETTLEMENT_ADDRESS = process.env.NEXT_PUBLIC_SETTLEMENT_ADDRESS as `0x${string}` | undefined;
+
+// SettlementV2 合约地址 (Merkle 提款系统)
+export const SETTLEMENT_V2_ADDRESS = process.env.NEXT_PUBLIC_SETTLEMENT_V2_ADDRESS as `0x${string}` | undefined;

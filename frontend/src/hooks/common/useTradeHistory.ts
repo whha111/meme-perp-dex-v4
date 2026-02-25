@@ -96,7 +96,6 @@ export function useTradeHistory(options: UseTradeHistoryOptions = {}) {
         await ws.subscribe(topics);
         subscribedRef.current = true;
 
-        console.log(`[useTradeHistory] Subscribed to:`, topics);
       } catch (err) {
         console.error("[useTradeHistory] WebSocket setup failed:", err);
         setError(err instanceof Error ? err.message : "WebSocket connection failed");
@@ -130,8 +129,6 @@ export function useTradeHistory(options: UseTradeHistoryOptions = {}) {
 
         const newTrade = formatTradeMessage(message);
         if (!newTrade) return;
-
-        console.log(`[useTradeHistory] New trade received:`, newTrade);
 
         // 添加新交易到列表头部 (最新在前)
         setTrades(prev => {
@@ -176,7 +173,6 @@ export function useTradeHistory(options: UseTradeHistoryOptions = {}) {
         });
         subscribedRef.current = false;
 
-        console.log(`[useTradeHistory] Unsubscribed from:`, topics);
       }
     };
   }, [token, limit, formatTradeMessage]);

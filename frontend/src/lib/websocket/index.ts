@@ -37,14 +37,12 @@ export {
   useWebSocketRequest,
   useWebSocketConnection,
   useWebSocketSubscription,
-  useAutoConnectWebSocket,
 } from "./hooks";
 
 // ============================================================
 // 交易对资产数据类型 (保留所有类型定义)
 // ============================================================
 
-import { Ticker } from "../api/client";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
 /** 交易对资产数据 */
@@ -165,140 +163,16 @@ export interface TokenListResponse {
 // ============================================================
 
 class WebSocketServices {
-  private tradeEventCallbacks: Array<(event: InstrumentTradeEvent) => void> =
-    [];
-  private assetUpdateCallbacks: Array<(update: InstrumentAssetUpdate) => void> =
-    [];
-  private tickerCallbacks: Map<string, Array<(ticker: Ticker) => void>> =
-    new Map();
-
-  constructor() {
-    // TODO: 对接真实 WebSocket 服务
-  }
+  constructor() {}
 
   /**
-   * 获取交易对资产信息
-   * TODO: 对接真实后端 API
+   * 订阅/取消订阅交易对 (no-op, 保留接口兼容)
    */
-  async getInstrumentAsset(params: {
-    inst_id: string;
-  }): Promise<InstrumentAssetData> {
-    // 未对接 - 返回空数据结构
-    return {
-      instId: params.inst_id,
-      currentPrice: "0",
-      fdv: "0",
-    };
-  }
+  async subscribeInstrument(_instId: string): Promise<void> {}
+  async unsubscribeInstrument(_instId: string): Promise<void> {}
 
   /**
-   * 获取代币列表 — 从后端 /api/v1/market/tickers 获取真实数据
-   */
-  async getTokenList(_params: TokenListParams): Promise<TokenListResponse> {
-    try {
-      const res = await fetch(`${MATCHING_ENGINE_URL}/api/v1/market/tickers`);
-      if (!res.ok) {
-        return { success: false, tokens: [], message: `HTTP ${res.status}` };
-      }
-      const json = await res.json();
-      // Backend returns { code: "0", msg: "success", data: Ticker[] }
-      if (json.code !== "0" || !Array.isArray(json.data)) {
-        return { success: false, tokens: [], message: json.msg || "Unknown error" };
-      }
-
-      const tokens = json.data.map((t: any) => {
-        // instId format: "0xABC...-ETH"
-        const tokenAddress = t.instId.split("-")[0];
-        // Calculate 24h price change percentage
-        const last = parseFloat(t.last) || 0;
-        const open24h = parseFloat(t.open24h) || 0;
-        const priceChange24h = open24h > 0 ? ((last - open24h) / open24h) * 100 : 0;
-
-        return {
-          inst_id: t.instId,
-          token_address: tokenAddress,
-          current_price: t.last,
-          fdv: "0", // Will be enriched by on-chain data
-          volume_24h: t.vol24h, // ETH volume in wei
-          price_change_24h: priceChange24h,
-          is_graduated: false, // Will be enriched by on-chain data
-        };
-      });
-
-      return { success: true, tokens };
-    } catch (err: any) {
-      return { success: false, tokens: [], message: err.message || "Fetch failed" };
-    }
-  }
-
-  /**
-   * 订阅交易事件
-   */
-  onTradeEvent(callback: (event: InstrumentTradeEvent) => void): () => void {
-    this.tradeEventCallbacks.push(callback);
-    return () => {
-      const index = this.tradeEventCallbacks.indexOf(callback);
-      if (index > -1) {
-        this.tradeEventCallbacks.splice(index, 1);
-      }
-    };
-  }
-
-  /**
-   * 订阅资产更新
-   */
-  onAssetUpdate(callback: (update: InstrumentAssetUpdate) => void): () => void {
-    this.assetUpdateCallbacks.push(callback);
-    return () => {
-      const index = this.assetUpdateCallbacks.indexOf(callback);
-      if (index > -1) {
-        this.assetUpdateCallbacks.splice(index, 1);
-      }
-    };
-  }
-
-  /**
-   * 订阅交易对实时更新
-   * TODO: 对接真实 WebSocket
-   */
-  async subscribeInstrument(_instId: string): Promise<void> {
-    // 未对接 - 不执行任何操作
-  }
-
-  /**
-   * 取消订阅交易对
-   * TODO: 对接真实 WebSocket
-   */
-  async unsubscribeInstrument(_instId: string): Promise<void> {
-    // 未对接 - 不执行任何操作
-  }
-
-  /**
-   * 订阅 ticker 更新
-   */
-  onTickerUpdate(
-    instId: string,
-    callback: (ticker: Ticker) => void
-  ): () => void {
-    if (!this.tickerCallbacks.has(instId)) {
-      this.tickerCallbacks.set(instId, []);
-    }
-    this.tickerCallbacks.get(instId)!.push(callback);
-
-    return () => {
-      const callbacks = this.tickerCallbacks.get(instId);
-      if (callbacks) {
-        const index = callbacks.indexOf(callback);
-        if (index > -1) {
-          callbacks.splice(index, 1);
-        }
-      }
-    };
-  }
-
-  /**
-   * 获取交易历史
-   * TODO: 对接真实后端 API
+   * 获取交易历史 (stub — 返回空数组)
    */
   async getTradeHistory(_params: {
     inst_id: string;
@@ -314,10 +188,7 @@ class WebSocketServices {
       tx_hash: string;
     }>;
   }> {
-    // 未对接 - 返回空数组
-    return {
-      transactions: [],
-    };
+    return { transactions: [] };
   }
 
   /**
@@ -344,41 +215,6 @@ class WebSocketServices {
     }
   }
 
-  /**
-   * 订阅交易对资产更新
-   */
-  onInstrumentAssetUpdate(
-    callback: (update: InstrumentAssetUpdate) => void
-  ): () => void {
-    return this.onAssetUpdate(callback);
-  }
-
-  /**
-   * 获取K线历史数据
-   * TODO: 对接真实后端 API
-   */
-  async getKlineHistory(_params: {
-    inst_id: string;
-    resolution: string;
-    from: number;
-    to: number;
-  }): Promise<{ success: boolean; bars: KlineBar[]; message?: string }> {
-    // 未对接 - 返回空数组
-    return {
-      success: false,
-      bars: [],
-      message: "服务未对接",
-    };
-  }
-
-  /**
-   * 获取实时 ETH 价格
-   * TODO: 对接真实价格源
-   */
-  async getETHPrice(): Promise<number> {
-    // 未对接 - 返回 0
-    return 0;
-  }
 }
 
 // 全局单例

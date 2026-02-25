@@ -173,7 +173,10 @@ const getApiUrl = (): string => MATCHING_ENGINE_URL;
 /**
  * 提交签名订单到撮合引擎
  */
-export async function submitOrder(signedOrder: SignedOrder): Promise<{
+export async function submitOrder(
+  signedOrder: SignedOrder,
+  options?: { takeProfit?: string; stopLoss?: string }
+): Promise<{
   success: boolean;
   orderId?: string;
   status?: string;
@@ -185,21 +188,27 @@ export async function submitOrder(signedOrder: SignedOrder): Promise<{
   error?: string;
 }> {
   try {
+    const body: Record<string, any> = {
+      trader: signedOrder.trader,
+      token: signedOrder.token,
+      isLong: signedOrder.isLong,
+      size: signedOrder.size.toString(),
+      leverage: signedOrder.leverage.toString(),
+      price: signedOrder.price.toString(),
+      deadline: signedOrder.deadline.toString(),
+      nonce: signedOrder.nonce.toString(),
+      orderType: signedOrder.orderType,
+      signature: signedOrder.signature,
+    };
+
+    // P2-2: 止盈止损参数
+    if (options?.takeProfit) body.takeProfit = options.takeProfit;
+    if (options?.stopLoss) body.stopLoss = options.stopLoss;
+
     const response = await fetch(`${getApiUrl()}/api/order/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        trader: signedOrder.trader,
-        token: signedOrder.token,
-        isLong: signedOrder.isLong,
-        size: signedOrder.size.toString(),
-        leverage: signedOrder.leverage.toString(),
-        price: signedOrder.price.toString(),
-        deadline: signedOrder.deadline.toString(),
-        nonce: signedOrder.nonce.toString(),
-        orderType: signedOrder.orderType,
-        signature: signedOrder.signature,
-      }),
+      body: JSON.stringify(body),
     });
 
     return await response.json();

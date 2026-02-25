@@ -360,7 +360,7 @@ const initialState = {
   // Order form state (从 perpetualStore 迁移)
   orderForm: DEFAULT_ORDER_FORM,
   leverageSettings: {} as Record<string, LeverageSettings>,
-  selectedInstId: "PEPE-PERP",
+  selectedInstId: "",
 };
 
 // ============================================================
@@ -380,7 +380,7 @@ export const useTradingDataStore = create<TradingDataState>()(
       set((state) => {
         const newOrderBooks = new Map(state.orderBooks);
         newOrderBooks.set(token.toLowerCase() as Address, orderBook);
-        return { orderBooks: newOrderBooks, lastUpdated: Date.now() };
+        return { orderBooks: newOrderBooks };
       }),
 
     addRecentTrade: (token, trade) =>
@@ -389,7 +389,7 @@ export const useTradingDataStore = create<TradingDataState>()(
         const normalizedToken = token.toLowerCase() as Address;
         const existing = newRecentTrades.get(normalizedToken) || [];
         newRecentTrades.set(normalizedToken, [trade, ...existing.slice(0, 99)]);
-        return { recentTrades: newRecentTrades, lastUpdated: Date.now() };
+        return { recentTrades: newRecentTrades };
       }),
 
     setRecentTrades: (token, trades) =>
@@ -416,7 +416,7 @@ export const useTradingDataStore = create<TradingDataState>()(
         }
         const newTokenStats = new Map(state.tokenStats);
         newTokenStats.set(normalizedToken, stats);
-        return { tokenStats: newTokenStats, lastUpdated: Date.now() };
+        return { tokenStats: newTokenStats };
       }),
 
     setFundingRate: (token, rate) =>

@@ -53,8 +53,8 @@ export function useETHPrice(): UseETHPriceReturn {
     queryKey: ["ethPrice"],
     queryFn: async (): Promise<ETHPriceResponse> => {
       try {
-        // 使用 Binance 公共 API 获取实时 ETH 价格 (支持 CORS)
-        const response = await fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=ETHUSDT");
+        // 通过 Next.js rewrites 代理请求 Binance API (避免浏览器 CORS)
+        const response = await fetch("/api/proxy/binance/v3/ticker/24hr?symbol=ETHUSDT");
         if (response.ok) {
           const data = await response.json();
           const price = parseFloat(data.lastPrice);
@@ -102,7 +102,7 @@ export function useETHPrice(): UseETHPriceReturn {
  */
 export async function fetchETHPrice(): Promise<number> {
   try {
-    const response = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT");
+    const response = await fetch("/api/proxy/binance/v3/ticker/price?symbol=ETHUSDT");
     if (response.ok) {
       const data = await response.json();
       const price = parseFloat(data.price);

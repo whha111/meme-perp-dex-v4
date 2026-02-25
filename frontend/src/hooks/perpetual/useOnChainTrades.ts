@@ -116,7 +116,6 @@ export function useOnChainTrades(
       }));
 
       setTrades(apiTrades);
-      console.log(`[useOnChainTrades] Fetched ${apiTrades.length} trades for ${tokenAddress}`);
     } catch (e) {
       console.error("[useOnChainTrades] Failed to fetch trades:", e);
       setError(e instanceof Error ? e : new Error(String(e)));
@@ -142,7 +141,6 @@ export function useOnChainTrades(
       try {
         await ws.connect();
         await ws.subscribe([normalizedToken]);
-        console.log(`[useOnChainTrades] Subscribed to WebSocket for ${normalizedToken}`);
       } catch (e) {
         console.error("[useOnChainTrades] WebSocket setup failed:", e);
       }
@@ -175,8 +173,6 @@ export function useOnChainTrades(
           transactionHash: message.txHash || "",
           price: parseFloat(message.price || "0"),
         };
-
-        console.log(`[useOnChainTrades] Received real-time trade:`, newTrade.transactionHash);
 
         // 添加到列表顶部 (最新在前)
         setTrades((prev) => {

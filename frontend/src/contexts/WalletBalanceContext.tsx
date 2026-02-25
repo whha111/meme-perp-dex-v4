@@ -21,8 +21,7 @@ import React, {
 import { formatEther, parseEther, type Address } from "viem";
 import { useReadContract, useBalance } from "wagmi";
 import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
-import { useWebSocketMessage } from "@/lib/websocket/hooks";
-import { MessageType } from "@/lib/websocket/types";
+import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
 // ============================================================
@@ -134,7 +133,7 @@ export function WalletBalanceProvider({
   // Fetch Settlement balance on mount and periodically
   useEffect(() => {
     fetchSettlementBalance();
-    const interval = setInterval(fetchSettlementBalance, 15_000);
+    const interval = setInterval(fetchSettlementBalance, 60_000);
     return () => clearInterval(interval);
   }, [fetchSettlementBalance]);
 
@@ -158,10 +157,14 @@ export function WalletBalanceProvider({
     fetchSettlementBalance();
   }, [refetchWeth, refetchNative, fetchSettlementBalance]);
 
-  // Listen for WS "balance" messages → trigger refetch
-  useWebSocketMessage(MessageType.BALANCE, useCallback(() => {
-    refreshBalance();
-  }, [refreshBalance]));
+  // System B (WebSocketManager) pushes balance → tradingDataStore
+  // When store balance changes, refetch on-chain wallet balances
+  const storeBalance = useTradingDataStore(state => state.balance);
+  useEffect(() => {
+    if (storeBalance) {
+      refreshBalance();
+    }
+  }, [storeBalance, refreshBalance]);
 
   // Formatted total balance (18 decimals for ETH)
   const formattedWethBalance = useMemo(() => {

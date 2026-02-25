@@ -46,7 +46,6 @@ export interface OnChainToken {
   soldSupply: string;
   metadataURI: string;
   perpEnabled: boolean;
-  lendingEnabled: boolean;
   realETHReserve: string; // ETH reserve for tracking trading activity
 }
 
@@ -120,7 +119,7 @@ export function useOnChainTokenList() {
           // Pool state structure (12 fields)
           // [0] realETHReserve, [1] realTokenReserve, [2] soldTokens, [3] isGraduated,
           // [4] isActive, [5] creator, [6] createdAt, [7] metadataURI,
-          // [8] graduationFailed, [9] graduationAttempts, [10] perpEnabled, [11] lendingEnabled
+          // [8] graduationFailed, [9] graduationAttempts, [10] perpEnabled
           const realETHReserve = pool.realETHReserve ?? pool[0] ?? 0n;
           const soldTokens = pool.soldTokens ?? pool[2] ?? 0n;
           const isGraduated = pool.isGraduated ?? pool[3] ?? false;
@@ -129,7 +128,6 @@ export function useOnChainTokenList() {
           const createdAt = pool.createdAt ?? pool[6] ?? 0n;
           const metadataURI = pool.metadataURI ?? pool[7] ?? "";
           const perpEnabled = pool.perpEnabled ?? pool[10] ?? false;
-          const lendingEnabled = pool.lendingEnabled ?? pool[11] ?? false;
 
           // Calculate market cap: price * total supply (1 billion tokens)
           const TOTAL_SUPPLY = 1_000_000_000n * 10n ** 18n;
@@ -148,7 +146,6 @@ export function useOnChainTokenList() {
             soldSupply: soldTokens.toString(),
             metadataURI,
             perpEnabled,
-            lendingEnabled,
             realETHReserve: formatUnits(realETHReserve as bigint, 18),
           } as OnChainToken;
         } catch (err) {

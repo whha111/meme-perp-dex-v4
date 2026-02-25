@@ -11,6 +11,9 @@ const TOKEN_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `
 const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "84532", 10);
 
 // TokenFactory ABI for view functions
+// ⚠️ ABI 必须与部署的 TokenFactory 合约完全一致
+// 合约 getPoolState 返回 11 个字段（不含 lendingEnabled）
+// 如果字段多了，viem 会把 metadataURI 的长度字节误读为 bool → InvalidBytesBooleanError
 const TOKEN_FACTORY_ABI = [
   {
     inputs: [{ name: "tokenAddress", type: "address" }],
@@ -29,7 +32,6 @@ const TOKEN_FACTORY_ABI = [
           { name: "graduationFailed", type: "bool" },
           { name: "graduationAttempts", type: "uint8" },
           { name: "perpEnabled", type: "bool" },
-          { name: "lendingEnabled", type: "bool" },
         ],
         name: "",
         type: "tuple",
@@ -64,7 +66,6 @@ export interface PoolState {
   graduationFailed: boolean;
   graduationAttempts: number;
   perpEnabled: boolean;
-  lendingEnabled: boolean;
 }
 
 export interface PoolData {
@@ -183,9 +184,11 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
     const priceResult = data[1];
 
     if (poolStateResult.status !== "success" || priceResult.status !== "success") {
+      const errDetail = `getPoolState: ${poolStateResult.status}${poolStateResult.status === 'failure' ? ` (${(poolStateResult as any).error?.message || (poolStateResult as any).error || 'unknown'})` : ''}, getCurrentPrice: ${priceResult.status}${priceResult.status === 'failure' ? ` (${(priceResult as any).error?.message || (priceResult as any).error || 'unknown'})` : ''}`;
+      console.error(`[usePoolState] ❌ Contract call failure:`, errDetail);
       return {
         ...DEFAULT_POOL_DATA,
-        error: new Error("Failed to fetch pool state"),
+        error: new Error(errDetail),
       };
     }
 
@@ -202,7 +205,6 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
       graduationFailed: boolean;
       graduationAttempts: number;
       perpEnabled: boolean;
-      lendingEnabled: boolean;
     };
 
     const poolState: PoolState = {
@@ -217,7 +219,6 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
       graduationFailed: rawState.graduationFailed,
       graduationAttempts: rawState.graduationAttempts,
       perpEnabled: rawState.perpEnabled ?? false,
-      lendingEnabled: rawState.lendingEnabled ?? false,
     };
 
     const currentPrice = priceResult.result as bigint;

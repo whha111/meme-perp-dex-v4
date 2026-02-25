@@ -83,7 +83,7 @@ export class WebSocketClient {
       }
 
       const wsUrl = WS_URL;
-      console.log("[WebSocketClient] Connecting to:", wsUrl);
+      // connecting
 
       this.setStatus(ConnectionStatus.CONNECTING);
 
@@ -91,7 +91,7 @@ export class WebSocketClient {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-          console.log("[WebSocketClient] Connected");
+          // connected
           this.setStatus(ConnectionStatus.CONNECTED);
           this.reconnectAttempts = 0;
           this.lastPong = Date.now();
@@ -101,7 +101,7 @@ export class WebSocketClient {
         };
 
         this.ws.onclose = (event) => {
-          console.log("[WebSocketClient] Disconnected:", event.code, event.reason);
+          // disconnected
           this.setStatus(ConnectionStatus.DISCONNECTED);
           this.stopPing();
           this.attemptReconnect();
@@ -254,7 +254,7 @@ export class WebSocketClient {
           },
         })
       );
-      console.log("[WebSocketClient] Subscribed to:", topics);
+      // subscribed
     }
   }
 
@@ -274,7 +274,7 @@ export class WebSocketClient {
           },
         })
       );
-      console.log("[WebSocketClient] Unsubscribed from:", topics);
+      // unsubscribed
     }
   }
 
@@ -402,10 +402,6 @@ export class WebSocketClient {
       MAX_RECONNECT_DELAY
     );
 
-    console.log(
-      `[WebSocketClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`
-    );
-
     this.setStatus(ConnectionStatus.RECONNECTING);
 
     this.reconnectTimeout = setTimeout(() => {
@@ -426,7 +422,7 @@ export class WebSocketClient {
           },
         })
       );
-      console.log("[WebSocketClient] Resubscribed to:", Array.from(this.subscribedTopics));
+      // resubscribed
     }
   }
 
