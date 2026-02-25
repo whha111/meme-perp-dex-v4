@@ -7,7 +7,7 @@
  */
 
 import "dotenv/config";
-import { type Address, type Hex, verifyTypedData, createPublicClient, http, webSocket } from "viem";
+import { type Address, type Hex, verifyTypedData, createPublicClient, http, webSocket, parseEther } from "viem";
 import { baseSepolia } from "viem/chains";
 import { WebSocketServer, WebSocket } from "ws";
 import { MatchingEngine, OrderType, OrderStatus, TimeInForce, OrderSource, registerPriceChangeCallback, type Order, type Match, type Trade, type Kline, type TokenStats } from "./engine";
@@ -26,6 +26,10 @@ import db, {
   type MarketStats,
 } from "./database";
 import { connectRedis as connectNewRedis, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, SettlementLogRepo as RedisSettlementLogRepo, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
+// P1-5: PostgreSQL 订单镜像 (Write-Through Cache)
+import { connectPostgres, isPostgresConnected, OrderMirrorRepo, type PgOrderMirror } from "./database/postgres";
+// P2-4: 仓位大小限制常量
+import { TRADING } from "./config";
 import { verifyOrderSignature } from "./utils/crypto";
 import { createWalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -36,6 +40,7 @@ import { getTokenHolders } from "./modules/tokenHolders";
 // ============================================================
 import { initializeSnapshotModule, startSnapshotJob, getUserProof, getSnapshotJobStatus } from "./modules/snapshot";
 import { initializeWithdrawModule, requestWithdrawal, getWithdrawModuleStatus } from "./modules/withdraw";
+import { initializePnLSettlement, startPnLSettlementJob, executePnLSettlement, getSettlementStatus } from "./modules/pnlSettlement";
 import {
   initLendingLiquidation,
   detectLendingLiquidations,
@@ -64,6 +69,7 @@ const RPC_URL = process.env.RPC_URL || "https://base-sepolia-rpc.publicnode.com"
 const WSS_URL = process.env.WSS_URL || "wss://base-sepolia-rpc.publicnode.com";
 const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
 const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
+const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address; // dYdX v3 style Merkle withdrawal contract
 const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0x8de2Ce2a0f974b4CB00EC5B56BD89382690b5523") as Address;
 const PRICE_FEED_ADDRESS = (process.env.PRICE_FEED_ADDRESS || "0xa97a1E55cFfF5C1e45Ac2c1D882717cDD4F44e01") as Address;
 const LENDING_POOL_ADDRESS_LOCAL = (process.env.LENDING_POOL_ADDRESS || "0x7Ddb15B5E680D8a74FE44958d18387Bb3999C633") as Address;
@@ -72,8 +78,16 @@ const PERP_VAULT_ADDRESS_LOCAL = (process.env.PERP_VAULT_ADDRESS || "") as Addre
 const BATCH_INTERVAL_MS = parseInt(process.env.BATCH_INTERVAL_MS || "30000"); // 30 seconds
 const FUNDING_RATE_INTERVAL_MS = parseInt(process.env.FUNDING_RATE_INTERVAL_MS || "5000"); // 5 seconds
 const SPOT_PRICE_SYNC_INTERVAL_MS = parseInt(process.env.SPOT_PRICE_SYNC_INTERVAL_MS || "1000"); // 1 second
-const SKIP_SIGNATURE_VERIFY = process.env.SKIP_SIGNATURE_VERIFY === "true"; // 测试模式：跳过签名验证
+// P0-1: 签名验证仅在 NODE_ENV=test 时可跳过，生产环境硬编码开启
+const SKIP_SIGNATURE_VERIFY = process.env.NODE_ENV === "test" && process.env.SKIP_SIGNATURE_VERIFY === "true";
 const FEE_RECEIVER_ADDRESS = (process.env.FEE_RECEIVER_ADDRESS || "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE").toLowerCase() as Address; // 平台手续费接收钱包
+
+// ============================================================
+// Server Telemetry Counters
+// ============================================================
+const serverStartTime = Date.now();
+let totalRequestCount = 0;
+let totalOrdersSubmitted = 0;
 
 // ETH/USD 价格 - 仅用于 UI 参考显示，不影响 ETH 本位交易逻辑
 // TODO: 可后续接入价格预言机 (如 Chainlink) 获取实时价格
@@ -199,6 +213,129 @@ const SETTLEMENT_ABI = [
       { name: "amount", type: "uint256", indexed: false },
     ],
   },
+  // ========== Batch PnL Settlement (链下→链上同步) ==========
+  {
+    inputs: [
+      { name: "from", type: "address[]" },
+      { name: "to", type: "address[]" },
+      { name: "amounts", type: "uint256[]" },
+    ],
+    name: "batchSettlePnL",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+] as const;
+
+// ============================================================
+// SettlementV2 ABI (dYdX v3 style: Merkle proof + EIP-712 withdrawal)
+// ============================================================
+const SETTLEMENT_V2_ABI = [
+  // State root management (backend submits Merkle root)
+  {
+    inputs: [{ name: "newRoot", type: "bytes32" }],
+    name: "updateStateRoot",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // Deposit (user deposits WETH collateral)
+  {
+    inputs: [{ name: "amount", type: "uint256" }],
+    name: "deposit",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // DepositFor (relayer deposits on behalf of user)
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    name: "depositFor",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // Withdraw (user submits Merkle proof + platform signature)
+  {
+    inputs: [
+      { name: "amount", type: "uint256" },
+      { name: "userEquity", type: "uint256" },
+      { name: "merkleProof", type: "bytes32[]" },
+      { name: "deadline", type: "uint256" },
+      { name: "signature", type: "bytes" },
+    ],
+    name: "withdraw",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // View: user deposits
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getUserDeposits",
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // View: user nonce
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getUserNonce",
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // View: total withdrawn
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "getUserTotalWithdrawn",
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // View: verify Merkle proof
+  {
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "equity", type: "uint256" },
+      { name: "proof", type: "bytes32[]" },
+    ],
+    name: "verifyMerkleProof",
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // Events
+  {
+    type: "event",
+    name: "Deposited",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "totalDeposits", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Withdrawn",
+    inputs: [
+      { name: "user", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "nonce", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "StateRootUpdated",
+    inputs: [
+      { name: "root", type: "bytes32", indexed: true },
+      { name: "timestamp", type: "uint256", indexed: false },
+      { name: "snapshotId", type: "uint256", indexed: false },
+    ],
+  },
 ] as const;
 
 // TokenFactory ABI (用于监听现货交易事件)
@@ -307,6 +444,20 @@ const UNISWAP_V2_PAIR_ABI = [
     outputs: [{ name: "", type: "address" }],
     stateMutability: "view",
     type: "function",
+  },
+  // P2-3: Swap event — 用于毕业后 K 线生成
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: "sender", type: "address" },
+      { indexed: false, name: "amount0In", type: "uint256" },
+      { indexed: false, name: "amount1In", type: "uint256" },
+      { indexed: false, name: "amount0Out", type: "uint256" },
+      { indexed: false, name: "amount1Out", type: "uint256" },
+      { indexed: true, name: "to", type: "address" },
+    ],
+    name: "Swap",
+    type: "event",
   },
 ] as const;
 
@@ -4426,6 +4577,200 @@ async function registerGraduatedToken(token: Address, pairAddress: Address): Pro
 
   console.log(`[Graduation] ✅ Registered graduated token: ${normalizedToken.slice(0, 10)}`);
   console.log(`[Graduation]    Pair: ${normalizedPair.slice(0, 10)}, WETH is token${isWethToken0 ? '0' : '1'}`);
+
+  // P2-3: 自动启动 Swap 事件监听 (异步，不阻塞注册流程)
+  try {
+    startSwapEventWatching(normalizedToken as Address, { pairAddress: normalizedPair, isWethToken0 });
+  } catch (_e) {
+    // Swap watcher 失败不影响毕业注册
+  }
+}
+
+// ============================================================
+// P2-3: Uniswap V2 Swap 事件监听 → K 线生成
+// ============================================================
+
+// 已激活的 Swap 监听器 (防止重复监听)
+const activeSwapWatchers = new Set<string>();
+
+/**
+ * P2-3: 为毕业代币启动 Uniswap V2 Swap 事件监听
+ * 从 Swap 事件中提取价格 + 成交量，生成 K 线数据
+ */
+function startSwapEventWatching(
+  token: Address,
+  graduatedInfo: GraduatedTokenInfo
+): void {
+  const normalizedToken = token.toLowerCase();
+
+  // 防止重复监听
+  if (activeSwapWatchers.has(normalizedToken)) {
+    console.log(`[P2-3] Swap watcher already active for ${normalizedToken.slice(0, 10)}`);
+    return;
+  }
+
+  try {
+    const wsClient = createPublicClient({
+      chain: baseSepolia,
+      transport: webSocket(WSS_URL),
+    });
+
+    wsClient.watchContractEvent({
+      address: graduatedInfo.pairAddress,
+      abi: UNISWAP_V2_PAIR_ABI,
+      eventName: "Swap",
+      onLogs: async (logs) => {
+        for (const log of logs) {
+          try {
+            const { amount0In, amount1In, amount0Out, amount1Out } = log.args as {
+              sender: Address;
+              amount0In: bigint;
+              amount1In: bigint;
+              amount0Out: bigint;
+              amount1Out: bigint;
+              to: Address;
+            };
+
+            // 计算 ETH 金额和 Token 金额
+            let ethAmount: bigint;
+            let tokenAmount: bigint;
+            let isBuy: boolean; // 从 Token 持有者角度: 买入 = 用 ETH 买 Token
+
+            if (graduatedInfo.isWethToken0) {
+              // WETH = token0, MemeToken = token1
+              // 买入 Token: ETH 进入 (amount0In > 0), Token 出来 (amount1Out > 0)
+              // 卖出 Token: Token 进入 (amount1In > 0), ETH 出来 (amount0Out > 0)
+              ethAmount = amount0In > 0n ? amount0In : amount0Out;
+              tokenAmount = amount1In > 0n ? amount1In : amount1Out;
+              isBuy = amount0In > 0n;
+            } else {
+              // MemeToken = token0, WETH = token1
+              // 买入 Token: ETH 进入 (amount1In > 0), Token 出来 (amount0Out > 0)
+              // 卖出 Token: Token 进入 (amount0In > 0), ETH 出来 (amount1Out > 0)
+              ethAmount = amount1In > 0n ? amount1In : amount1Out;
+              tokenAmount = amount0In > 0n ? amount0In : amount0Out;
+              isBuy = amount1In > 0n;
+            }
+
+            // 跳过零值交易
+            if (ethAmount === 0n || tokenAmount === 0n) continue;
+
+            // 计算执行价格 (ETH per Token, 18 位精度)
+            const priceEth = Number(ethAmount) / Number(tokenAmount);
+            const ethVolume = Number(ethAmount) / 1e18;
+
+            console.log(`[P2-3] Swap: ${isBuy ? "BUY" : "SELL"} ${normalizedToken.slice(0, 10)} | Price: ${priceEth.toExponential(4)} ETH | Vol: ${ethVolume.toFixed(6)} ETH`);
+
+            // 更新所有周期的 K 线数据
+            const { KlineRepo, KLINE_RESOLUTIONS, SpotStatsRepo } = await import("../spot/spotHistory");
+            const { getRedisClient, isRedisConnected } = await import("./database/redis");
+            const now = Math.floor(Date.now() / 1000);
+
+            if (!isRedisConnected()) continue;
+            const client = getRedisClient();
+
+            for (const resolution of Object.keys(KLINE_RESOLUTIONS) as (keyof typeof KLINE_RESOLUTIONS)[]) {
+              const resolutionSeconds = KLINE_RESOLUTIONS[resolution];
+              const bucketTime = Math.floor(now / resolutionSeconds) * resolutionSeconds;
+              const key = `spot:kline:${normalizedToken}:${resolution}`;
+              const existing = await client.hget(key, bucketTime.toString());
+
+              let bar;
+              if (existing) {
+                bar = JSON.parse(existing);
+                bar.high = Math.max(parseFloat(bar.high), priceEth).toString();
+                bar.low = Math.min(parseFloat(bar.low), priceEth).toString();
+                bar.close = priceEth.toString();
+                bar.volume = (parseFloat(bar.volume) + ethVolume).toString();
+                bar.trades += 1;
+              } else {
+                // 新 K 线: 获取上一根收盘价
+                const prevBucketTime = bucketTime - resolutionSeconds;
+                const prevBarJson = await client.hget(key, prevBucketTime.toString());
+                const prevClose = prevBarJson ? parseFloat(JSON.parse(prevBarJson).close) : priceEth;
+
+                bar = {
+                  time: bucketTime,
+                  open: prevClose.toString(),
+                  high: Math.max(prevClose, priceEth).toString(),
+                  low: Math.min(prevClose, priceEth).toString(),
+                  close: priceEth.toString(),
+                  volume: ethVolume.toString(),
+                  trades: 1,
+                };
+              }
+
+              await client.hset(key, bucketTime.toString(), JSON.stringify(bar));
+              const expireSeconds = resolution === "1m" ? 7 * 24 * 60 * 60 : 30 * 24 * 60 * 60;
+              await client.expire(key, expireSeconds);
+            }
+
+            // 更新最新价格
+            await SpotStatsRepo.updatePrice(
+              normalizedToken as Address,
+              priceEth.toString(),
+              priceEth.toString() // ETH 本位，priceUsd = priceEth
+            );
+
+            // 更新引擎价格 + 波动率 (供永续合约使用)
+            const priceBigInt = BigInt(Math.floor(priceEth * 1e18));
+            if (priceBigInt > 0n) {
+              engine.updatePrice(normalizedToken as Address, priceBigInt);
+              engine.setSpotPrice(normalizedToken as Address, priceBigInt);
+              updateVolatility(normalizedToken as Address, priceEth);
+              broadcastOrderBook(normalizedToken as Address);
+            }
+
+            // 广播 K 线更新到 WebSocket
+            const currentBucket = Math.floor(now / 60) * 60;
+            const klines = await KlineRepo.get(normalizedToken as Address, "1m", currentBucket, currentBucket);
+            if (klines.length > 0) {
+              const kline = klines[0];
+              broadcastKline(normalizedToken as Address, {
+                timestamp: kline.time * 1000,
+                open: kline.open,
+                high: kline.high,
+                low: kline.low,
+                close: kline.close,
+                volume: kline.volume,
+              });
+            }
+
+            // 广播现货交易 (复用现有通道)
+            broadcastSpotTrade(normalizedToken as Address, {
+              token: normalizedToken as Address,
+              trader: (log.args as any).to || ("0x" as Address),
+              isBuy,
+              ethAmount: ethAmount.toString(),
+              tokenAmount: tokenAmount.toString(),
+              price: priceEth.toString(),
+              txHash: (log.transactionHash as Hex) || null,
+              timestamp: now,
+            });
+
+          } catch (swapErr: any) {
+            console.warn(`[P2-3] Error processing Swap for ${normalizedToken.slice(0, 10)}:`, swapErr?.message?.slice(0, 100));
+          }
+        }
+      },
+    });
+
+    activeSwapWatchers.add(normalizedToken);
+    console.log(`[P2-3] ✅ Started Swap event watcher for ${normalizedToken.slice(0, 10)} on Pair ${graduatedInfo.pairAddress.slice(0, 10)}`);
+  } catch (err: any) {
+    console.error(`[P2-3] Failed to start Swap watcher for ${normalizedToken.slice(0, 10)}:`, err?.message?.slice(0, 100));
+  }
+}
+
+/**
+ * P2-3: 为所有已毕业的代币启动 Swap 事件监听
+ * 在 startEventWatching() 之后调用
+ */
+function startAllSwapWatchers(): void {
+  for (const [token, info] of graduatedTokens.entries()) {
+    startSwapEventWatching(token as Address, info);
+  }
+  console.log(`[P2-3] Started ${activeSwapWatchers.size} Swap event watchers for graduated tokens`);
 }
 
 /**
@@ -5472,6 +5817,8 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       reduceOnly = false,  // P2: 只减仓标志
       postOnly = false,    // P3: 只挂单模式 (Maker Only)
       timeInForce = "GTC", // P3: 订单有效期 (GTC/IOC/FOK/GTD)
+      takeProfit = null,   // P2-2: 止盈价 (ETH string or null)
+      stopLoss = null,     // P2-2: 止损价 (ETH string or null)
     } = body;
 
     // Validate required fields
@@ -5486,9 +5833,19 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     const deadlineBigInt = BigInt(deadline);
     const nonceBigInt = BigInt(nonce);
 
-    // Check deadline
+    // Check deadline (P2-5)
     if (deadlineBigInt < BigInt(Math.floor(Date.now() / 1000))) {
       return errorResponse("Order expired");
+    }
+
+    // ============================================================
+    // P2-4: 仓位大小限制检查
+    // ============================================================
+    if (sizeBigInt > TRADING.MAX_POSITION_SIZE) {
+      return errorResponse(`Position too large. Maximum: ${TRADING.MAX_POSITION_SIZE} (1000 ETH)`);
+    }
+    if (sizeBigInt < TRADING.MIN_POSITION_SIZE) {
+      return errorResponse(`Position too small. Minimum: ${TRADING.MIN_POSITION_SIZE} (0.001 ETH)`);
     }
 
     // ============================================================
@@ -5764,6 +6121,35 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
         nonce: order.nonce.toString(),
       });
       console.log(`[DB] ✅ Order saved to database: ${order.id}`);
+
+      // P1-5: 异步镜像到 PostgreSQL (不阻塞)
+      if (isPostgresConnected()) {
+        OrderMirrorRepo.upsert({
+          id: order.id,
+          trader: order.trader,
+          token: order.token,
+          symbol: `${(token as string).slice(0, 10).toUpperCase()}-ETH`,
+          is_long: order.isLong,
+          size: order.size.toString(),
+          price: order.price.toString(),
+          leverage: Number(order.leverage) / 10000,
+          margin: order.margin.toString(),
+          fee: order.fee.toString(),
+          order_type: orderTypeStr,
+          side: order.isLong ? "LONG" : "SHORT",
+          status: statusStr,
+          filled_size: order.filledSize.toString(),
+          avg_fill_price: order.avgFillPrice.toString(),
+          reduce_only: order.reduceOnly,
+          post_only: order.postOnly,
+          trigger_price: order.takeProfitPrice?.toString() || order.stopLossPrice?.toString() || null,
+          signature: order.signature,
+          deadline: Number(order.deadline),
+          nonce: order.nonce.toString(),
+          created_at: order.createdAt,
+          updated_at: order.updatedAt,
+        }).catch(e => console.error(`[PG] ❌ Mirror failed for ${order.id}: ${e.message}`));
+      }
     } catch (dbError) {
       console.error(`[DB] ❌ Failed to save order ${order.id}:`, dbError);
       // 不阻塞订单提交，继续执行
@@ -5914,6 +6300,26 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       };
       saveTradeRecord(match.longOrder.trader, match.longOrder.id, true, longIsMaker, longFee);
       saveTradeRecord(match.shortOrder.trader, match.shortOrder.id, false, !longIsMaker, shortFee);
+    }
+
+    // ============================================================
+    // P2-2: 自动设置止盈止损 (订单成交后)
+    // ============================================================
+    if (matches.length > 0 && (takeProfit || stopLoss)) {
+      const normalizedTraderTP = (trader as string).toLowerCase() as Address;
+      const positions = userPositions.get(normalizedTraderTP);
+      if (positions && positions.length > 0) {
+        // 找到当前订单创建的最新仓位 (按 orderId 匹配)
+        const latestPos = positions.find(p => p.orderId === order.id) || positions[positions.length - 1];
+        if (latestPos) {
+          const tpPrice = takeProfit ? BigInt(Math.floor(parseFloat(takeProfit) * 1e18)) : null;
+          const slPrice = stopLoss ? BigInt(Math.floor(parseFloat(stopLoss) * 1e18)) : null;
+          const tpslResult = setTakeProfitStopLoss(latestPos.pairId, tpPrice, slPrice);
+          if (tpslResult) {
+            console.log(`[P2-2] TP/SL auto-set for ${latestPos.pairId}: TP=${takeProfit || 'none'} SL=${stopLoss || 'none'}`);
+          }
+        }
+      }
     }
 
     // ============================================================
@@ -6851,6 +7257,12 @@ async function handleCancelOrder(req: Request, orderId: string): Promise<Respons
     // 持久化取消状态到 Redis（重启后不会复活已取消的订单）
     OrderRepo.update(orderId, { status: OrderStatus.CANCELLED } as any)
       .catch(e => console.error(`[CancelOrder] Failed to update Redis status for ${orderId}:`, e));
+
+    // P1-5: 镜像到 PostgreSQL
+    if (isPostgresConnected()) {
+      OrderMirrorRepo.updateStatus(orderId, "CANCELED")
+        .catch(e => console.error(`[PG] Mirror cancel failed for ${orderId}: ${e.message}`));
+    }
 
     // 链上退款: 从 Settlement 提取保证金回派生钱包（异步，不阻塞响应）
     if (refundTotal > 0n) {
@@ -9115,6 +9527,7 @@ async function runBatchSubmissionLoop(): Promise<void> {
 // ============================================================
 
 async function handleRequest(req: Request): Promise<Response> {
+  totalRequestCount++;
   const url = new URL(req.url);
   const path = url.pathname;
   const method = req.method;
@@ -9130,9 +9543,65 @@ async function handleRequest(req: Request): Promise<Response> {
     });
   }
 
-  // Health check
+  // Enhanced health check
   if (path === "/health") {
-    return jsonResponse({ status: "ok", pendingMatches: engine.getPendingMatches().length });
+    const { isRedisConnected } = await import("./database/redis");
+    const redisOk = isRedisConnected();
+    const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+    const memUsage = process.memoryUsage();
+    const status = redisOk ? "ok" : "degraded";
+
+    const body = {
+      status,
+      uptime: uptimeSeconds,
+      services: {
+        redis: redisOk ? "connected" : "disconnected",
+      },
+      metrics: {
+        memoryMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+        totalRequests: totalRequestCount,
+        totalOrders: totalOrdersSubmitted,
+        pendingMatches: engine.getPendingMatches().length,
+      },
+    };
+
+    return new Response(JSON.stringify(body), {
+      status: redisOk ? 200 : 503,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Prometheus metrics endpoint
+  if (path === "/metrics") {
+    const { isRedisConnected } = await import("./database/redis");
+    const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+    const memUsage = process.memoryUsage();
+
+    const metrics = [
+      `# HELP memeperp_uptime_seconds Server uptime in seconds`,
+      `# TYPE memeperp_uptime_seconds gauge`,
+      `memeperp_uptime_seconds ${uptimeSeconds}`,
+      `# HELP memeperp_requests_total Total HTTP requests handled`,
+      `# TYPE memeperp_requests_total counter`,
+      `memeperp_requests_total ${totalRequestCount}`,
+      `# HELP memeperp_orders_submitted_total Total orders submitted`,
+      `# TYPE memeperp_orders_submitted_total counter`,
+      `memeperp_orders_submitted_total ${totalOrdersSubmitted}`,
+      `# HELP memeperp_redis_connected Whether Redis is connected (1=yes, 0=no)`,
+      `# TYPE memeperp_redis_connected gauge`,
+      `memeperp_redis_connected ${isRedisConnected() ? 1 : 0}`,
+      `# HELP process_heap_bytes Process heap memory in bytes`,
+      `# TYPE process_heap_bytes gauge`,
+      `process_heap_bytes ${memUsage.heapUsed}`,
+      `# HELP memeperp_pending_matches Number of pending order matches`,
+      `# TYPE memeperp_pending_matches gauge`,
+      `memeperp_pending_matches ${engine.getPendingMatches().length}`,
+    ].join("\n");
+
+    return new Response(metrics + "\n", {
+      status: 200,
+      headers: { "Content-Type": "text/plain; version=0.0.4; charset=utf-8" },
+    });
   }
 
   // 查询毕业代币信息 (价格源切换状态)
@@ -9593,6 +10062,40 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
+  // ============================================================
+  // PnL Settlement Admin API
+  // ============================================================
+
+  // 手动触发 PnL 结算 (管理员紧急场景)
+  if (path === "/api/admin/settle-pnl" && method === "POST") {
+    try {
+      const result = await executePnLSettlement();
+      return jsonResponse(result);
+    } catch (e: any) {
+      return errorResponse(e.message || "PnL settlement failed");
+    }
+  }
+
+  // 查看 PnL 结算状态
+  if (path === "/api/admin/settle-pnl/status" && method === "GET") {
+    return jsonResponse(getSettlementStatus());
+  }
+
+  // SettlementV2 Merkle 系统状态
+  if (path === "/api/v2/status" && method === "GET") {
+    const snapshotStatus = getSnapshotJobStatus();
+    const withdrawStatus = getWithdrawModuleStatus();
+    return jsonResponse({
+      success: true,
+      settlementV2: {
+        address: SETTLEMENT_V2_ADDRESS || null,
+        enabled: !!SETTLEMENT_V2_ADDRESS,
+      },
+      snapshot: snapshotStatus,
+      withdraw: withdrawStatus,
+    });
+  }
+
   // 注册前端交易钱包 session (用于自动 approve+deposit)
   if (path === "/api/wallet/register-session" && method === "POST") {
     try {
@@ -9609,6 +10112,7 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   if (path === "/api/order/submit" && method === "POST") {
+    totalOrdersSubmitted++;
     return handleOrderSubmit(req);
   }
 
@@ -10233,6 +10737,67 @@ function broadcastMarketData(token: Address): void {
 }
 
 /**
+ * 发送市场数据给单个客户端 (用于初次订阅时推送快照)
+ */
+function sendMarketDataToClient(ws: WebSocket, token: Address): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+
+  const normalizedToken = token.toLowerCase() as Address;
+  const orderBook = engine.getOrderBook(normalizedToken);
+
+  let currentPrice = orderBook.getCurrentPrice();
+  if (currentPrice <= 0n) {
+    currentPrice = engine.getSpotPrice(normalizedToken);
+  }
+
+  const trades = engine.getRecentTrades(normalizedToken, 100);
+  const now = Date.now();
+  const oneDayAgo = now - 24 * 60 * 60 * 1000;
+  const trades24h = trades.filter(t => t.timestamp >= oneDayAgo);
+
+  let high24h = currentPrice;
+  let low24h = currentPrice;
+  let volume24h = 0n;
+  let open24h = currentPrice;
+
+  if (trades24h.length > 0) {
+    open24h = trades24h[trades24h.length - 1].price;
+    for (const t of trades24h) {
+      if (t.price > high24h) high24h = t.price;
+      if (t.price < low24h) low24h = t.price;
+      volume24h += (t.size * t.price) / (10n ** 18n);
+    }
+  }
+
+  const priceChange = currentPrice - open24h;
+  const priceChangePercent = open24h > 0n ? Number(priceChange * 10000n / open24h) / 100 : 0;
+  const { longOI, shortOI } = calculateOpenInterest(normalizedToken);
+  const totalOI = longOI + shortOI;
+
+  ws.send(JSON.stringify({
+    type: "market_data",
+    token: normalizedToken,
+    data: {
+      lastPrice: currentPrice.toString(),
+      markPrice: currentPrice.toString(),
+      indexPrice: currentPrice.toString(),
+      high24h: high24h.toString(),
+      low24h: low24h.toString(),
+      volume24h: volume24h.toString(),
+      open24h: open24h.toString(),
+      priceChange24h: priceChange.toString(),
+      priceChangePercent24h: priceChangePercent.toFixed(2),
+      trades24h: trades24h.length,
+      openInterest: totalOI.toString(),
+      longOI: longOI.toString(),
+      shortOI: shortOI.toString(),
+      timestamp: now,
+    },
+    timestamp: now,
+  }));
+}
+
+/**
  * 推送资金费率给订阅该代币的所有客户端
  * 前端期望格式: { type: "funding_rate", token: "0x...", rate: "...", nextFundingTime: ... }
  */
@@ -10341,6 +10906,23 @@ function broadcastMarketDataIfChanged(token: Address): void {
  * 推送订单更新给交易者
  */
 function broadcastOrderUpdate(order: Order): void {
+  // P1-5: 每次订单状态变更时异步镜像到 PostgreSQL
+  if (isPostgresConnected()) {
+    const statusMap: Record<number, string> = {
+      [OrderStatus.PENDING]: "PENDING",
+      [OrderStatus.PARTIALLY_FILLED]: "PARTIALLY_FILLED",
+      [OrderStatus.FILLED]: "FILLED",
+      [OrderStatus.CANCELLED]: "CANCELED",
+    };
+    const pgStatus = statusMap[order.status as number] || "PENDING";
+    OrderMirrorRepo.updateStatus(
+      order.id,
+      pgStatus,
+      order.filledSize.toString(),
+      order.avgFillPrice.toString(),
+    ).catch(e => console.error(`[PG] Mirror update failed for ${order.id}: ${e}`));
+  }
+
   if (!wss) return;
 
   const trader = order.trader.toLowerCase() as Address;
@@ -10457,6 +11039,12 @@ function handleWSMessage(ws: WebSocket, message: string): void {
 
       wsClients.set(ws, tokens);
 
+      // 立即发送每个 token 的 orderbook + market_data
+      for (const token of tokens) {
+        broadcastOrderBook(token);
+        sendMarketDataToClient(ws, token);
+      }
+
       // ✅ 发送确认响应（防止前端超时）
       if (msg.request_id) {
         ws.send(JSON.stringify({
@@ -10473,8 +11061,9 @@ function handleWSMessage(ws: WebSocket, message: string): void {
       tokens.add(msg.token.toLowerCase() as Address);
       wsClients.set(ws, tokens);
 
-      // Send current orderbook immediately
+      // Send current orderbook + market_data immediately
       broadcastOrderBook(msg.token.toLowerCase() as Address);
+      sendMarketDataToClient(ws, msg.token.toLowerCase() as Address);
       console.log(`[WS] Client subscribed to ${msg.token}`);
 
       // ✅ 发送确认响应
@@ -10494,8 +11083,9 @@ function handleWSMessage(ws: WebSocket, message: string): void {
       wsClients.set(ws, tokens);
       console.log(`[WS] Client subscribed to token: ${msg.token}`);
 
-      // 立即发送当前市场数据
+      // 立即发送当前市场数据 (orderbook + market_data)
       broadcastOrderBook(msg.token.toLowerCase() as Address);
+      sendMarketDataToClient(ws, msg.token.toLowerCase() as Address);
     }
     // ✅ 新增：处理 unsubscribe 请求（新 API 格式）
     else if (msg.type === "unsubscribe" && msg.data && Array.isArray(msg.data.topics)) {
@@ -10669,6 +11259,16 @@ async function startServer(): Promise<void> {
   const redisConnected = await db.connect();
   // Also connect the new Redis module (used by spotHistory, balance, etc.)
   await connectNewRedis();
+
+  // P1-5: 连接 PostgreSQL（订单镜像，非阻塞）
+  console.log("[Server] Connecting to PostgreSQL (order mirror)...");
+  const pgConnected = await connectPostgres();
+  if (pgConnected) {
+    console.log("[Server] ✅ PostgreSQL connected — order mirroring enabled");
+  } else {
+    console.warn("[Server] ⚠️ PostgreSQL not available — running with Redis only (orders not mirrored)");
+  }
+
   if (redisConnected) {
     console.log("[Server] Redis connected successfully");
 
@@ -10711,33 +11311,118 @@ async function startServer(): Promise<void> {
   console.log("[Server] Mode 2: On-chain position settlement DISABLED");
 
   // ============================================================
-  // 初始化 Mode 2 模块 (Merkle 快照 + 提现签名)
+  // 初始化 PnL 结算模块 (链下→链上余额同步，在 Merkle 快照之前)
   // ============================================================
-  initializeSnapshotModule({
-    getBalance: getUserBalance,
-    getPositions: (trader: Address) => userPositions.get(trader.toLowerCase() as Address) || [],
-    getAllTraders: () => Array.from(userBalances.keys()) as Address[],
-  });
-  console.log("[Server] Mode 2: Snapshot module initialized");
-
-  // 提现模块需要签名私钥
   if (MATCHER_PRIVATE_KEY && SETTLEMENT_ADDRESS) {
+    const pnlPublicClient = createPublicClient({
+      chain: baseSepolia,
+      transport: http(RPC_URL),
+    });
+    const pnlMatcherAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
+    const pnlWalletClient = createWalletClient({
+      account: pnlMatcherAccount,
+      chain: baseSepolia,
+      transport: http(RPC_URL),
+    });
+
+    initializePnLSettlement({
+      getAdjustments: () => mode2PnLAdjustments,
+      reduceAdjustment: (trader: Address, amount: bigint) => {
+        addMode2Adjustment(trader, -amount, "ON_CHAIN_SETTLED");
+      },
+      settlementAddress: SETTLEMENT_ADDRESS,
+      settlementAbi: SETTLEMENT_ABI,
+      matcherWalletClient: pnlWalletClient,
+      publicClient: pnlPublicClient,
+    });
+
+    startPnLSettlementJob({
+      intervalMs: 60 * 60 * 1000,  // 1 hour
+      minSettleAmount: parseEther("0.0001"),
+      maxBatchSize: 200,
+      dryRun: false,
+    });
+    console.log("[Server] PnL Settlement module initialized (hourly sync to chain)");
+  } else {
+    console.warn("[Server] PnL Settlement: MATCHER_PRIVATE_KEY or SETTLEMENT_ADDRESS missing, module disabled");
+  }
+
+  // ============================================================
+  // 初始化 Mode 2 模块 (dYdX v3 style: Merkle 快照 + 提现签名)
+  // ============================================================
+
+  // 判断是否启用 SettlementV2 Merkle 提款系统
+  const useSettlementV2 = !!(SETTLEMENT_V2_ADDRESS && MATCHER_PRIVATE_KEY);
+
+  if (useSettlementV2) {
+    // --- SettlementV2 Merkle 路径 (dYdX v3 行业主流方案) ---
+    const v2UpdaterAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
+    const v2WalletClient = createWalletClient({
+      account: v2UpdaterAccount,
+      chain: baseSepolia,
+      transport: http(RPC_URL),
+    });
+
+    // 初始化 Snapshot 模块 — 带链上 root 提交
+    initializeSnapshotModule({
+      getBalance: getUserBalance,
+      getPositions: (trader: Address) => userPositions.get(trader.toLowerCase() as Address) || [],
+      getAllTraders: () => Array.from(userBalances.keys()) as Address[],
+      submitRoot: async (root: Hex, _timestamp: number): Promise<Hex | null> => {
+        try {
+          const txHash = await v2WalletClient.writeContract({
+            address: SETTLEMENT_V2_ADDRESS,
+            abi: SETTLEMENT_V2_ABI,
+            functionName: "updateStateRoot",
+            args: [root as `0x${string}`],
+          });
+          console.log(`[SettlementV2] State root submitted: ${txHash}`);
+          return txHash;
+        } catch (e: any) {
+          console.error(`[SettlementV2] Failed to submit state root: ${e.message}`);
+          return null;
+        }
+      },
+    });
+    console.log(`[Server] Mode 2: Snapshot module initialized (SettlementV2: ${SETTLEMENT_V2_ADDRESS})`);
+
+    // 初始化提现模块 — 指向 SettlementV2
+    initializeWithdrawModule({
+      signerPrivateKey: MATCHER_PRIVATE_KEY,
+      contractAddress: SETTLEMENT_V2_ADDRESS,
+      chainId: 84532, // Base Sepolia
+    });
+    console.log("[Server] Mode 2: Withdraw module initialized (Merkle + EIP-712)");
+
+    // 启动快照定时任务 — 每小时生成 Merkle root 并提交到链上
+    startSnapshotJob({
+      intervalMs: 60 * 60 * 1000, // 1 hour
+      submitToChain: true, // SettlementV2 已配置，启用链上提交
+      pruneAfterHours: 24,
+    });
+    console.log("[Server] Mode 2: Snapshot job started (1h interval, chain submission ON)");
+  } else if (MATCHER_PRIVATE_KEY && SETTLEMENT_ADDRESS) {
+    // --- 降级模式: 无 SettlementV2，仅生成本地快照 (不提交链上) ---
+    initializeSnapshotModule({
+      getBalance: getUserBalance,
+      getPositions: (trader: Address) => userPositions.get(trader.toLowerCase() as Address) || [],
+      getAllTraders: () => Array.from(userBalances.keys()) as Address[],
+    });
+
     initializeWithdrawModule({
       signerPrivateKey: MATCHER_PRIVATE_KEY,
       contractAddress: SETTLEMENT_ADDRESS,
-      chainId: 84532, // Base Sepolia
+      chainId: 84532,
     });
-    console.log("[Server] Mode 2: Withdraw module initialized");
 
-    // 启动快照定时任务 (每小时生成 Merkle root)
     startSnapshotJob({
-      intervalMs: 60 * 60 * 1000, // 1 hour
-      submitToChain: false, // 暂时不提交到链上，等 SettlementV2 部署后启用
+      intervalMs: 60 * 60 * 1000,
+      submitToChain: false, // 无 SettlementV2，不提交链上
       pruneAfterHours: 24,
     });
-    console.log("[Server] Mode 2: Snapshot job started (1 hour interval)");
+    console.log("[Server] Mode 2: Fallback mode — snapshot only (no chain submission, awaiting SettlementV2 deployment)");
   } else {
-    console.warn("[Server] Mode 2: MATCHER_PRIVATE_KEY or SETTLEMENT_ADDRESS missing, withdraw module disabled");
+    console.warn("[Server] Mode 2: MATCHER_PRIVATE_KEY missing, withdraw module disabled");
   }
 
   // Initialize Relay Service (P2)
@@ -10968,6 +11653,68 @@ async function startServer(): Promise<void> {
   // 从 Redis 加载待处理订单 (在代币列表同步后)
   await loadOrdersFromRedis();
 
+  // P1-5: 如果 Redis 中没有加载到订单，尝试从 PostgreSQL 恢复
+  if (isPostgresConnected()) {
+    const engineOrderCount = engine.allOrders.size;
+    if (engineOrderCount === 0) {
+      console.log("[Server] Redis had no orders, attempting PostgreSQL recovery...");
+      try {
+        const pgOrders = await OrderMirrorRepo.getActiveOrders();
+        if (pgOrders.length > 0) {
+          let recovered = 0;
+          for (const pgOrder of pgOrders) {
+            try {
+              const engineOrder: Order = {
+                id: pgOrder.id,
+                clientOrderId: undefined,
+                trader: pgOrder.trader as Address,
+                token: pgOrder.token as Address,
+                isLong: pgOrder.is_long,
+                size: BigInt(pgOrder.size),
+                leverage: BigInt(Math.floor(pgOrder.leverage * 10000)),
+                price: BigInt(pgOrder.price),
+                orderType: pgOrder.order_type === "MARKET" ? OrderType.MARKET : OrderType.LIMIT,
+                timeInForce: TimeInForce.GTC,
+                reduceOnly: pgOrder.reduce_only,
+                postOnly: pgOrder.post_only,
+                status: pgOrder.status === "PARTIALLY_FILLED" ? OrderStatus.PARTIALLY_FILLED : OrderStatus.PENDING,
+                filledSize: BigInt(pgOrder.filled_size),
+                avgFillPrice: BigInt(pgOrder.avg_fill_price),
+                totalFillValue: 0n,
+                fee: BigInt(pgOrder.fee),
+                feeCurrency: "ETH",
+                margin: BigInt(pgOrder.margin),
+                collateral: BigInt(pgOrder.margin),
+                takeProfitPrice: pgOrder.trigger_price ? BigInt(pgOrder.trigger_price) : undefined,
+                stopLossPrice: undefined,
+                createdAt: pgOrder.created_at,
+                updatedAt: pgOrder.updated_at,
+                deadline: BigInt(pgOrder.deadline),
+                nonce: BigInt(pgOrder.nonce),
+                signature: pgOrder.signature as Hex,
+                source: OrderSource.API,
+              };
+              engine.allOrders.set(engineOrder.id, engineOrder);
+              const orderBook = engine.getOrderBook(pgOrder.token as Address);
+              orderBook.addOrder(engineOrder);
+              recovered++;
+            } catch (recoverErr: any) {
+              console.error(`[PG Recovery] Failed to restore order ${pgOrder.id}: ${recoverErr.message}`);
+            }
+          }
+          console.log(`[Server] ✅ Recovered ${recovered}/${pgOrders.length} orders from PostgreSQL`);
+        } else {
+          console.log("[Server] PostgreSQL also has no active orders");
+        }
+      } catch (pgError: any) {
+        console.error(`[Server] PostgreSQL recovery failed: ${pgError.message}`);
+      }
+    } else {
+      const pgCount = await OrderMirrorRepo.countActive().catch(() => 0);
+      console.log(`[Server] Redis has ${engineOrderCount} orders, PostgreSQL mirror has ${pgCount} active orders`);
+    }
+  }
+
   // ============================================================
   // 🧹 清理孤儿 orderMarginInfos (重启后 Redis 恢复的记录可能已过期)
   // ============================================================
@@ -11100,6 +11847,10 @@ async function startServer(): Promise<void> {
     console.error("[Events] Failed to start event watching:", e);
   });
 
+  // P2-3: 为已毕业代币启动 Swap 事件监听 (K线生成)
+  // 注意: detectGraduatedTokens() 已在前面执行，graduatedTokens Map 已填充
+  startAllSwapWatchers();
+
   // ========================================
   // 启动时回填现货交易数据 (异步，不阻塞启动)
   // 回填最近 50000 个区块 (~28 小时) 以捕获重启期间遗漏的交易
@@ -11157,6 +11908,53 @@ async function startServer(): Promise<void> {
   }, FUNDING_RATE_INTERVAL_MS);
   console.log(`[Server] Funding rate interval: ${FUNDING_RATE_INTERVAL_MS}ms (on-chain update disabled)`);
 
+  // ============================================================
+  // Rate Limiter (in-memory sliding window)
+  // ============================================================
+  // 三级速率限制: 读 100/s, 写 20/s, 下单 5/s
+  const rateLimitMap = new Map<string, { read: number[]; write: number[]; order: number[] }>();
+
+  function isRateLimited(ip: string, isWrite: boolean, isOrderSubmit: boolean): boolean {
+    const now = Date.now();
+    const windowMs = 1000; // 1 second sliding window
+
+    if (!rateLimitMap.has(ip)) {
+      rateLimitMap.set(ip, { read: [], write: [], order: [] });
+    }
+    const entry = rateLimitMap.get(ip)!;
+
+    // Clean expired timestamps
+    entry.read = entry.read.filter(t => now - t < windowMs);
+    entry.write = entry.write.filter(t => now - t < windowMs);
+    entry.order = entry.order.filter(t => now - t < windowMs);
+
+    if (isOrderSubmit) {
+      if (entry.order.length >= 5) return true;
+      entry.order.push(now);
+    }
+    if (isWrite) {
+      if (entry.write.length >= 20) return true;
+      entry.write.push(now);
+    }
+    if (entry.read.length >= 100) return true;
+    entry.read.push(now);
+
+    return false;
+  }
+
+  // Cleanup stale entries every 60s to prevent memory leak
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of rateLimitMap) {
+      entry.read = entry.read.filter(t => now - t < 2000);
+      entry.write = entry.write.filter(t => now - t < 2000);
+      entry.order = entry.order.filter(t => now - t < 2000);
+      if (entry.read.length === 0 && entry.write.length === 0 && entry.order.length === 0) {
+        rateLimitMap.delete(ip);
+      }
+    }
+  }, 60_000);
+
   // Start HTTP server (Node.js compatible)
   import("http").then((http) => {
     const server = http.createServer(async (req, res) => {
@@ -11170,6 +11968,22 @@ async function startServer(): Promise<void> {
         res.statusCode = 204;
         res.end();
         return;
+      }
+
+      // Rate limiting
+      const clientIp = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.socket.remoteAddress || "unknown";
+      const reqPath = req.url?.split("?")[0] || "";
+      const isWrite = req.method === "POST";
+      const isOrderSubmit = reqPath === "/api/order/submit";
+      // Skip rate limiting for health/metrics endpoints
+      if (reqPath !== "/health" && reqPath !== "/metrics") {
+        if (isRateLimited(clientIp, isWrite, isOrderSubmit)) {
+          res.statusCode = 429;
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("Retry-After", "1");
+          res.end(JSON.stringify({ error: "Too many requests", retryAfter: 1 }));
+          return;
+        }
       }
 
       try {
@@ -11215,6 +12029,14 @@ async function startServer(): Promise<void> {
     server.listen(PORT, () => {
       console.log(`[Server] Matching engine API running on http://localhost:${PORT}`);
       console.log(`[Server] Batch interval: ${BATCH_INTERVAL_MS}ms`);
+
+      // P0-1: 启动时警告签名验证状态
+      if (SKIP_SIGNATURE_VERIFY) {
+        console.warn("⚠️⚠️⚠️ [SECURITY] SIGNATURE VERIFICATION IS DISABLED (NODE_ENV=test) ⚠️⚠️⚠️");
+        console.warn("⚠️⚠️⚠️ [SECURITY] DO NOT USE THIS IN PRODUCTION ⚠️⚠️⚠️");
+      } else {
+        console.log("[Security] ✅ Signature verification is ENABLED");
+      }
 
       // Start WebSocket server on same port
       wss = new WebSocketServer({ server });

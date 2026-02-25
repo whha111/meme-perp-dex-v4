@@ -72,6 +72,7 @@ export const TRADING = {
   MIN_LEVERAGE: 1n,
   MAX_LEVERAGE: 100n,
   MIN_MARGIN: 1n * 10n ** 15n, // 最小保证金 0.001 ETH (约 $2.5)
+  MIN_POSITION_SIZE: 1n * 10n ** 15n, // 最小仓位 0.001 ETH (约 $2.5)
   MAX_POSITION_SIZE: 1000n * PRECISION_MULTIPLIER.ETH, // 最大仓位 1000 ETH
   TAKER_FEE_RATE: 5n,  // 0.05% = 5bp
   MAKER_FEE_RATE: 2n,  // 0.02% = 2bp
@@ -157,6 +158,10 @@ export const ORDER_TYPES = {
 
 export const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 export const REDIS_KEY_PREFIX = "memeperp:";
+// Sentinel 高可用配置 (格式: "host1:port1,host2:port2,host3:port3")
+export const REDIS_SENTINEL_HOSTS = process.env.REDIS_SENTINEL_HOSTS || "";
+export const REDIS_MASTER_NAME = process.env.REDIS_MASTER_NAME || "mymaster";
+export const REDIS_PASSWORD = process.env.REDIS_PASSWORD || "";
 
 // ============================================================
 // PostgreSQL配置

@@ -12,7 +12,7 @@
 import Redis from "ioredis";
 import { v4 as uuidv4 } from "uuid";
 import type { Address } from "viem";
-import { REDIS_URL, REDIS_KEY_PREFIX } from "../config";
+import { REDIS_URL, REDIS_KEY_PREFIX, REDIS_SENTINEL_HOSTS, REDIS_MASTER_NAME, REDIS_PASSWORD } from "../config";
 import { logger } from "../utils/logger";
 import {
   type Position,
@@ -35,15 +35,37 @@ let isConnected = false;
 
 export function getRedisClient(): Redis {
   if (!redis) {
-    redis = new Redis(REDIS_URL, {
-      keyPrefix: REDIS_KEY_PREFIX,
-      maxRetriesPerRequest: 3,
-      connectTimeout: 3000,
-      commandTimeout: 5000,
-    });
+    if (REDIS_SENTINEL_HOSTS) {
+      // Sentinel 高可用模式
+      const sentinels = REDIS_SENTINEL_HOSTS.split(",").map((hostPort) => {
+        const [host, port] = hostPort.trim().split(":");
+        return { host, port: parseInt(port || "26379") };
+      });
+      redis = new Redis({
+        sentinels,
+        name: REDIS_MASTER_NAME,
+        keyPrefix: REDIS_KEY_PREFIX,
+        password: REDIS_PASSWORD || undefined,
+        maxRetriesPerRequest: 3,
+        connectTimeout: 5000,
+        commandTimeout: 5000,
+        sentinelRetryStrategy: (times: number) => Math.min(times * 100, 3000),
+      });
+      logger.info("Redis", `Sentinel mode: master="${REDIS_MASTER_NAME}", sentinels=${REDIS_SENTINEL_HOSTS}`);
+    } else {
+      // 单节点模式 (开发/测试)
+      redis = new Redis(REDIS_URL, {
+        keyPrefix: REDIS_KEY_PREFIX,
+        password: REDIS_PASSWORD || undefined,
+        maxRetriesPerRequest: 3,
+        connectTimeout: 3000,
+        commandTimeout: 5000,
+      });
+      logger.info("Redis", `Standalone mode: ${REDIS_URL}`);
+    }
 
     redis.on("connect", () => {
-      logger.info("Redis", `Connected to ${REDIS_URL}`);
+      logger.info("Redis", "Connected");
       isConnected = true;
     });
 

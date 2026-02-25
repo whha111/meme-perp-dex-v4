@@ -20,7 +20,7 @@ import { keccak256, encodePacked, type Address, type Hex } from "viem";
  */
 export interface UserEquity {
   user: Address;
-  equity: bigint; // 1e6 precision (USDT)
+  equity: bigint; // 1e18 precision (WETH)
 }
 
 /**
