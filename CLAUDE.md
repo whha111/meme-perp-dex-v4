@@ -10,17 +10,19 @@
 cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 ```
 
-## ⚠️ 严重警告 (2026-03-01 全面审计)
+## 审计修复状态 (2026-03-01 全面审计 → 已修复)
 
-**发现 48 个问题: 12 CRITICAL, 15 HIGH, 21 MEDIUM**
+**审计发现 48 个问题: 12 CRITICAL, 15 HIGH, 21 MEDIUM — 已修复 35 个, 5 个部分修复, 8 个架构限制**
 
-整个永续合约交易系统运行在**虚拟余额**上，没有真实链上资金:
-- SettlementV2 合约余额 = 0 (从未有人调用 deposit())
-- PerpVault 合约余额 = 0 (deposit() 从未调用，totalShares = 0)
-- 所有用户余额来自 `mode2PnLAdjustments` 内存 Map + Redis
-- `POST /api/user/:trader/deposit` 是无验证的虚假充值接口
-- 做市商通过此接口注入 6 ETH 幽灵流动性
-- Redis 丢失 = 所有资金记录丢失，无法恢复
+链上资金托管已连通:
+- ✅ PerpVault 已有 2 ETH LP 种子（ConfigureSettlement.s.sol 已执行）
+- ✅ 前端存款走 SettlementV2.deposit() 链上 3 步流程（AccountBalance.tsx）
+- ✅ 前端提款走 Merkle proof → SettlementV2.withdraw()（AccountBalance.tsx）
+- ✅ `POST /api/user/:trader/deposit` 假充值 API 已加 ALLOW_FAKE_DEPOSIT 守卫
+- ✅ PerpVault batch settlement 已实现（loss/fee/liquidation/profit 队列）
+- ✅ Keeper 从撮合引擎获取仓位数据（不再读空 PostgreSQL）
+- ⚠️ PnL 结算仍以 mode2Adj 为主路径，PerpVault 为异步同步层
+- ⚠️ 余额/仓位主数据仍在 Redis，PostgreSQL 仅镜像订单
 
 **详见**: `docs/ISSUES_AUDIT_REPORT.md`
 
@@ -36,19 +38,22 @@ cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 
 **架构**: 简化版 dYdX v3 — 链下撮合 + SettlementV2 托管 + PerpVault LP 池 + Merkle 提款
 
-**已完成:**
+**已完成 (2026-03-01 审计修复后):**
 - ✅ PerpVault OI 追踪 (batch queue + nonce管理，100% 成功率)
-- ✅ Merkle 快照代码就绪 (modules/snapshot.ts)
-- ✅ 提款 Merkle proof 代码就绪 (modules/withdraw.ts)
-- ✅ ConfigureSettlement.s.sol 地址已修正
+- ✅ Merkle 快照 + 提款 Merkle proof (modules/snapshot.ts + withdraw.ts)
+- ✅ ConfigureSettlement.s.sol 已执行 — PerpVault 2 ETH LP, 合约全部授权
+- ✅ 前端 3 步链上存款 (ETH→WETH→SettlementV2.deposit)
+- ✅ 前端 Merkle proof 链上提款 (SettlementV2.withdraw)
+- ✅ 假充值/提款 API 已加环境变量守卫 (ALLOW_FAKE_DEPOSIT)
+- ✅ 18 个安全 Bug 修复 (鉴权/nonce/并发/K线/死代码)
+- ✅ 涨幅显示 Bug 修复 (priceChangePercent24h)
+- ✅ Keeper 从撮合引擎获取数据 (不再读空 DB)
+- ✅ 保险基金查询 PerpVault getPoolValue() (不再是内存假值)
 
-**未连通 (CRITICAL):**
-- ❌ 用户存款未调用 SettlementV2.deposit() — 走虚假 API
-- ❌ 用户提款未调用 SettlementV2.withdraw() — 走虚假 API
-- ❌ PnL 结算未真正流经 PerpVault — 纯 mode2Adj
-- ❌ 保险基金纯内存，不持久化
-- ❌ Keeper 读空 PostgreSQL，强平监控失效
-- ❌ ConfigureSettlement.s.sol 未执行（需要 ETH）
+**待优化 (非阻塞):**
+- ⚠️ PnL 主路径仍是 mode2Adj，PerpVault batch settlement 为异步同步
+- ⚠️ 余额/仓位主数据在 Redis，PostgreSQL 仅镜像订单
+- ⏳ 端到端真实资金流测试 (Phase E)
 
 ## 行业标准 (必须遵循)
 

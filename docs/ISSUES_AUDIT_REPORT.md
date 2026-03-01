@@ -465,9 +465,24 @@ await depositEngine(deployer.addr, parseEther("2"));
 | 18 个安全 Bug (P1-P5: 鉴权/nonce/并发/K线/死代码) | ✅ 已完成 | 2026-03-01 | `ce8b2f0` |
 | 27 个 CRITICAL 审计修复 (Phase 1-4) | ✅ 已完成 | 2026-03-01 | `bd2048a` |
 | Phase 5-8: 22 个 bug + 部署安全加固 | ✅ 已完成 | 2026-03-01 | `5c730a9` |
-| 剩余 10 个修复 (C-02,C-05,H-13,H-14,M-10/13/15/16/17/18) | ✅ 已完成 | 2026-03-01 | 本次提交 |
-| ConfigureSettlement.s.sol 种子 LP 减至 0.5 ETH | ✅ 已调整 | 2026-03-01 | 本次提交 |
-| 执行 ConfigureSettlement.s.sol (需 ~0.65 ETH) | ⏳ 可执行 | 部署者余额 0.87 ETH | — |
+| 剩余 10 个修复 (C-02,C-05,H-13,H-14,M-10/13/15/16/17/18) | ✅ 已完成 | 2026-03-01 | `f937f21` |
+| ConfigureSettlement.s.sol 种子 LP 恢复为 2 ETH | ✅ 已调整 | 2026-03-01 | `f937f21` |
+| 执行 ConfigureSettlement.s.sol | ✅ 已执行 | 2026-03-01 | 链上交易确认 |
+
+#### 链上验证结果 (2026-03-01)
+
+| 检查项 | 合约 | 结果 |
+|--------|------|------|
+| PerpVault `getPoolValue()` | `0x586F...51F` | **2.000007 ETH** ✅ |
+| PerpVault `vault()` | `0x586F...51F` | `0xcc4Fa8Df...` ✅ |
+| PerpVault `authorizedContracts(deployer)` | `0x586F...51F` | `true` ✅ |
+| PerpVault `maxOIPerToken(DOGE)` | `0x586F...51F` | **10 ETH** ✅ |
+| PerpVault `maxOIPerToken(PEPE)` | `0x586F...51F` | **10 ETH** ✅ |
+| PerpVault `maxOIPerToken(SHIB)` | `0x586F...51F` | **10 ETH** ✅ |
+| SettlementV2 `platformSigner()` | `0x733E...C75` | `0x5AF1...` (deployer) ✅ |
+| SettlementV2 `authorizedUpdaters(deployer)` | `0x733E...C75` | `true` ✅ |
+| SettlementV2 `depositCapPerUser()` | `0x733E...C75` | **10 ETH** ✅ |
+| SettlementV2 `depositCapTotal()` | `0x733E...C75` | **100 ETH** ✅ |
 
 ### CRITICAL 修复详情
 
@@ -536,4 +551,5 @@ await depositEngine(deployer.addr, parseEther("2"));
 
 > **统计**: 48 个问题中, **35 个完全修复**, **5 个部分修复**, **8 个标注为架构限制/待对接**
 >
-> **下一步**: 执行 ConfigureSettlement.s.sol (部署者余额 0.87 ETH ≥ 所需 0.65 ETH) → 端到端验证
+> **ConfigureSettlement.s.sol 已于 2026-03-01 成功执行**, 链上验证全部通过。
+> **下一步**: Phase E 端到端真实资金流测试 (存款→开仓→平仓→提款)
