@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -149,9 +150,17 @@ func (h *MarketHandler) GetOrderBook(c *gin.Context) {
 	// TODO: Add a proper instrument mapping service
 	// Temporary: Pass instID directly to matching engine and let it handle
 
+	// AUDIT-FIX GO-H06: Sanitize instID to prevent SSRF (path traversal, query injection)
+	sanitizedInstID := strings.ReplaceAll(instID, "/", "")
+	sanitizedInstID = strings.ReplaceAll(sanitizedInstID, "?", "")
+	sanitizedInstID = strings.ReplaceAll(sanitizedInstID, "&", "")
+	sanitizedInstID = strings.ReplaceAll(sanitizedInstID, "#", "")
+	sanitizedInstID = strings.ReplaceAll(sanitizedInstID, "..", "")
+
 	// Proxy request to Matching Engine
-	url := fmt.Sprintf("%s/api/orderbook/%s", h.matchingEngineURL, instID)
-	resp, err := http.Get(url)
+	url := fmt.Sprintf("%s/api/orderbook/%s", h.matchingEngineURL, sanitizedInstID)
+	client := &http.Client{Timeout: 5 * time.Second} // AUDIT-FIX GO-H05: add timeout
+	resp, err := client.Get(url)
 	if err != nil {
 		// If matching engine is unavailable, return empty orderbook
 		response.Success(c, model.OrderBook{

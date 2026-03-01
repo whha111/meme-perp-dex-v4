@@ -194,7 +194,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <a
-                  href={`https://basescan.org/address/${holder.address}`}
+                  href={`https://sepolia.basescan.org/address/${holder.address}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-okx-text-primary font-mono text-[12px] hover:text-[#007AFF] transition-colors"

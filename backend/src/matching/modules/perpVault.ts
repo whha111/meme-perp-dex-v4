@@ -312,7 +312,8 @@ async function flushOIQueue(): Promise<void> {
       const existing = pendingOIDelta.get(key) || 0n;
       pendingOIDelta.set(key, existing + delta);
     }
-    isFlushingOI = false;
+    // AUDIT-FIX ME-C03: 使用正确的锁变量 globalTxLock (isFlushingOI 未定义)
+    globalTxLock = false;
     return;
   }
 

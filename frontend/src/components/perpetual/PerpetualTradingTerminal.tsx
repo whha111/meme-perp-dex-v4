@@ -530,12 +530,18 @@ export function PerpetualTradingTerminal({
   );
 
   // K 线图表的价格 prop — 单独 memoize，避免随父组件其他状态变化重建
+  // AUDIT-FIX FC-C03: chartPrice 应统一使用 ETH 计价
+  // 之前 fallback 用 spotPriceUsd (USD)，但 chart 期望 ETH 计价 → 价格 inflated ~2000x
   const chartPrice = useMemo(() => {
     if (tokenStats?.lastPrice) {
       return Number(tokenStats.lastPrice) / 1e18;
     }
-    return spotPriceUsd > 0 ? spotPriceUsd : undefined;
-  }, [tokenStats?.lastPrice, spotPriceUsd]);
+    // Fallback: 使用 spotPriceBigInt (ETH 计价, 1e18 精度)
+    if (spotPriceBigInt) {
+      return Number(spotPriceBigInt) / 1e18;
+    }
+    return undefined;
+  }, [tokenStats?.lastPrice, spotPriceBigInt]);
 
   return (
     <div

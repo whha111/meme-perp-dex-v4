@@ -26,6 +26,17 @@ import { useTokenInfo, getTokenDisplayName } from "@/hooks/common/useTokenInfo";
 import { usePoolState, calculatePriceUsd, calculateMarketCapUsd } from "@/hooks/spot/usePoolState";
 import { useOnChainTrades, OnChainTrade } from "@/hooks/perpetual/useOnChainTrades";
 import { tradeEventEmitter } from "@/lib/tradeEvents";
+import { TradingErrorBoundary } from "@/components/shared/TradingErrorBoundary";
+
+// 格式化 USD 市值（紧凑格式：K/M 后缀）
+function formatUsdCompact(usd: number): string {
+  if (usd <= 0) return "0.00";
+  if (usd >= 1_000_000) return (usd / 1_000_000).toFixed(2) + "M";
+  if (usd >= 1_000) return (usd / 1_000).toFixed(2) + "K";
+  if (usd >= 1) return usd.toFixed(2);
+  if (usd >= 0.01) return usd.toFixed(4);
+  return usd.toFixed(6);
+}
 
 // 格式化 ETH 本位价格，使用下标表示法 (e.g., 0.0₅62087 ETH)
 function formatSmallPriceETH(priceEth: number): string {
@@ -85,18 +96,20 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
   // 构造 instId (用于API调用)
   const instId = symbol;
 
-  // 从链上获取代币名称和符号
-  const tokenInfo = useTokenInfo(symbol);
-  const displaySymbol = getTokenDisplayName(symbol, tokenInfo);
+  // 从 symbol 提取纯地址（去掉 -USDT 后缀 + 小写化）
+  // symbol 格式可能是 "0x...-USDT" 或 "0x..." 或 "BTC-USDT"
+  const isTokenAddress = symbol?.startsWith("0x");
+  // ⚠️ 小写化！URL 中的 mixed-case 地址 checksum 可能不合法，viem 会拒绝
+  const pureTokenAddress = isTokenAddress ? symbol.split("-")[0].toLowerCase() : null;
+  const isValidTokenAddress = pureTokenAddress && pureTokenAddress.length === 42;
+
+  // 从 matching engine 获取代币名称和符号
+  // ⚠️ 必须用 pureTokenAddress（纯地址），不能用 symbol（含 -USDT 后缀 → length≠42 → 查找失败）
+  const tokenInfo = useTokenInfo(pureTokenAddress || symbol);
+  const displaySymbol = getTokenDisplayName(pureTokenAddress || symbol, tokenInfo);
 
   // 获取实时 ETH 价格
   const { price: ethPriceUsd } = useETHPrice();
-
-  // 从 TokenFactory 合约直接获取池子状态和价格
-  // symbol 格式可能是 "0x..." 或 "0x...-USDT"
-  const isTokenAddress = symbol?.startsWith("0x");
-  const pureTokenAddress = isTokenAddress ? symbol.split("-")[0] : null;
-  const isValidTokenAddress = pureTokenAddress && pureTokenAddress.length === 42;
   const poolData = usePoolState(isValidTokenAddress ? pureTokenAddress : undefined);
 
   // 获取链上交易记录
@@ -278,7 +291,8 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
       type: trade.tradeType.toLowerCase() as "buy" | "sell",
       totalValue: formatETHValue(ethAmount),
       price: formatSmallPriceETH(priceEth),
-      quantity: (trade.tradeType === "BUY" ? "+" : "-") + (parseFloat(trade.tokenAmount) / 1e18).toFixed(2) + "M " + currentDisplaySymbol,
+      // AUDIT-FIX FC-C02: 与历史交易格式一致 — 先 /1e18 得到实际 token 数, 再 /1e6 + "M" 后缀
+      quantity: (trade.tradeType === "BUY" ? "+" : "-") + (parseFloat(trade.tokenAmount) / 1e18 / 1e6).toFixed(2) + "M " + currentDisplaySymbol,
       quantitySol: (trade.tradeType === "BUY" ? "-" : "+") + ethAmount.toFixed(5) + " ETH",
       address: trade.traderAddress.slice(0, 6) + "..." + trade.traderAddress.slice(-4),
       txHash: trade.txHash,
@@ -413,7 +427,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
         <div className="bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-2">
           {headerSlot}
           <span className="ml-2 text-[11px] text-okx-text-secondary">
-            ${(Number(formatUnits(marketCap, 18)) * ethPriceUsd).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+            ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * ethPriceUsd)}
           </span>
         </div>
       ) : (
@@ -422,7 +436,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
            <span className="text-okx-text-primary font-bold">{displaySymbol}</span>
            <span className="mx-1">——</span>
            <span>
-             ${(Number(formatUnits(marketCap, 18)) * ethPriceUsd).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+             ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * ethPriceUsd)}
            </span>
         </div>
       )}
@@ -431,7 +445,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
       <PriceBoard
         symbol={symbol}
         displaySymbol={displaySymbol}
-        tokenAddress={(displayData as any)?.tokenAddress}
+        tokenAddress={displayData?.tokenAddress}
         currentPrice={currentPrice}
         price24hChange={displayData.priceChange24h || 0}
         marketCap={marketCap}
@@ -445,7 +459,9 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
         <div className="flex-[3] border-r border-okx-border-primary flex flex-col overflow-hidden">
            {/* K线图本体 - TradingView 官方 Lightweight Charts */}
            <div className="h-[400px] bg-[#131722]">
-              <TokenPriceChart symbol={symbol} displaySymbol={displaySymbol} latestTrade={latestTrade} />
+              <TradingErrorBoundary module="SpotChart">
+                <TokenPriceChart symbol={symbol} displaySymbol={displaySymbol} latestTrade={latestTrade} />
+              </TradingErrorBoundary>
            </div>
 
            {/* 底部详情选项卡 */}
@@ -548,7 +564,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
                  {activeTab === "holdingAddresses" && (
                    <TopHolders
                      instId={instId}
-                     creatorAddress={(displayData as any)?.creatorAddress}
+                     creatorAddress={displayData?.creatorAddress}
                    />
                  )}
                  {activeTab === "profitAddresses" && (
@@ -585,16 +601,18 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
 
         {/* 右侧交易面板 (25%) */}
         <div className="flex-1 bg-okx-bg-primary p-2 overflow-y-auto">
-           <SwapPanelOKX
-             symbol={symbol}
-             displaySymbol={displaySymbol}
-             securityStatus={securityStatus}
-             tokenAddress={(displayData as any)?.tokenAddress as `0x${string}` | undefined}
-             soldSupply={displayData?.soldSupply}
-             totalSupply={displayData?.totalSupply}
-             isGraduated={isPoolGraduated}
-             isPoolActive={isPoolActive}
-           />
+          <TradingErrorBoundary module="SwapPanel">
+            <SwapPanelOKX
+              symbol={symbol}
+              displaySymbol={displaySymbol}
+              securityStatus={securityStatus}
+              tokenAddress={displayData?.tokenAddress as `0x${string}` | undefined}
+              soldSupply={displayData?.soldSupply}
+              totalSupply={displayData?.totalSupply}
+              isGraduated={isPoolGraduated}
+              isPoolActive={isPoolActive}
+            />
+          </TradingErrorBoundary>
         </div>
       </div>
 

@@ -155,7 +155,7 @@ export function ProfitableAddresses({
               {/* Address + Label */}
               <div className="flex items-center gap-1.5 min-w-0">
                 <a
-                  href={`https://basescan.org/address/${holder.address}`}
+                  href={`https://sepolia.basescan.org/address/${holder.address}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-okx-text-primary font-mono hover:text-[#007AFF] transition-colors"

@@ -17,6 +17,7 @@
 import {
   type Address,
   type Hex,
+  type PublicClient,
   keccak256,
   encodePacked,
   encodeAbiParameters,
@@ -115,6 +116,55 @@ export function initializeWithdrawModule(config: {
     EIP712_DOMAIN.chainId = config.chainId;
   }
   console.log(`[Withdraw] Module initialized, signer=${state.signer.address.slice(0, 10)}`);
+}
+
+/**
+ * Sync withdrawal nonces from on-chain SettlementV2 contract.
+ * Call this on engine restart to prevent nonce reuse / replay attacks.
+ *
+ * @param publicClient - viem PublicClient connected to the correct chain
+ * @param users - list of known user addresses to sync
+ */
+export async function syncNoncesFromChain(
+  publicClient: PublicClient,
+  users: Address[],
+): Promise<number> {
+  if (!state.contractAddress) {
+    console.warn("[Withdraw] Cannot sync nonces: module not initialized");
+    return 0;
+  }
+
+  const NONCE_ABI = [
+    {
+      inputs: [{ name: "user", type: "address" }],
+      name: "withdrawalNonces",
+      outputs: [{ type: "uint256" }],
+      stateMutability: "view",
+      type: "function",
+    },
+  ] as const;
+
+  let synced = 0;
+  for (const user of users) {
+    try {
+      const nonce = await publicClient.readContract({
+        address: state.contractAddress,
+        abi: NONCE_ABI,
+        functionName: "withdrawalNonces",
+        args: [user],
+      }) as bigint;
+
+      if (nonce > 0n) {
+        state.nonces.set(user.toLowerCase(), nonce);
+        synced++;
+      }
+    } catch {
+      // Skip users that fail (e.g., contract not deployed on this chain)
+    }
+  }
+
+  console.log(`[Withdraw] Synced ${synced}/${users.length} nonces from chain`);
+  return synced;
 }
 
 /**
@@ -304,7 +354,8 @@ export function createWithdrawalRequest(
     user,
     amount,
     nonce: getUserNonce(user),
-    deadline: Date.now() + deadlineMinutes * 60 * 1000,
+    // AUDIT-FIX ME-C06: EIP-712 deadline 必须是 Unix 秒而非毫秒
+    deadline: Math.floor(Date.now() / 1000) + deadlineMinutes * 60,
   };
 }
 

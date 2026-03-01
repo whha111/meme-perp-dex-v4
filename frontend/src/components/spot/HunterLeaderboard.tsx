@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { MATCHING_ENGINE_URL, WS_URL } from "@/config/api";
 
 interface Hunter {
   rank: number;
@@ -44,8 +45,8 @@ interface Props {
 
 export function HunterLeaderboard({
   token,
-  apiUrl = "http://localhost:8081",
-  wsUrl = "ws://localhost:8081",
+  apiUrl = MATCHING_ENGINE_URL,
+  wsUrl = WS_URL,
 }: Props) {
   const t = useTranslations("perp");
   const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null);
@@ -267,7 +268,7 @@ export function HunterLeaderboard({
               >
                 <span className="text-red-400">{formatAddress(liq.liquidatedTrader)}</span>
                 <span className="text-gray-500"> → </span>
-                <span className="text-gray-400">${(Number(liq.collateralLost) / 1e6).toFixed(2)}</span>
+                <span className="text-gray-400">Ξ{(Number(liq.collateralLost) / 1e18).toFixed(4)}</span>
               </div>
             ))}
           </div>

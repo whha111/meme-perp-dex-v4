@@ -244,6 +244,12 @@ contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
         // 4. Update state
         withdrawalNonces[user] = nonce + 1;
         totalWithdrawn[user] += amount;
+        // AUDIT-FIX SC-C01: decrement totalDeposited on withdraw to prevent permanent deposit DoS
+        if (totalDeposited >= amount) {
+            totalDeposited -= amount;
+        } else {
+            totalDeposited = 0;
+        }
 
         // 5. Transfer tokens
         collateralToken.safeTransfer(user, amount);

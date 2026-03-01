@@ -12,6 +12,7 @@ import (
 )
 
 type AccountService struct {
+	db           *gorm.DB // AUDIT-FIX GO-C05: store DB reference for bill repo
 	userRepo     *repository.UserRepository
 	balanceRepo  *repository.BalanceRepository
 	positionRepo *repository.PositionRepository
@@ -19,12 +20,14 @@ type AccountService struct {
 }
 
 func NewAccountService(
+	db *gorm.DB, // AUDIT-FIX GO-C05: pass DB for bill repo
 	userRepo *repository.UserRepository,
 	balanceRepo *repository.BalanceRepository,
 	positionRepo *repository.PositionRepository,
 	cache *database.Cache,
 ) *AccountService {
 	return &AccountService{
+		db:           db,
 		userRepo:     userRepo,
 		balanceRepo:  balanceRepo,
 		positionRepo: positionRepo,
@@ -165,8 +168,8 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		return errors.New(errors.CodePositionNotFound)
 	}
 
-	// Get balance
-	balance, err := s.balanceRepo.GetByUserAndCcy(userID, "BNB")
+	// AUDIT-FIX GO-C04: Platform uses ETH on Base Sepolia, not BNB
+	balance, err := s.balanceRepo.GetByUserAndCcy(userID, "ETH")
 	if err != nil {
 		return errors.New(errors.CodeInsufficientBalance)
 	}
@@ -178,7 +181,7 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		}
 
 		// Deduct from available balance
-		if err := s.balanceRepo.FreezeBalance(userID, "BNB", amount); err != nil {
+		if err := s.balanceRepo.FreezeBalance(userID, "ETH", amount); err != nil {
 			return err
 		}
 
@@ -195,7 +198,7 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		pos.Margin = pos.Margin.Sub(amount)
 
 		// Return to available balance
-		if err := s.balanceRepo.UnfreezeBalance(userID, "BNB", amount); err != nil {
+		if err := s.balanceRepo.UnfreezeBalance(userID, "ETH", amount); err != nil {
 			return err
 		}
 	} else {
@@ -214,7 +217,7 @@ func (s *AccountService) GetBills(userID int64, instType, ccy string, billType i
 		limit = 100
 	}
 
-	billRepo := repository.NewBillRepository(nil) // Need to inject this properly
+	billRepo := repository.NewBillRepository(s.db) // AUDIT-FIX GO-C05: use injected DB, not nil
 	return billRepo.GetByUser(userID, instType, ccy, billType, after, before, limit)
 }
 

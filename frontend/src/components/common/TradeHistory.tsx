@@ -163,7 +163,7 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                 {/* 详情 */}
                 <td className="py-3 px-3 text-center">
                   <a 
-                    href={`https://basescan.org/tx/${trade.txHash}`} 
+                    href={`https://sepolia.basescan.org/tx/${trade.txHash}`}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-okx-text-tertiary hover:text-okx-text-primary"

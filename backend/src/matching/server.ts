@@ -6202,7 +6202,8 @@ function errorResponse(message: string, status = 400): Response {
 
 // P3-P1: EIP-191 签名验证 — 用于非订单的私有端点 (close, cancel, withdraw, TPSL)
 // 与 WS auth 使用同一模式 (handlers.ts L234 handleAuth)
-const SKIP_SIGNATURE_VERIFY_ENV = process.env.SKIP_SIGNATURE_VERIFY === "true";
+// AUDIT-FIX ME-C02: 必须与 L91 保持一致 — 仅在测试环境下可跳过
+const SKIP_SIGNATURE_VERIFY_ENV = process.env.NODE_ENV === "test" && process.env.SKIP_SIGNATURE_VERIFY === "true";
 
 async function verifyTraderSignature(
   trader: string,
@@ -8095,20 +8096,25 @@ async function handleClosePair(req: Request, pairId: string): Promise<Response> 
       }
 
       // 同步更新内存余额 (用于 WS 广播)
+      // AUDIT-FIX ME-C01: 全仓平仓必须释放 usedMargin，防止 totalBalance 膨胀
+      const balance = getUserBalance(normalizedTrader);
+      const releasedCollateral = BigInt(position.collateral || "0");
+      if (balance.usedMargin && balance.usedMargin > 0n) {
+        balance.usedMargin -= releasedCollateral;
+        if (balance.usedMargin < 0n) balance.usedMargin = 0n;
+      }
       if (returnAmount > 0n) {
-        const balance = getUserBalance(normalizedTrader);
         balance.availableBalance += returnAmount;
         balance.totalBalance = balance.availableBalance + (balance.usedMargin || 0n);
-        console.log(`[Close] Mode 2: Added Ξ${Number(returnAmount) / 1e18} to ${normalizedTrader.slice(0, 10)} available balance`);
+        console.log(`[Close] Mode 2: Added Ξ${Number(returnAmount) / 1e18} to ${normalizedTrader.slice(0, 10)} available balance (released margin: Ξ${Number(releasedCollateral) / 1e18})`);
       } else if (returnAmount < 0n) {
-        // 亏损情况: 从 available 中扣除
-        const balance = getUserBalance(normalizedTrader);
+        // AUDIT-FIX ME-C11: 亏损情况 — 即使余额不足也必须扣除（扣至0）
         const loss = -returnAmount;
-        if (balance.availableBalance >= loss) {
-          balance.availableBalance -= loss;
-          balance.totalBalance = balance.availableBalance + (balance.usedMargin || 0n);
-          console.log(`[Close] Mode 2: Deducted Ξ${Number(loss) / 1e18} loss from ${normalizedTrader.slice(0, 10)}`);
-        }
+        balance.availableBalance = balance.availableBalance >= loss ? balance.availableBalance - loss : 0n;
+        balance.totalBalance = balance.availableBalance + (balance.usedMargin || 0n);
+        console.log(`[Close] Mode 2: Deducted Ξ${Number(loss) / 1e18} loss from ${normalizedTrader.slice(0, 10)} (balance clamped to 0 if insufficient)`);
+      } else {
+        balance.totalBalance = balance.availableBalance + (balance.usedMargin || 0n);
       }
 
       // 广播余额更新
@@ -8711,7 +8717,7 @@ function calculateUnrealizedPnL(
  */
 function calculateMarginRatio(
   collateral: bigint,   // 1e18 精度 (ETH) - 初始保证金
-  size: bigint,         // 1e18 精度 (Token 数量)
+  size: bigint,         // 1e18 精度 (ETH 名义价值, NOT token count)
   entryPrice: bigint,   // 1e18 精度 (ETH/Token)
   currentPrice: bigint, // 1e18 精度 (ETH/Token)
   isLong: boolean,
@@ -8719,9 +8725,10 @@ function calculateMarginRatio(
 ): bigint {
   if (size === 0n || currentPrice === 0n) return 0n; // 无仓位，0%风险
 
-  // 计算仓位的 ETH 价值
-  // positionValue = size * currentPrice / 1e18 (ETH)
-  const positionValue = (size * currentPrice) / (10n ** 18n);
+  // AUDIT-FIX ME-C04: size 已经是 ETH 名义价值 (not token count)
+  // 之前错误地乘以 currentPrice/1e18，将 ETH notional 当作 token count 处理
+  // 导致 positionValue 偏差巨大，API 返回的保证金率完全错误
+  const positionValue = size;
   if (positionValue === 0n) return 0n;
 
   // 计算维持保证金 = 仓位价值 * MMR
@@ -9169,7 +9176,13 @@ async function handleGetFundingHistory(token: string, url: URL): Promise<Respons
 async function handleManualFundingSettlement(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { token } = body;
+    const { token, adminKey } = body;
+
+    // AUDIT-FIX ME-C10: 管理员操作需要鉴权
+    const expectedAdminKey = process.env.ADMIN_API_KEY;
+    if (!expectedAdminKey || adminKey !== expectedAdminKey) {
+      return errorResponse("Unauthorized: admin API key required", 401);
+    }
 
     if (!token) {
       return errorResponse("Missing token address");
@@ -9402,12 +9415,14 @@ interface RemoveMarginResult {
  * @param amount 追加金额 (1e18 ETH)
  */
 function addMarginToPosition(pairId: string, amount: bigint): AddMarginResult {
-  // 查找仓位
+  // 查找仓位 — AUDIT-FIX ME-C09: 保存 trader 地址以便后续扣余额
   let position: Position | null = null;
+  let positionTrader: string | null = null;
   for (const [trader, positions] of userPositions.entries()) {
     const found = positions.find(p => p.pairId === pairId);
     if (found) {
       position = found;
+      positionTrader = trader;
       break;
     }
   }
@@ -9435,6 +9450,23 @@ function addMarginToPosition(pairId: string, amount: bigint): AddMarginResult {
       reason: "Amount must be positive",
     };
   }
+
+  // AUDIT-FIX ME-C09: 从 trader 的 availableBalance 扣除追加金额
+  const traderBalance = getUserBalance(positionTrader! as Address);
+  if (traderBalance.availableBalance < amount) {
+    return {
+      success: false,
+      pairId,
+      addedAmount: 0n,
+      newCollateral: BigInt(position.collateral),
+      newLeverage: Number(position.leverage),
+      newLiquidationPrice: BigInt(position.liquidationPrice),
+      reason: `Insufficient balance: available=${Number(traderBalance.availableBalance) / 1e18}, required=${Number(amount) / 1e18}`,
+    };
+  }
+  traderBalance.availableBalance -= amount;
+  traderBalance.usedMargin = (traderBalance.usedMargin || 0n) + amount;
+  // totalBalance 不变: available↓ + usedMargin↑ = 0 net
 
   const oldCollateral = BigInt(position.collateral);
   const newCollateral = oldCollateral + amount;
@@ -9675,6 +9707,113 @@ function broadcastMarginUpdate(position: Position, action: "add" | "remove", amo
 
   for (const [client] of wsClients.entries()) {
     if (client.readyState === WebSocket.OPEN) client.send(message);
+  }
+}
+
+// ============================================================
+// AUDIT-FIX ME-C08: HTTP handlers for margin adjustment API
+// These were referenced in the router but never defined, causing crashes
+// ============================================================
+
+/**
+ * GET /api/position/:pairId/margin — 获取保证金调整信息
+ */
+async function handleGetMarginInfo(pairId: string): Promise<Response> {
+  const info = getMarginAdjustmentInfo(pairId);
+  if (!info) {
+    return errorResponse("Position not found", 404);
+  }
+  return jsonResponse({
+    success: true,
+    data: {
+      pairId: info.pairId,
+      currentCollateral: info.currentCollateral.toString(),
+      currentLeverage: info.currentLeverage,
+      maxRemovable: info.maxRemovable.toString(),
+      minCollateral: info.minCollateral.toString(),
+      positionValue: info.positionValue.toString(),
+    },
+  });
+}
+
+/**
+ * POST /api/position/:pairId/margin/add — 追加保证金
+ */
+async function handleAddMargin(req: Request, pairId: string): Promise<Response> {
+  try {
+    const { amount, trader, signature } = await req.json();
+    if (!amount || !trader) {
+      return errorResponse("Missing required fields: amount, trader");
+    }
+
+    // 验证签名
+    const authMsg = `Add margin ${amount} to ${pairId} for ${trader.toLowerCase()}`;
+    const auth = await verifyTraderSignature(trader, signature, authMsg);
+    if (!auth.valid) {
+      return errorResponse(auth.error || "Authentication failed", 401);
+    }
+
+    const result = addMarginToPosition(pairId, BigInt(amount));
+    if (!result.success) {
+      return errorResponse(result.reason || "Failed to add margin");
+    }
+    return jsonResponse({
+      success: true,
+      data: {
+        pairId: result.pairId,
+        addedAmount: result.addedAmount.toString(),
+        newCollateral: result.newCollateral.toString(),
+        newLeverage: result.newLeverage,
+        newLiquidationPrice: result.newLiquidationPrice.toString(),
+      },
+    });
+  } catch (e: any) {
+    return errorResponse(e.message || "Internal error");
+  }
+}
+
+/**
+ * POST /api/position/:pairId/margin/remove — 减少保证金
+ */
+async function handleRemoveMargin(req: Request, pairId: string): Promise<Response> {
+  try {
+    const { amount, trader, signature } = await req.json();
+    if (!amount || !trader) {
+      return errorResponse("Missing required fields: amount, trader");
+    }
+
+    // 验证签名
+    const authMsg = `Remove margin ${amount} from ${pairId} for ${trader.toLowerCase()}`;
+    const auth = await verifyTraderSignature(trader, signature, authMsg);
+    if (!auth.valid) {
+      return errorResponse(auth.error || "Authentication failed", 401);
+    }
+
+    const result = removeMarginFromPosition(pairId, BigInt(amount));
+    if (!result.success) {
+      return errorResponse(result.reason || "Failed to remove margin");
+    }
+
+    // AUDIT-FIX: 减少的保证金应返还 trader 的 availableBalance
+    const normalizedTrader = trader.toLowerCase() as Address;
+    const balance = getUserBalance(normalizedTrader);
+    balance.availableBalance += BigInt(amount);
+    balance.usedMargin = (balance.usedMargin || 0n) - BigInt(amount);
+    if (balance.usedMargin < 0n) balance.usedMargin = 0n;
+
+    return jsonResponse({
+      success: true,
+      data: {
+        pairId: result.pairId,
+        removedAmount: result.removedAmount.toString(),
+        newCollateral: result.newCollateral.toString(),
+        newLeverage: result.newLeverage,
+        newLiquidationPrice: result.newLiquidationPrice.toString(),
+        maxRemovable: result.maxRemovable.toString(),
+      },
+    });
+  } catch (e: any) {
+    return errorResponse(e.message || "Internal error");
   }
 }
 
@@ -10509,7 +10648,19 @@ async function handleRequest(req: Request): Promise<Response> {
           return errorResponse(result.error || "Withdrawal authorization failed");
         }
 
-        console.log(`[Withdraw:V2] ${normalizedTrader.slice(0, 10)} authorized Ξ${Number(withdrawAmount) / 1e18} withdrawal`);
+        // AUDIT-FIX ME-C15: 预扣提款金额，防止双重提款
+        // 用户余额在链上提款确认前先减少，防止用同一余额多次请求提款
+        const withdrawBalance = getUserBalance(normalizedTrader);
+        if (withdrawBalance.availableBalance >= withdrawAmount) {
+          withdrawBalance.availableBalance -= withdrawAmount;
+        } else {
+          // 如果 availableBalance 不足但 equity 校验通过，说明 mode2Adj 有余额
+          // 仍然预扣以防双重提款
+          withdrawBalance.availableBalance = 0n;
+        }
+        withdrawBalance.totalBalance = withdrawBalance.availableBalance + (withdrawBalance.usedMargin || 0n);
+
+        console.log(`[Withdraw:V2] ${normalizedTrader.slice(0, 10)} authorized Ξ${Number(withdrawAmount) / 1e18} withdrawal (balance pre-deducted)`);
 
         // 6. Return authorization for frontend to submit on-chain
         // Frontend calls SettlementV2.withdraw(amount, userEquity, proof, deadline, sig)
@@ -10870,7 +11021,13 @@ async function handleRequest(req: Request): Promise<Response> {
   // ============================================================
 
   // GET /api/internal/positions/all — 返回所有非零仓位 (供 Keeper 查询)
+  // AUDIT-FIX ME-H08: 内部 API 需要鉴权，防止信息泄露
   if (path === "/api/internal/positions/all" && method === "GET") {
+    const internalKey = url.searchParams.get("key") || req.headers.get("x-internal-key");
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    if (expectedKey && internalKey !== expectedKey) {
+      return errorResponse("Unauthorized: internal API key required", 401);
+    }
     const allPositions: Array<{
       trader: string;
       token: string;
