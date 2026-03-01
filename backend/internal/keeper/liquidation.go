@@ -2,8 +2,14 @@ package keeper
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"math/big"
+	"net/http"
 	"time"
+
+	"github.com/shopspring/decimal"
 
 	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
@@ -25,6 +31,10 @@ type LiquidationKeeper struct {
 	positionRepo *repository.PositionRepository
 	userRepo     *repository.UserRepository
 
+	// Matching engine HTTP client (Mode 2: positions live in engine memory/Redis)
+	matchingEngineURL string
+	httpClient        *http.Client
+
 	// Blockchain client and contracts
 	ethClient       *blockchain.Client
 	liquidationCtx  *blockchain.LiquidationContract
@@ -34,18 +44,29 @@ type LiquidationKeeper struct {
 	liquidationsExecuted uint64
 	liquidationsFailed   uint64
 	lastCheckTime        time.Time
+	engineQuerySuccesses uint64
+	engineQueryFailures  uint64
 }
 
 // NewLiquidationKeeper creates a new LiquidationKeeper with blockchain integration
-func NewLiquidationKeeper(db *gorm.DB, cache *database.Cache, cfg *config.BlockchainConfig, logger *zap.Logger) *LiquidationKeeper {
-	return &LiquidationKeeper{
+func NewLiquidationKeeper(db *gorm.DB, cache *database.Cache, cfg *config.BlockchainConfig, logger *zap.Logger, matchingEngineURL ...string) *LiquidationKeeper {
+	k := &LiquidationKeeper{
 		db:           db,
 		cache:        cache,
 		cfg:          cfg,
 		logger:       logger,
 		positionRepo: repository.NewPositionRepository(db),
 		userRepo:     repository.NewUserRepository(db),
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
+	if len(matchingEngineURL) > 0 && matchingEngineURL[0] != "" {
+		k.matchingEngineURL = matchingEngineURL[0]
+		logger.Info("Matching engine integration enabled",
+			zap.String("url", k.matchingEngineURL))
+	}
+	return k
 }
 
 // InitBlockchain initializes blockchain connections
@@ -68,10 +89,12 @@ func (k *LiquidationKeeper) InitBlockchain() error {
 			zap.String("balance", balance.String()))
 
 		// Warn if balance is low
-		// 0.01 ETH minimum
-		minBalance := "10000000000000000" // 0.01 ETH in wei
-		if balance.String() < minBalance {
-			k.logger.Warn("Keeper balance is low, transactions may fail")
+		// 0.01 ETH minimum (P3-P3: fix string comparison → big.Int.Cmp)
+		minBalanceWei, _ := new(big.Int).SetString("10000000000000000", 10) // 0.01 ETH
+		if balance.Cmp(minBalanceWei) < 0 {
+			k.logger.Warn("Keeper balance is low, transactions may fail",
+				zap.String("balance", balance.String()),
+				zap.String("minRequired", "0.01 ETH"))
 		}
 	}
 
@@ -144,11 +167,113 @@ func (k *LiquidationKeeper) Start(ctx context.Context) {
 	}
 }
 
+// enginePositionResponse is the JSON response from matching engine's /api/internal/positions/all
+type enginePositionResponse struct {
+	Positions []enginePosition `json:"positions"`
+	Count     int              `json:"count"`
+	Timestamp int64            `json:"timestamp"`
+}
+
+type enginePosition struct {
+	Trader           string `json:"trader"`
+	Token            string `json:"token"`
+	IsLong           bool   `json:"isLong"`
+	Size             string `json:"size"`
+	Collateral       string `json:"collateral"`
+	EntryPrice       string `json:"entryPrice"`
+	Leverage         string `json:"leverage"`
+	LiquidationPrice string `json:"liquidationPrice"`
+	UnrealizedPnl    string `json:"unrealizedPnl"`
+	Timestamp        int64  `json:"timestamp"`
+}
+
+// getPositionsFromEngine fetches all non-zero positions from the matching engine
+func (k *LiquidationKeeper) getPositionsFromEngine() ([]model.Position, error) {
+	if k.matchingEngineURL == "" {
+		return nil, fmt.Errorf("matching engine URL not configured")
+	}
+
+	resp, err := k.httpClient.Get(k.matchingEngineURL + "/api/internal/positions/all")
+	if err != nil {
+		return nil, fmt.Errorf("engine request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("engine returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result enginePositionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode engine response: %w", err)
+	}
+
+	// Convert engine positions to model.Position
+	positions := make([]model.Position, 0, len(result.Positions))
+	for _, ep := range result.Positions {
+		posSide := model.PosSideLong
+		if !ep.IsLong {
+			posSide = model.PosSideShort
+		}
+
+		pos := model.Position{
+			PosID:   ep.Trader, // Store wallet address in PosID for engine-sourced positions
+			InstID:  ep.Token,
+			PosSide: posSide,
+		}
+
+		// Parse wei bigint strings to human-readable Decimal (divide by 1e18)
+		if sz, ok := new(big.Int).SetString(ep.Size, 10); ok {
+			pos.Pos = model.Decimal{Decimal: decimal.NewFromBigInt(sz, -18)}
+			pos.AvailPos = pos.Pos
+		}
+		if px, ok := new(big.Int).SetString(ep.EntryPrice, 10); ok {
+			pos.AvgPx = model.Decimal{Decimal: decimal.NewFromBigInt(px, -18)}
+		}
+		if liq, ok := new(big.Int).SetString(ep.LiquidationPrice, 10); ok {
+			pos.LiqPx = model.Decimal{Decimal: decimal.NewFromBigInt(liq, -18)}
+		}
+		if m, ok := new(big.Int).SetString(ep.Collateral, 10); ok {
+			pos.Margin = model.Decimal{Decimal: decimal.NewFromBigInt(m, -18)}
+		}
+
+		positions = append(positions, pos)
+	}
+
+	return positions, nil
+}
+
 func (k *LiquidationKeeper) checkPositions(ctx context.Context) {
 	k.lastCheckTime = time.Now()
 
-	// Get all non-zero positions from database
-	positions, err := k.positionRepo.GetAllNonZero()
+	// Mode 2: Try matching engine first (positions live in engine memory/Redis)
+	var positions []model.Position
+	var err error
+	fromEngine := false
+
+	if k.matchingEngineURL != "" {
+		positions, err = k.getPositionsFromEngine()
+		if err != nil {
+			k.engineQueryFailures++
+			k.logger.Warn("Failed to get positions from engine, falling back to DB",
+				zap.Error(err),
+				zap.Uint64("failures", k.engineQueryFailures))
+			// Fallback to PostgreSQL
+			positions, err = k.positionRepo.GetAllNonZero()
+		} else {
+			fromEngine = true
+			k.engineQuerySuccesses++
+			if k.engineQuerySuccesses%100 == 1 {
+				k.logger.Debug("Got positions from engine",
+					zap.Int("count", len(positions)))
+			}
+		}
+	} else {
+		// Legacy mode: read from PostgreSQL
+		positions, err = k.positionRepo.GetAllNonZero()
+	}
+
 	if err != nil {
 		k.logger.Error("Failed to get positions", zap.Error(err))
 		return
@@ -186,25 +311,21 @@ func (k *LiquidationKeeper) checkPositions(ctx context.Context) {
 		// Local pre-check: is position in danger zone?
 		isDangerous, isLiquidatable := k.checkPositionRisk(&pos, markPrice)
 
-		if isLiquidatable {
-			// Position should be liquidated immediately
-			user, err := k.userRepo.GetByID(pos.UserID)
-			if err != nil {
-				k.logger.Warn("Failed to get user for position",
-					zap.String("posId", pos.PosID),
-					zap.Error(err))
-				continue
-			}
-			dangerousPositions = append(dangerousPositions, struct {
-				pos       model.Position
-				markPrice model.Decimal
-				user      *model.User
-			}{pos, markPrice, user})
-		} else if isDangerous {
-			// Position is close to liquidation, add to check list
-			user, err := k.userRepo.GetByID(pos.UserID)
-			if err != nil {
-				continue
+		if isLiquidatable || isDangerous {
+			var user *model.User
+			if fromEngine {
+				// Engine positions store wallet address in PosID
+				user = &model.User{Address: pos.PosID}
+			} else {
+				user, err = k.userRepo.GetByID(pos.UserID)
+				if err != nil {
+					if isLiquidatable {
+						k.logger.Warn("Failed to get user for position",
+							zap.String("posId", pos.PosID),
+							zap.Error(err))
+					}
+					continue
+				}
 			}
 			dangerousPositions = append(dangerousPositions, struct {
 				pos       model.Position
@@ -437,9 +558,12 @@ func (k *LiquidationKeeper) liquidateInDB(pos *model.Position, markPrice model.D
 // GetMetrics returns keeper metrics
 func (k *LiquidationKeeper) GetMetrics() map[string]interface{} {
 	return map[string]interface{}{
-		"liquidations_executed": k.liquidationsExecuted,
-		"liquidations_failed":   k.liquidationsFailed,
-		"last_check_time":       k.lastCheckTime,
-		"blockchain_enabled":    k.ethClient != nil,
+		"liquidations_executed":    k.liquidationsExecuted,
+		"liquidations_failed":      k.liquidationsFailed,
+		"last_check_time":          k.lastCheckTime,
+		"blockchain_enabled":       k.ethClient != nil,
+		"engine_enabled":           k.matchingEngineURL != "",
+		"engine_query_successes":   k.engineQuerySuccesses,
+		"engine_query_failures":    k.engineQueryFailures,
 	}
 }

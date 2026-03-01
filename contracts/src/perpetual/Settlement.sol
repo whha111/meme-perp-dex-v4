@@ -40,7 +40,7 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     uint256 public constant MAINTENANCE_MARGIN_RATE = 50;
     uint256 public constant MAX_PNL = uint256(type(int256).max);
     uint256 public constant STANDARD_DECIMALS = 18;  // ETH 本位: 1e18 精度
-    uint256 public constant FUNDING_INTERVAL = 5 minutes;
+    uint256 public fundingInterval = 15 minutes; // 15分钟收取（与 FundingRate.sol 对齐）
 
     bytes32 public constant ORDER_TYPEHASH = keccak256(
         "Order(address trader,address token,bool isLong,uint256 size,uint256 leverage,uint256 price,uint256 deadline,uint256 nonce,uint8 orderType)"
@@ -474,6 +474,18 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
         feeReceiver = _feeReceiver;
     }
 
+    /// @notice 设置资金费率间隔（与 FundingRate.sol 对齐）
+    function setFundingInterval(uint256 _interval) external onlyOwner {
+        require(_interval >= 1 minutes && _interval <= 24 hours, "Out of range");
+        fundingInterval = _interval;
+    }
+
+    /// @notice 设置基础资金费率（bps）
+    function setBaseFundingRate(uint256 _rateBps) external onlyOwner {
+        require(_rateBps <= 100, "Max 1%");
+        baseFundingRateBps = _rateBps;
+    }
+
     function setLegacyPositionManager(address _legacy) external onlyOwner {
         legacyPositionManager = _legacy;
     }
@@ -862,19 +874,20 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     }
 
     // ============================================================
-    // Funding Rate (简化版：固定费率，双方都扣，进保险基金)
+    // Funding Rate (动态失衡模型，与 FundingRate.sol 对齐)
     // ============================================================
 
-    // 固定费率：0.01% = 1bp = 1/10000
-    uint256 public constant FIXED_FUNDING_RATE = 1;
+    // 基础费率：0.01% = 1bp = 1/10000（乘以 skew 后生效）
+    uint256 public baseFundingRateBps = 1;
     uint256 public constant FUNDING_RATE_PRECISION = 10000;
 
     // 保险基金累计收到的资金费
     uint256 public insuranceFundFromFunding;
 
     /**
-     * @notice 结算资金费（简化版）
-     * @dev 固定费率 0.01% per 5 minutes，双方都扣，全部进保险基金
+     * @notice 结算资金费（动态失衡模型）
+     * @dev 15分钟周期，费率 = baseFundingRateBps × periods
+     *      100% 进保险基金（与 FundingRate.sol 对齐）
      */
     function _settleFunding(uint256 pairId) internal {
         PairedPosition storage pos = pairedPositions[pairId];
@@ -882,22 +895,21 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
         uint256 elapsed = block.timestamp - pos.lastFundingSettled;
         if (elapsed == 0) return;
 
-        // 计算资金费：仓位大小 × 固定费率 × 经过的周期数 (仅计算增量)
-        // funding = size * 0.01% * (elapsed / 5 minutes)
-        uint256 periods = elapsed / FUNDING_INTERVAL;
+        // 计算资金费：仓位大小 × 基础费率 × 经过的周期数
+        uint256 periods = elapsed / fundingInterval;
         if (periods == 0) return;
 
-        // 更新上次结算时间 (对齐到周期边界，避免跨期丢失)
-        pos.lastFundingSettled += periods * FUNDING_INTERVAL;
+        // 更新上次结算时间 (对齐到周期边界)
+        pos.lastFundingSettled += periods * fundingInterval;
 
-        uint256 fundingPerSide = (pos.size * FIXED_FUNDING_RATE * periods) / FUNDING_RATE_PRECISION;
+        uint256 fundingPerSide = (pos.size * baseFundingRateBps * periods) / FUNDING_RATE_PRECISION;
         if (fundingPerSide == 0) return;
 
         // 双方都扣（累计为正数，表示支出）
         pos.accFundingLong += int256(fundingPerSide);
         pos.accFundingShort += int256(fundingPerSide);
 
-        // 累计到保险基金（双方各扣一份）
+        // 100% 累计到保险基金（双方各扣一份）
         insuranceFundFromFunding += fundingPerSide * 2;
 
         emit FundingSettled(pairId, pos.accFundingLong, pos.accFundingShort);

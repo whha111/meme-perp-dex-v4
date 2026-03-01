@@ -22,7 +22,6 @@ contract Liquidation is Ownable, ReentrancyGuard {
     // ============================================================
 
     uint256 public constant PRECISION = 1e18;
-    uint256 public constant LIQUIDATOR_REWARD_RATE = 5e16; // 5% 清算奖励
 
     // ============================================================
     // State Variables
@@ -41,8 +40,17 @@ contract Liquidation is Ownable, ReentrancyGuard {
     uint256 public totalLiquidationVolume;
 
     // ADL 相关
-    address[] public adlQueue; // ADL 队列（按盈利排序的用户）
-    mapping(address => uint256) public userADLIndex; // 用户在 ADL 队列中的索引
+    address[] public adlQueue;
+    mapping(address => uint256) public userADLIndex;
+
+    /// @notice 清算奖励费率（默认 7.5% = 75e15，仅在 liquidatorRewardEnabled 为 true 时生效）
+    uint256 public liquidatorRewardRate = 75e15; // 7.5%
+
+    /// @notice 按代币粒度控制清算奖励：内盘(false) = 系统清算0%奖励，转DEX后(true) = 外部清算7.5%奖励
+    mapping(address => bool) public liquidatorRewardEnabled;
+
+    /// @notice TokenFactory 地址（用于毕业回调自动启用清算奖励）
+    address public tokenFactory;
 
     // ============================================================
     // Events
@@ -74,6 +82,9 @@ contract Liquidation is Ownable, ReentrancyGuard {
     event DeficitCovered(uint256 amount);
     event ADLExecuted(address indexed user, uint256 reduceAmount, string reason);
     event TradingPausedDueToInsufficient(uint256 deficit);
+    event LiquidatorRewardEnabled(address indexed token);
+    event LiquidatorRewardRateUpdated(uint256 oldRate, uint256 newRate);
+    event TokenFactoryUpdated(address indexed tokenFactory);
 
     // ============================================================
     // Errors
@@ -120,6 +131,27 @@ contract Liquidation is Ownable, ReentrancyGuard {
         emit InsuranceFundWithdraw(amount);
     }
 
+    /// @notice 启用代币的清算奖励（毕业后由 TokenFactory 回调触发，或 owner 手动启用）
+    function enableLiquidatorReward(address token) external {
+        require(msg.sender == owner() || msg.sender == tokenFactory, "Unauthorized");
+        liquidatorRewardEnabled[token] = true;
+        emit LiquidatorRewardEnabled(token);
+    }
+
+    /// @notice 设置清算奖励费率（仅 owner）
+    function setLiquidatorRewardRate(uint256 _rate) external onlyOwner {
+        require(_rate <= 15e16, "Max 15%"); // 上限 15%
+        emit LiquidatorRewardRateUpdated(liquidatorRewardRate, _rate);
+        liquidatorRewardRate = _rate;
+    }
+
+    /// @notice 设置 TokenFactory 地址（用于毕业回调）
+    function setTokenFactory(address _tokenFactory) external onlyOwner {
+        if (_tokenFactory == address(0)) revert ZeroAddress();
+        tokenFactory = _tokenFactory;
+        emit TokenFactoryUpdated(_tokenFactory);
+    }
+
     // ============================================================
     // Liquidation Functions
     // ============================================================
@@ -135,24 +167,13 @@ contract Liquidation is Ownable, ReentrancyGuard {
 
         positionManager.forceClose(user);
 
+        // Legacy 函数: 默认 0 奖励（系统清算）
         uint256 liquidatorReward = 0;
         uint256 toInsuranceFund = 0;
 
         if (remainingValue > 0) {
-            // H-011: Safe reward calculation with overflow check
-            uint256 remaining = uint256(remainingValue);
-            // Use safe multiplication: check if (remaining * LIQUIDATOR_REWARD_RATE) would overflow
-            // For 5% reward rate (5e16), overflow happens when remaining > type(uint256).max / 5e16
-            // That's approximately 3.6e60, which is extremely unlikely for any reasonable collateral
-            // But for safety, we cap the remaining value
-            if (remaining > type(uint256).max / LIQUIDATOR_REWARD_RATE) {
-                // Cap to prevent overflow
-                remaining = type(uint256).max / LIQUIDATOR_REWARD_RATE;
-            }
-            liquidatorReward = (remaining * LIQUIDATOR_REWARD_RATE) / PRECISION;
-            toInsuranceFund = uint256(remainingValue) - liquidatorReward;
-
-            vault.distributeLiquidation(user, msg.sender, liquidatorReward, 0);
+            // 100% 进保险基金（legacy = 内盘 = 系统清算 = 无奖励）
+            toInsuranceFund = uint256(remainingValue);
             insuranceFund += toInsuranceFund;
         } else {
             uint256 deficit = uint256(-remainingValue);
@@ -166,15 +187,7 @@ contract Liquidation is Ownable, ReentrancyGuard {
                 insuranceFund = 0;
             }
 
-            // H-011: Safe reward calculation with minimum check
-            // When position is underwater, give liquidator 5% of original collateral as reward
-            // But cap it to prevent edge cases where collateral is 0
-            if (pos.collateral > 0) {
-                liquidatorReward = pos.collateral / 20; // 5% of collateral
-                // Ensure reward doesn't exceed what's actually available
-                // The position's collateral should still be in Vault as locked balance
-                vault.distributeLiquidation(user, msg.sender, liquidatorReward, 0);
-            }
+            // Legacy = 内盘 = 系统清算 = 穿仓时无奖励
         }
 
         totalLiquidations++;
@@ -202,18 +215,12 @@ contract Liquidation is Ownable, ReentrancyGuard {
 
         positionManager.forceClose(user);
 
+        // Legacy = 内盘 = 系统清算 = 0% 奖励
         uint256 liquidatorReward = 0;
         uint256 toInsuranceFund = 0;
 
         if (remainingValue > 0) {
-            // H-011: Safe reward calculation with overflow check
-            uint256 remaining = uint256(remainingValue);
-            if (remaining > type(uint256).max / LIQUIDATOR_REWARD_RATE) {
-                remaining = type(uint256).max / LIQUIDATOR_REWARD_RATE;
-            }
-            liquidatorReward = (remaining * LIQUIDATOR_REWARD_RATE) / PRECISION;
-            toInsuranceFund = uint256(remainingValue) - liquidatorReward;
-            vault.distributeLiquidation(user, liquidator, liquidatorReward, 0);
+            toInsuranceFund = uint256(remainingValue);
             insuranceFund += toInsuranceFund;
         } else {
             uint256 deficit = uint256(-remainingValue);
@@ -222,11 +229,6 @@ contract Liquidation is Ownable, ReentrancyGuard {
             } else {
                 _handleInsuranceShortfall(deficit - insuranceFund);
                 insuranceFund = 0;
-            }
-            // H-011: Safe reward calculation with minimum check
-            if (pos.collateral > 0) {
-                liquidatorReward = pos.collateral / 20;
-                vault.distributeLiquidation(user, liquidator, liquidatorReward, 0);
             }
         }
 
@@ -256,18 +258,26 @@ contract Liquidation is Ownable, ReentrancyGuard {
 
         positionManager.forceCloseToken(user, token);
 
+        // 内盘(bonding curve) = 0% 奖励，全额进保险基金
+        // 转 DEX 后 = 7.5% 奖励给外部清算人
+        uint256 effectiveRewardRate = liquidatorRewardEnabled[token] ? liquidatorRewardRate : 0;
+
         uint256 liquidatorReward = 0;
         uint256 toInsuranceFund = 0;
 
         if (remainingValue > 0) {
             uint256 remaining = uint256(remainingValue);
-            if (remaining > type(uint256).max / LIQUIDATOR_REWARD_RATE) {
-                remaining = type(uint256).max / LIQUIDATOR_REWARD_RATE;
+            if (effectiveRewardRate > 0) {
+                if (remaining > type(uint256).max / effectiveRewardRate) {
+                    remaining = type(uint256).max / effectiveRewardRate;
+                }
+                liquidatorReward = (remaining * effectiveRewardRate) / PRECISION;
             }
-            liquidatorReward = (remaining * LIQUIDATOR_REWARD_RATE) / PRECISION;
             toInsuranceFund = uint256(remainingValue) - liquidatorReward;
 
-            vault.distributeLiquidation(user, msg.sender, liquidatorReward, 0);
+            if (liquidatorReward > 0) {
+                vault.distributeLiquidation(user, msg.sender, liquidatorReward, 0);
+            }
             insuranceFund += toInsuranceFund;
         } else {
             uint256 deficit = uint256(-remainingValue);
@@ -279,7 +289,8 @@ contract Liquidation is Ownable, ReentrancyGuard {
                 insuranceFund = 0;
             }
 
-            if (pos.collateral > 0) {
+            // 穿仓时仅在奖励启用后给清算人最小奖励
+            if (effectiveRewardRate > 0 && pos.collateral > 0) {
                 liquidatorReward = pos.collateral / 20;
                 vault.distributeLiquidation(user, msg.sender, liquidatorReward, 0);
             }
@@ -318,17 +329,23 @@ contract Liquidation is Ownable, ReentrancyGuard {
 
         positionManager.forceCloseToken(user, token);
 
+        uint256 effectiveRewardRate = liquidatorRewardEnabled[token] ? liquidatorRewardRate : 0;
+
         uint256 liquidatorReward = 0;
         uint256 toInsuranceFund = 0;
 
         if (remainingValue > 0) {
             uint256 remaining = uint256(remainingValue);
-            if (remaining > type(uint256).max / LIQUIDATOR_REWARD_RATE) {
-                remaining = type(uint256).max / LIQUIDATOR_REWARD_RATE;
+            if (effectiveRewardRate > 0) {
+                if (remaining > type(uint256).max / effectiveRewardRate) {
+                    remaining = type(uint256).max / effectiveRewardRate;
+                }
+                liquidatorReward = (remaining * effectiveRewardRate) / PRECISION;
             }
-            liquidatorReward = (remaining * LIQUIDATOR_REWARD_RATE) / PRECISION;
             toInsuranceFund = uint256(remainingValue) - liquidatorReward;
-            vault.distributeLiquidation(user, liquidator, liquidatorReward, 0);
+            if (liquidatorReward > 0) {
+                vault.distributeLiquidation(user, liquidator, liquidatorReward, 0);
+            }
             insuranceFund += toInsuranceFund;
         } else {
             uint256 deficit = uint256(-remainingValue);
@@ -338,7 +355,7 @@ contract Liquidation is Ownable, ReentrancyGuard {
                 _handleInsuranceShortfall(deficit - insuranceFund);
                 insuranceFund = 0;
             }
-            if (pos.collateral > 0) {
+            if (effectiveRewardRate > 0 && pos.collateral > 0) {
                 liquidatorReward = pos.collateral / 20;
                 vault.distributeLiquidation(user, liquidator, liquidatorReward, 0);
             }
@@ -630,7 +647,7 @@ contract Liquidation is Ownable, ReentrancyGuard {
         int256 remainingValue = int256(pos.collateral) + pnl;
 
         if (remainingValue > 0) {
-            reward = (uint256(remainingValue) * LIQUIDATOR_REWARD_RATE) / PRECISION;
+            reward = (uint256(remainingValue) * liquidatorRewardRate) / PRECISION;
         } else {
             reward = pos.collateral / 20;
         }

@@ -107,12 +107,11 @@ export function PerpetualOrderPanelV2({
     balance,
     positions,
     pendingOrders,
-    orderBook,
     submitMarketOrder,
     submitLimitOrder,
     closePair,
-    refreshOrderBook,
     // refreshBalance no longer needed here — usePerpetualV2 handles WS balance internally
+    // orderBook / refreshOrderBook removed — dead code, data flows via WebSocket → tradingDataStore
     isSigningOrder,
     isSubmittingOrder,
     isPending,
@@ -160,13 +159,6 @@ export function PerpetualOrderPanelV2({
   const updateLeverage = useTradingDataStore.getState().updateLeverage;
   const updateMarginMode = useTradingDataStore.getState().updateMarginMode;
 
-  // Refresh order book when token changes
-  useEffect(() => {
-    if (tokenAddress) {
-      refreshOrderBook(tokenAddress);
-    }
-  }, [tokenAddress, refreshOrderBook]);
-
   // Derive state from store
   const side = orderForm.side;
   const marginMode = orderForm.marginMode;
@@ -191,20 +183,14 @@ export function PerpetualOrderPanelV2({
   // tokenPriceETH: Token/ETH 比率 (从 Bonding Curve)
   // tokenPriceUSD: 仅用于 UI 参考显示
   const { tokenPriceETH, tokenPriceUSD } = useMemo(() => {
-    // 优先使用 TokenFactory 的 bonding curve 价格 (Token/ETH)
+    // 使用 TokenFactory 的 bonding curve 价格 (Token/ETH)
     if (spotPriceBigInt) {
       const priceETH = Number(spotPriceBigInt) / 1e18;  // Token/ETH ratio
       const priceUSD = priceETH * (ethPrice || 0);      // 仅参考
       return { tokenPriceETH: priceETH, tokenPriceUSD: priceUSD };
     }
-    // 回退到 orderBook 的 lastPrice (ETH 本位: 1e18 精度)
-    if (orderBook?.lastPrice) {
-      const priceETH = Number(orderBook.lastPrice) / 1e18;
-      const priceUSD = priceETH * (ethPrice || 0);
-      return { tokenPriceETH: priceETH, tokenPriceUSD: priceUSD };
-    }
     return { tokenPriceETH: 0, tokenPriceUSD: 0 };
-  }, [spotPriceBigInt, orderBook?.lastPrice, ethPrice]);
+  }, [spotPriceBigInt, ethPrice]);
 
   // 根据用户选择的单位，统一换算成仓位价值 (ETH 本位) 和 Meme 币数量
   // ETH 本位: 主要使用 ETH 计价，USD 仅用于参考显示

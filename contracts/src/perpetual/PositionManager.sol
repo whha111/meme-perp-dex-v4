@@ -95,17 +95,21 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
     // H-017: 用户默认保证金模式
     mapping(address => MarginMode) public defaultMarginMode;
 
-    // 手续费配置 - Maker/Taker 差异化费率
-    uint256 public openFeeRate = 8;  // 0.08% Taker fee (8/10000) - 开仓即时成交
-    uint256 public closeFeeRate = 3; // 0.03% Maker fee (3/10000) - 平仓提供流动性
+    // 手续费配置 - Maker/Taker 差异化费率 (Meme 币风险补偿)
+    uint256 public openFeeRate = 10;  // 0.10% Taker fee (10/10000)
+    uint256 public closeFeeRate = 5;  // 0.05% Maker fee (5/10000)
 
-    // 手续费接收地址 (Legacy, 仅用于无代币创建者的情况)
-    address public feeReceiver;
+    // 手续费接收地址
+    address public feeReceiver;           // 平台手续费接收地址
+    address public insuranceFeeReceiver;  // 保险基金手续费接收地址
+    address public lpFeeReceiver;         // LP 池手续费接收地址
 
-    // 永续手续费分配比例 (基点，10000 = 100%)
-    uint256 public constant PERP_CREATOR_FEE_SHARE = 2000;   // 20%
-    uint256 public constant PERP_REFERRER_FEE_SHARE = 1000;  // 10%
-    uint256 public constant PERP_PLATFORM_FEE_SHARE = 7000;  // 70%
+    // 永续手续费分配比例 (基点，10000 = 100%) — 可配置
+    uint256 public perpCreatorFeeShare = 1500;     // 15% 代币创建者
+    uint256 public perpReferrerFeeShare = 1000;    // 10% 推荐人
+    uint256 public perpPlatformFeeShare = 5000;    // 50% 平台
+    uint256 public perpInsuranceFeeShare = 1500;   // 15% 保险基金
+    uint256 public perpLpFeeShare = 1000;          // 10% LP 池
 
     // TokenFactory 地址 (用于获取代币创建者和用户推荐人)
     address public tokenFactory;
@@ -183,9 +187,14 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         uint256 totalFee,
         uint256 toCreator,
         uint256 toReferrer,
-        uint256 toPlatform
+        uint256 toPlatform,
+        uint256 toInsurance,
+        uint256 toLP
     );
     event TokenFactorySet(address indexed tokenFactory);
+    event FeeSharesUpdated(uint256 creator, uint256 referrer, uint256 platform, uint256 insurance, uint256 lp);
+    event InsuranceFeeReceiverSet(address indexed receiver);
+    event LpFeeReceiverSet(address indexed receiver);
 
     // ============================================================
     // Errors
@@ -280,6 +289,37 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         if (_tokenFactory == address(0)) revert ZeroAddress();
         tokenFactory = _tokenFactory;
         emit TokenFactorySet(_tokenFactory);
+    }
+
+    /// @notice 设置保险基金手续费接收地址
+    function setInsuranceFeeReceiver(address _receiver) external onlyOwner {
+        if (_receiver == address(0)) revert ZeroAddress();
+        insuranceFeeReceiver = _receiver;
+        emit InsuranceFeeReceiverSet(_receiver);
+    }
+
+    /// @notice 设置 LP 池手续费接收地址
+    function setLpFeeReceiver(address _receiver) external onlyOwner {
+        if (_receiver == address(0)) revert ZeroAddress();
+        lpFeeReceiver = _receiver;
+        emit LpFeeReceiverSet(_receiver);
+    }
+
+    /// @notice 设置手续费分配比例（5路，总和必须 = 10000）
+    function setFeeShares(
+        uint256 _creator,
+        uint256 _referrer,
+        uint256 _platform,
+        uint256 _insurance,
+        uint256 _lp
+    ) external onlyOwner {
+        require(_creator + _referrer + _platform + _insurance + _lp == 10000, "Sum must be 10000");
+        perpCreatorFeeShare = _creator;
+        perpReferrerFeeShare = _referrer;
+        perpPlatformFeeShare = _platform;
+        perpInsuranceFeeShare = _insurance;
+        perpLpFeeShare = _lp;
+        emit FeeSharesUpdated(_creator, _referrer, _platform, _insurance, _lp);
     }
 
     // ============================================================
@@ -1240,7 +1280,8 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
 
     /**
      * @notice 分配永续开仓手续费 (从用户可用余额)
-     * @dev 分配比例: 20% 创建者, 10% 推荐人, 70% 平台
+     * @dev 5路分配: creator/referrer/platform/insurance/LP
+     *      无效接收方的份额回流到平台
      * @param user 用户地址
      * @param token 代币地址
      * @param fee 总手续费
@@ -1262,11 +1303,13 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         }
 
         // 计算分配金额
-        uint256 toCreator = (fee * PERP_CREATOR_FEE_SHARE) / 10000;
-        uint256 toReferrer = (fee * PERP_REFERRER_FEE_SHARE) / 10000;
-        uint256 toPlatform = fee - toCreator - toReferrer;
+        uint256 toCreator = (fee * perpCreatorFeeShare) / 10000;
+        uint256 toReferrer = (fee * perpReferrerFeeShare) / 10000;
+        uint256 toInsurance = (fee * perpInsuranceFeeShare) / 10000;
+        uint256 toLP = (fee * perpLpFeeShare) / 10000;
+        uint256 toPlatform = fee - toCreator - toReferrer - toInsurance - toLP;
 
-        // 分配给创建者
+        // 分配给创建者（无效则回流平台）
         if (toCreator > 0 && creator != address(0)) {
             vault.collectFee(user, creator, toCreator);
         } else {
@@ -1274,7 +1317,7 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
             toCreator = 0;
         }
 
-        // 分配给推荐人
+        // 分配给推荐人（无效则回流平台）
         if (toReferrer > 0 && referrer != address(0)) {
             vault.collectFee(user, referrer, toReferrer);
         } else {
@@ -1282,17 +1325,34 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
             toReferrer = 0;
         }
 
+        // 分配给保险基金
+        if (toInsurance > 0 && insuranceFeeReceiver != address(0)) {
+            vault.collectFee(user, insuranceFeeReceiver, toInsurance);
+        } else {
+            toPlatform += toInsurance;
+            toInsurance = 0;
+        }
+
+        // 分配给 LP 池
+        if (toLP > 0 && lpFeeReceiver != address(0)) {
+            vault.collectFee(user, lpFeeReceiver, toLP);
+        } else {
+            toPlatform += toLP;
+            toLP = 0;
+        }
+
         // 分配给平台
         if (toPlatform > 0 && feeReceiver != address(0)) {
             vault.collectFee(user, feeReceiver, toPlatform);
         }
 
-        emit PerpFeeDistributed(token, user, fee, toCreator, toReferrer, toPlatform);
+        emit PerpFeeDistributed(token, user, fee, toCreator, toReferrer, toPlatform, toInsurance, toLP);
     }
 
     /**
      * @notice 分配永续平仓手续费 (从用户锁定余额)
-     * @dev 分配比例: 20% 创建者, 10% 推荐人, 70% 平台
+     * @dev 5路分配: creator/referrer/platform/insurance/LP
+     *      无效接收方的份额回流到平台
      * @param user 用户地址
      * @param token 代币地址
      * @param fee 总手续费
@@ -1314,11 +1374,13 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         }
 
         // 计算分配金额
-        uint256 toCreator = (fee * PERP_CREATOR_FEE_SHARE) / 10000;
-        uint256 toReferrer = (fee * PERP_REFERRER_FEE_SHARE) / 10000;
-        uint256 toPlatform = fee - toCreator - toReferrer;
+        uint256 toCreator = (fee * perpCreatorFeeShare) / 10000;
+        uint256 toReferrer = (fee * perpReferrerFeeShare) / 10000;
+        uint256 toInsurance = (fee * perpInsuranceFeeShare) / 10000;
+        uint256 toLP = (fee * perpLpFeeShare) / 10000;
+        uint256 toPlatform = fee - toCreator - toReferrer - toInsurance - toLP;
 
-        // 分配给创建者
+        // 分配给创建者（无效则回流平台）
         if (toCreator > 0 && creator != address(0)) {
             vault.collectFeeFromLocked(user, creator, toCreator);
         } else {
@@ -1326,7 +1388,7 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
             toCreator = 0;
         }
 
-        // 分配给推荐人
+        // 分配给推荐人（无效则回流平台）
         if (toReferrer > 0 && referrer != address(0)) {
             vault.collectFeeFromLocked(user, referrer, toReferrer);
         } else {
@@ -1334,11 +1396,27 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
             toReferrer = 0;
         }
 
+        // 分配给保险基金
+        if (toInsurance > 0 && insuranceFeeReceiver != address(0)) {
+            vault.collectFeeFromLocked(user, insuranceFeeReceiver, toInsurance);
+        } else {
+            toPlatform += toInsurance;
+            toInsurance = 0;
+        }
+
+        // 分配给 LP 池
+        if (toLP > 0 && lpFeeReceiver != address(0)) {
+            vault.collectFeeFromLocked(user, lpFeeReceiver, toLP);
+        } else {
+            toPlatform += toLP;
+            toLP = 0;
+        }
+
         // 分配给平台
         if (toPlatform > 0 && feeReceiver != address(0)) {
             vault.collectFeeFromLocked(user, feeReceiver, toPlatform);
         }
 
-        emit PerpFeeDistributed(token, user, fee, toCreator, toReferrer, toPlatform);
+        emit PerpFeeDistributed(token, user, fee, toCreator, toReferrer, toPlatform, toInsurance, toLP);
     }
 }

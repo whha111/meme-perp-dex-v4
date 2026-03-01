@@ -26,6 +26,8 @@ import { useRiskControl } from "@/hooks/perpetual/useRiskControl";
 import { useApiError } from "@/hooks/common/useApiError";
 import { trackRender } from "@/lib/debug-render";
 import { MATCHING_ENGINE_URL } from "@/config/api";
+import { AnimatedNumber } from "@/components/shared/AnimatedNumber";
+import { TradingErrorBoundary } from "@/components/shared/TradingErrorBoundary";
 
 // P003 修复: 统一使用 V2 架构（Settlement 合约 + 撮合引擎）
 // 移除旧的 PositionManager 合约依赖，仓位数据统一从撮合引擎获取
@@ -143,11 +145,21 @@ export function PerpetualTradingTerminal({
     return price.toFixed(4);
   };
 
+  // Number-based format for AnimatedNumber (price already divided by 1e18)
+  const formatMemePriceNum = useCallback((price: number) => {
+    if (price === 0) return "0.0000000000";
+    if (price < 0.000001) return price.toFixed(10);
+    if (price < 0.0001) return price.toFixed(8);
+    if (price < 0.01) return price.toFixed(6);
+    return price.toFixed(4);
+  }, []);
+
   const formattedPrice = formatMemePrice(tokenStats?.lastPrice);
-  const formattedPriceChange = tokenStats?.priceChange24h
-    ? (Number(tokenStats.priceChange24h) / 100).toFixed(2) + "%"
-    : "0.00%";
-  const isPriceUp = tokenStats?.priceChange24h ? Number(tokenStats.priceChange24h) >= 0 : true;
+  // ✅ 使用 priceChangePercent24h (后端已计算好的百分比)，而非 priceChange24h (原始 wei 差值)
+  // 注意: JSX 模板 (L573) 自带 "+" 前缀，此处不重复添加
+  const priceChangePercent = parseFloat(tokenStats?.priceChangePercent24h || "0");
+  const formattedPriceChange = `${priceChangePercent.toFixed(2)}%`;
+  const isPriceUp = priceChangePercent >= 0;
   // 24h 高低价：有 WS 数据用 WS，否则 fallback 到 spot 价格
   const formattedHigh24h = (tokenStats?.high24h && tokenStats.high24h !== "0")
     ? formatMemePrice(tokenStats.high24h)
@@ -545,9 +557,19 @@ export function PerpetualTradingTerminal({
         <div className="flex items-center gap-6 text-[12px]">
           {/* 当前价格和涨跌幅 (TokenFactory 现货价格) */}
           <div className="flex items-center gap-2">
-            <span className={`text-[16px] font-bold ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
-              {marketInfo.currentPrice}
-            </span>
+            {chartPrice ? (
+              <AnimatedNumber
+                value={chartPrice}
+                format={formatMemePriceNum}
+                className={`text-[16px] font-bold ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}
+                showArrow={true}
+                highlightChange={true}
+              />
+            ) : (
+              <span className={`text-[16px] font-bold ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
+                {marketInfo.currentPrice}
+              </span>
+            )}
             <span className={`text-[12px] ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
               {marketInfo.isPriceUp ? "+" : ""}{marketInfo.priceChange}
             </span>
@@ -663,27 +685,31 @@ export function PerpetualTradingTerminal({
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Order Book - 使用新的 OrderBook 组件 */}
         <div className="w-[240px] border-r border-okx-border-primary overflow-hidden">
-          <OrderBook
-            data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : undefined}
-            onPriceClick={(price) => {
-              // 点击价格可以填入下单面板
-              console.log("Price clicked:", price);
-            }}
-            maxRows={12}
-          />
+          <TradingErrorBoundary module="OrderBook">
+            <OrderBook
+              data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : undefined}
+              onPriceClick={(price) => {
+                // 点击价格可以填入下单面板
+                console.log("Price clicked:", price);
+              }}
+              maxRows={12}
+            />
+          </TradingErrorBoundary>
         </div>
 
         {/* Center: Chart + Bottom Panel */}
         <div className="flex-1 border-r border-okx-border-primary flex flex-col overflow-hidden">
           {/* Chart Area - 使用撮合引擎 K 线数据 */}
           <div className="h-[400px] bg-[#131722]">
-            {tokenAddress && (
-              <MemoizedPriceChart
-                tokenAddress={tokenAddress}
-                displaySymbol={displaySymbol}
-                currentPrice={chartPrice}
-              />
-            )}
+            <TradingErrorBoundary module="PerpChart">
+              {tokenAddress && (
+                <MemoizedPriceChart
+                  tokenAddress={tokenAddress}
+                  displaySymbol={displaySymbol}
+                  currentPrice={chartPrice}
+                />
+              )}
+            </TradingErrorBoundary>
           </div>
 
           {/* Bottom Panel - Positions, Orders, History */}
@@ -754,21 +780,21 @@ export function PerpetualTradingTerminal({
                         </tr>
                       </thead>
                       <tbody>
-                        {currentPositionsForDisplay.map((pos: any) => {
+                        {currentPositionsForDisplay.map((pos) => {
                           // ============================================================
                           // 直接使用后端推送的数据，不再前端计算！
                           // ETH 本位: size=ETH名义价值(1e18), price=Token/ETH(1e18), ETH=1e18, ratio/roe=基点
                           // ============================================================
-                          const sizeETH = parseFloat(pos.size) / 1e18;  // ETH 名义价值 (1e18 精度)
-                          const entryPrice = parseFloat(pos.entryPrice) / 1e18;  // Token/ETH 比率 (1e18 精度)
-                          const markPrice = parseFloat(pos.markPrice || pos.entryPrice) / 1e18;  // 后端推送的标记价 (Token/ETH)
-                          const liqPrice = parseFloat(pos.liquidationPrice || "0") / 1e18;  // 后端推送的强平价 (Token/ETH)
-                          const marginETH = parseFloat(pos.collateral) / 1e18;  // 保证金 (ETH)
-                          const leverage = parseFloat(pos.leverage);  // 人类可读
-                          const unrealizedPnlETH = parseFloat(pos.unrealizedPnL) / 1e18;  // 后端推送的盈亏 (ETH)
-                          const marginRatio = parseFloat(pos.marginRatio || "0") / 100;  // 基点转百分比
-                          const roe = parseFloat(pos.roe || "0") / 100;  // 基点转百分比
-                          const mmr = parseFloat(pos.mmr || "200") / 100;  // 基点转百分比
+                          const sizeETH = parseFloat(String(pos.size)) / 1e18;  // ETH 名义价值 (1e18 精度)
+                          const entryPrice = parseFloat(String(pos.entryPrice)) / 1e18;  // Token/ETH 比率 (1e18 精度)
+                          const markPrice = parseFloat(String(pos.markPrice || pos.entryPrice)) / 1e18;  // 后端推送的标记价 (Token/ETH)
+                          const liqPrice = parseFloat(String(pos.liquidationPrice || "0")) / 1e18;  // 后端推送的强平价 (Token/ETH)
+                          const marginETH = parseFloat(String(pos.collateral)) / 1e18;  // 保证金 (ETH)
+                          const leverage = parseFloat(String(pos.leverage));  // 人类可读
+                          const unrealizedPnlETH = parseFloat(String(pos.unrealizedPnL)) / 1e18;  // 后端推送的盈亏 (ETH)
+                          const marginRatio = parseFloat(String(pos.marginRatio || "0")) / 100;  // 基点转百分比
+                          const roe = parseFloat(String("roe" in pos ? pos.roe : "0") || "0") / 100;  // 基点转百分比
+                          const mmr = parseFloat(String(pos.mmr || "200")) / 100;  // 基点转百分比
                           // size 就是 ETH 名义价值，反算代币数量用于辅助显示
                           const tokenAmount = markPrice > 0 ? sizeETH / markPrice : 0;
 
@@ -1427,13 +1453,15 @@ export function PerpetualTradingTerminal({
 
         {/* Right: Order Panel (固定宽度) */}
         <div className="w-[320px] bg-okx-bg-primary overflow-y-auto">
-          {/* V2: 使用 Settlement 合约 + 撮合引擎 */}
-          <PerpetualOrderPanelV2
-            symbol={symbol}
-            displaySymbol={displaySymbol}
-            tokenAddress={symbol.startsWith("0x") ? symbol as Address : undefined}
-            isPerpEnabled={isPerpEnabled}
-          />
+          <TradingErrorBoundary module="OrderPanel">
+            {/* V2: 使用 Settlement 合约 + 撮合引擎 */}
+            <PerpetualOrderPanelV2
+              symbol={symbol}
+              displaySymbol={displaySymbol}
+              tokenAddress={symbol.startsWith("0x") ? symbol as Address : undefined}
+              isPerpEnabled={isPerpEnabled}
+            />
+          </TradingErrorBoundary>
         </div>
       </div>
 

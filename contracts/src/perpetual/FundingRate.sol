@@ -9,9 +9,13 @@ import "../interfaces/IPriceFeed.sol";
 
 /**
  * @title FundingRate
- * @notice 资金费率合约 - 简化版
- * @dev 每5分钟收取固定 0.01% 资金费率，双边收取进保险基金
- *      保险基金上限为 OI 的 10%，超出后 65% 保险 + 35% 平台
+ * @notice 资金费率合约 — Meme 币专用动态失衡模型
+ * @dev 核心逻辑：
+ *      1. 每 15 分钟收取一次（可配置）
+ *      2. 费率基于多空 OI 失衡度动态计算：skew = |longOI - shortOI| / totalOI
+ *      3. 劣势方（OI 更大的一方）支付资金费
+ *      4. 收取的资金费 100% 注入保险基金
+ *      5. 50/50 平衡时资金费为 0（无成本）
  */
 contract FundingRate is Ownable {
     using Address for address payable;
@@ -21,16 +25,23 @@ contract FundingRate is Ownable {
     // ============================================================
 
     uint256 public constant PRECISION = 1e18;
-    uint256 public constant FUNDING_INTERVAL = 5 minutes;
-    uint256 public constant FUNDING_RATE_BPS = 1; // 0.01% = 1 基点
     uint256 public constant BPS_PRECISION = 10000;
 
-    // 保险基金上限 = OI 的 10%
-    uint256 public constant INSURANCE_CAP_RATIO = 1000; // 10% = 1000 基点
+    // ============================================================
+    // Configurable Parameters (可通过 admin setter 调整)
+    // ============================================================
 
-    // 溢出分配比例
-    uint256 public constant OVERFLOW_TO_INSURANCE = 6500; // 65%
-    uint256 public constant OVERFLOW_TO_PLATFORM = 3500;  // 35%
+    /// @notice 资金费收取间隔（默认 15 分钟）
+    uint256 public fundingInterval = 15 minutes;
+
+    /// @notice 基础费率（bps，默认 1 = 0.01%）
+    uint256 public baseFundingRateBps = 1;
+
+    /// @notice 最大费率上限（bps，默认 50 = 0.5%）
+    uint256 public maxFundingRateBps = 50;
+
+    /// @notice 资金费 → 保险基金比例（默认 10000 = 100%）
+    uint256 public toInsuranceRatio = 10000;
 
     // ============================================================
     // State Variables
@@ -40,20 +51,23 @@ contract FundingRate is Ownable {
     IVault public vault;
     IPriceFeed public priceFeed;
 
-    // 上次收取时间
+    /// @notice 上次收取时间
     uint256 public lastFundingTime;
 
-    // 保险基金余额 (合约内管理)
+    /// @notice 保险基金余额（合约内管理）
     uint256 public insuranceFundBalance;
 
-    // 平台风险准备金余额
+    /// @notice 平台风险准备金余额
     uint256 public riskReserveBalance;
 
-    // 超级管理员 (可紧急提取保险基金)
+    /// @notice 超级管理员（可紧急提取保险基金）
     address public superAdmin;
 
-    // 累计收取的资金费
+    /// @notice 累计收取的资金费
     uint256 public totalFundingCollected;
+
+    /// @notice 当前实际费率（每次 collectFunding 后更新，方便前端读取）
+    int256 public currentFundingRate; // 正 = 多头付费，负 = 空头付费
 
     // ============================================================
     // Events
@@ -64,12 +78,17 @@ contract FundingRate is Ownable {
         uint256 totalOI,
         uint256 fundingAmount,
         uint256 toInsurance,
-        uint256 toPlatform
+        uint256 toPlatform,
+        int256 fundingRate // 正 = 多头付费
     );
     event InsuranceFundInjected(address indexed from, uint256 amount);
     event InsuranceFundWithdrawn(address indexed to, uint256 amount);
     event RiskReserveWithdrawn(address indexed to, uint256 amount);
     event SuperAdminUpdated(address indexed oldAdmin, address indexed newAdmin);
+    event FundingIntervalUpdated(uint256 oldValue, uint256 newValue);
+    event BaseFundingRateUpdated(uint256 oldValue, uint256 newValue);
+    event MaxFundingRateUpdated(uint256 oldValue, uint256 newValue);
+    event ToInsuranceRatioUpdated(uint256 oldValue, uint256 newValue);
 
     // ============================================================
     // Errors
@@ -80,6 +99,7 @@ contract FundingRate is Ownable {
     error Unauthorized();
     error InsufficientBalance();
     error ZeroAmount();
+    error InvalidParameter();
 
     // ============================================================
     // Modifiers
@@ -110,105 +130,99 @@ contract FundingRate is Ownable {
     // ============================================================
 
     /**
-     * @notice 收取资金费（每5分钟，任何人可调用）
-     * @dev 固定 0.01% 费率，双边收取
+     * @notice 收取资金费（动态失衡模型）
+     * @dev 任何人可调用。费率基于多空 OI 比例动态计算：
+     *      skew = (longOI - shortOI) / totalOI
+     *      effectiveRate = |skew| × baseFundingRateBps，上限 maxFundingRateBps
+     *      劣势方支付，100% 进保险基金
      */
     function collectFunding() external {
-        if (block.timestamp < lastFundingTime + FUNDING_INTERVAL) {
+        if (block.timestamp < lastFundingTime + fundingInterval) {
             revert TooEarlyToCollect();
         }
 
-        // 获取总持仓量 (OI)
         uint256 totalLong = positionManager.getTotalLongSize();
         uint256 totalShort = positionManager.getTotalShortSize();
         uint256 totalOI = totalLong + totalShort;
 
         if (totalOI == 0) {
             lastFundingTime = block.timestamp;
+            currentFundingRate = 0;
             return;
         }
 
-        // 计算资金费 = OI × 0.01%
-        uint256 fundingAmount = (totalOI * FUNDING_RATE_BPS) / BPS_PRECISION;
-
-        // 计算保险基金上限
-        uint256 insuranceCap = (totalOI * INSURANCE_CAP_RATIO) / BPS_PRECISION;
-
-        uint256 toInsurance;
-        uint256 toPlatform;
-
-        if (insuranceFundBalance < insuranceCap) {
-            // 未达上限，全部进保险基金
-            toInsurance = fundingAmount;
-            toPlatform = 0;
+        // 计算失衡度 skew（精度 1e18）
+        // skew > 0: 多头占优（多头付费）
+        // skew < 0: 空头占优（空头付费）
+        int256 skew;
+        if (totalLong >= totalShort) {
+            skew = int256(((totalLong - totalShort) * PRECISION) / totalOI);
         } else {
-            // 超过上限，分流
-            toInsurance = (fundingAmount * OVERFLOW_TO_INSURANCE) / BPS_PRECISION;
-            toPlatform = fundingAmount - toInsurance;
+            skew = -int256(((totalShort - totalLong) * PRECISION) / totalOI);
         }
+
+        // 计算有效费率 = |skew| × baseFundingRateBps / BPS_PRECISION
+        uint256 absSkew = skew >= 0 ? uint256(skew) : uint256(-skew);
+        uint256 effectiveRateBps = (absSkew * baseFundingRateBps) / PRECISION;
+
+        // 限制最大费率
+        if (effectiveRateBps > maxFundingRateBps) {
+            effectiveRateBps = maxFundingRateBps;
+        }
+
+        // 资金费 = 劣势方 OI × effectiveRate
+        // 劣势方是 OI 更大的一方
+        uint256 dominantOI = totalLong >= totalShort ? totalLong : totalShort;
+        uint256 fundingAmount = (dominantOI * effectiveRateBps) / BPS_PRECISION;
+
+        // 分配：100% 进保险基金（toInsuranceRatio = 10000）
+        uint256 toInsurance = (fundingAmount * toInsuranceRatio) / BPS_PRECISION;
+        uint256 toPlatform = fundingAmount - toInsurance;
 
         // 更新余额
         insuranceFundBalance += toInsurance;
         riskReserveBalance += toPlatform;
         totalFundingCollected += fundingAmount;
 
+        // 记录当前费率（带方向，供前端显示）
+        currentFundingRate = skew >= 0
+            ? int256(effectiveRateBps)   // 正 = 多头付费
+            : -int256(effectiveRateBps); // 负 = 空头付费
+
         lastFundingTime = block.timestamp;
 
-        emit FundingCollected(block.timestamp, totalOI, fundingAmount, toInsurance, toPlatform);
+        emit FundingCollected(block.timestamp, totalOI, fundingAmount, toInsurance, toPlatform, currentFundingRate);
     }
 
     // ============================================================
     // Insurance Fund Management
     // ============================================================
 
-    /**
-     * @notice 向保险基金注资
-     */
     function injectInsuranceFund() external payable {
         if (msg.value == 0) revert ZeroAmount();
         insuranceFundBalance += msg.value;
         emit InsuranceFundInjected(msg.sender, msg.value);
     }
 
-    /**
-     * @notice 紧急提取保险基金 (仅超级管理员)
-     * @param amount 提取金额
-     * @param recipient 接收地址
-     */
     function emergencyWithdrawInsurance(uint256 amount, address recipient) external onlySuperAdmin {
         if (recipient == address(0)) revert ZeroAddress();
         if (amount > insuranceFundBalance) revert InsufficientBalance();
-
         insuranceFundBalance -= amount;
         payable(recipient).sendValue(amount);
-
         emit InsuranceFundWithdrawn(recipient, amount);
     }
 
-    /**
-     * @notice 提取风险准备金 (仅管理员)
-     * @param recipient 接收地址
-     */
     function withdrawRiskReserve(address recipient) external onlyOwner {
         if (recipient == address(0)) revert ZeroAddress();
         uint256 amount = riskReserveBalance;
         if (amount == 0) revert ZeroAmount();
-
         riskReserveBalance = 0;
         payable(recipient).sendValue(amount);
-
         emit RiskReserveWithdrawn(recipient, amount);
     }
 
-    /**
-     * @notice 从保险基金覆盖亏损 (供 Vault 调用)
-     * @param amount 需要覆盖的金额
-     * @return covered 实际覆盖金额
-     */
     function coverDeficit(uint256 amount) external returns (uint256 covered) {
-        // 只允许 Vault 调用
         require(msg.sender == address(vault), "Only Vault");
-
         covered = amount > insuranceFundBalance ? insuranceFundBalance : amount;
         if (covered > 0) {
             insuranceFundBalance -= covered;
@@ -217,12 +231,33 @@ contract FundingRate is Ownable {
     }
 
     // ============================================================
-    // Admin Functions
+    // Admin Functions (可配置参数)
     // ============================================================
 
-    /**
-     * @notice 设置超级管理员
-     */
+    function setFundingInterval(uint256 _interval) external onlyOwner {
+        if (_interval < 1 minutes || _interval > 24 hours) revert InvalidParameter();
+        emit FundingIntervalUpdated(fundingInterval, _interval);
+        fundingInterval = _interval;
+    }
+
+    function setBaseFundingRate(uint256 _rateBps) external onlyOwner {
+        if (_rateBps > 100) revert InvalidParameter(); // 最大 1%
+        emit BaseFundingRateUpdated(baseFundingRateBps, _rateBps);
+        baseFundingRateBps = _rateBps;
+    }
+
+    function setMaxFundingRate(uint256 _maxRateBps) external onlyOwner {
+        if (_maxRateBps > 500) revert InvalidParameter(); // 最大 5%
+        emit MaxFundingRateUpdated(maxFundingRateBps, _maxRateBps);
+        maxFundingRateBps = _maxRateBps;
+    }
+
+    function setToInsuranceRatio(uint256 _ratio) external onlyOwner {
+        if (_ratio > BPS_PRECISION) revert InvalidParameter();
+        emit ToInsuranceRatioUpdated(toInsuranceRatio, _ratio);
+        toInsuranceRatio = _ratio;
+    }
+
     function setSuperAdmin(address newAdmin) external onlyOwner {
         if (newAdmin == address(0)) revert ZeroAddress();
         address oldAdmin = superAdmin;
@@ -234,107 +269,72 @@ contract FundingRate is Ownable {
     // View Functions
     // ============================================================
 
-    /**
-     * @notice 获取当前资金费率 (固定 0.01%)
-     */
-    function getCurrentFundingRate() external pure returns (uint256) {
-        return FUNDING_RATE_BPS;
+    /// @notice 获取当前资金费率（带方向）
+    /// @return rate 正 = 多头付费，负 = 空头付费，单位 bps
+    function getCurrentFundingRate() external view returns (int256 rate) {
+        return currentFundingRate;
     }
 
-    /**
-     * @notice 获取下次收取时间
-     */
+    /// @notice 获取下次收取时间
     function getNextFundingTime() external view returns (uint256) {
-        return lastFundingTime + FUNDING_INTERVAL;
+        return lastFundingTime + fundingInterval;
     }
 
-    /**
-     * @notice 获取保险基金余额
-     */
+    /// @notice 获取保险基金余额
     function getInsuranceFundBalance() external view returns (uint256) {
         return insuranceFundBalance;
     }
 
-    /**
-     * @notice 获取保险基金上限 (基于当前 OI)
-     */
-    function getInsuranceCap() external view returns (uint256) {
+    /// @notice 计算当前 skew（不改变状态）
+    function getCurrentSkew() external view returns (int256) {
         uint256 totalLong = positionManager.getTotalLongSize();
         uint256 totalShort = positionManager.getTotalShortSize();
         uint256 totalOI = totalLong + totalShort;
-        return (totalOI * INSURANCE_CAP_RATIO) / BPS_PRECISION;
+        if (totalOI == 0) return 0;
+        if (totalLong >= totalShort) {
+            return int256(((totalLong - totalShort) * PRECISION) / totalOI);
+        } else {
+            return -int256(((totalShort - totalLong) * PRECISION) / totalOI);
+        }
     }
 
-    /**
-     * @notice 检查保险基金是否超过上限
-     */
-    function isInsuranceOverCap() external view returns (bool) {
-        uint256 totalLong = positionManager.getTotalLongSize();
-        uint256 totalShort = positionManager.getTotalShortSize();
-        uint256 totalOI = totalLong + totalShort;
-        uint256 insuranceCap = (totalOI * INSURANCE_CAP_RATIO) / BPS_PRECISION;
-        return insuranceFundBalance >= insuranceCap;
+    /// @notice 获取年化费率（基于当前失衡度）
+    function getAnnualizedRate() external view returns (uint256) {
+        uint256 periodsPerDay = 1 days / fundingInterval;
+        uint256 absRate = currentFundingRate >= 0
+            ? uint256(currentFundingRate)
+            : uint256(-currentFundingRate);
+        return absRate * periodsPerDay * 365;
     }
 
-    /**
-     * @notice 获取风险准备金余额
-     */
-    function getRiskReserveBalance() external view returns (uint256) {
-        return riskReserveBalance;
-    }
-
-    /**
-     * @notice 年化资金费率 (0.01% × 12 × 24 × 365 = 1051.2%)
-     */
-    function getAnnualizedRate() external pure returns (uint256) {
-        // 每5分钟 0.01%，每天 288次，每年 365天
-        // 0.01% × 288 × 365 = 1051.2%
-        return FUNDING_RATE_BPS * 288 * 365;
-    }
-
-    /**
-     * @notice 获取上次收取时间
-     */
     function getLastFundingTime() external view returns (uint256) {
         return lastFundingTime;
     }
 
-    /**
-     * @notice 检查是否可以收取资金费
-     */
     function canCollectFunding() external view returns (bool) {
-        return block.timestamp >= lastFundingTime + FUNDING_INTERVAL;
+        return block.timestamp >= lastFundingTime + fundingInterval;
+    }
+
+    function getRiskReserveBalance() external view returns (uint256) {
+        return riskReserveBalance;
     }
 
     // ============================================================
     // Legacy Interface (兼容旧代码)
     // ============================================================
 
-    /**
-     * @notice 结算资金费 (Legacy 别名)
-     */
     function settleFunding() external {
         this.collectFunding();
     }
 
-    /**
-     * @notice 获取预估资金费率 (Legacy, 返回固定值)
-     */
-    function getEstimatedFundingRate() external pure returns (int256) {
-        return int256(FUNDING_RATE_BPS);
+    function getEstimatedFundingRate() external view returns (int256) {
+        return currentFundingRate;
     }
 
-    /**
-     * @notice 结算用户资金费 (Legacy, no-op)
-     * @dev 新版本中资金费是全局收取的，不再针对单个用户
-     */
     function settleUserFunding(address) external pure returns (int256) {
         return 0;
     }
 
-    /**
-     * @notice 获取用户待结算资金费 (Legacy, 返回0)
-     */
     function getPendingFunding(address) external pure returns (int256) {
         return 0;
     }
@@ -344,7 +344,6 @@ contract FundingRate is Ownable {
     // ============================================================
 
     receive() external payable {
-        // 接收注入的资金
         insuranceFundBalance += msg.value;
         emit InsuranceFundInjected(msg.sender, msg.value);
     }

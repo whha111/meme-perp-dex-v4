@@ -474,8 +474,13 @@ contract PerpetualTradingTest is Test {
         console.log("[Step 6] Settle Funding");
         fundingRate.settleFunding();
 
-        uint256 currentRate = fundingRate.getCurrentFundingRate();
-        console.log("  Current Funding Rate:", currentRate);
+        int256 currentRate = fundingRate.getCurrentFundingRate();
+        console.log("  Current Funding Rate (int256):");
+        if (currentRate >= 0) {
+            console.log("    Rate:", uint256(currentRate));
+        } else {
+            console.log("    Rate (negative):", uint256(-currentRate));
+        }
 
         // Step 7: 获取年化费率
         console.log("");

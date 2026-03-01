@@ -44,6 +44,9 @@ contract PriceFeed is Ownable, IPriceFeed {
     // token address => Uniswap V2 Pair address
     mapping(address => address) public tokenUniswapPair;
 
+    // 价格过期时间（安全兜底：系统宕机超过此时间则拒绝返回过期价格）
+    uint256 public maxPriceAge = 5 minutes;
+
     // ============================================================
     // Events
     // ============================================================
@@ -66,6 +69,7 @@ contract PriceFeed is Ownable, IPriceFeed {
     error TokenAlreadySupported();
     error NoUniswapPair();
     error WETHNotSet();
+    error PriceStale();
 
     // ============================================================
     // Modifiers
@@ -94,6 +98,14 @@ contract PriceFeed is Ownable, IPriceFeed {
         if (_tokenFactory == address(0)) revert ZeroAddress();
         tokenFactory = _tokenFactory;
         emit TokenFactorySet(_tokenFactory);
+    }
+
+    /**
+     * @notice 设置价格最大过期时间
+     * @param _maxPriceAge 最大过期时间（秒），0 表示禁用过期检查
+     */
+    function setMaxPriceAge(uint256 _maxPriceAge) external onlyOwner {
+        maxPriceAge = _maxPriceAge;
     }
 
     /**
@@ -257,9 +269,13 @@ contract PriceFeed is Ownable, IPriceFeed {
     /**
      * @notice 获取代币标记价格（直接返回现货价格，100%硬锚）
      * @dev 内盘合约不做任何价格偏离，直接使用Bonding Curve价格
+     *      新增过期检查：如果价格超过 maxPriceAge 未更新则 revert
      */
     function getTokenMarkPrice(address token) external view returns (uint256) {
         if (!supportedTokens[token]) revert TokenNotSupported();
+        if (tokenLastUpdateTime[token] > 0 && block.timestamp - tokenLastUpdateTime[token] > maxPriceAge) {
+            revert PriceStale();
+        }
         return tokenLastPrice[token];
     }
 

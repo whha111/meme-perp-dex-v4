@@ -49,11 +49,14 @@ func (m *Manager) Initialize() {
 	m.keepers = append(m.keepers, priceKeeper)
 
 	// Liquidation keeper - monitors and triggers liquidations
-	liqKeeper := NewLiquidationKeeper(m.db, m.cache, &m.cfg.Blockchain, m.logger.Named("liquidation-keeper"))
+	// Pass matching engine URL so keeper can query positions from engine (Mode 2)
+	// instead of empty PostgreSQL. Falls back to DB if engine is unreachable.
+	liqKeeper := NewLiquidationKeeper(m.db, m.cache, &m.cfg.Blockchain, m.logger.Named("liquidation-keeper"), m.cfg.MatchingEngine.URL)
 	m.keepers = append(m.keepers, liqKeeper)
 
 	// Funding keeper - settles funding rates
-	fundingKeeper := NewFundingKeeper(m.db, m.cache, &m.cfg.Blockchain, m.logger.Named("funding-keeper"))
+	// P3-P3: Pass matching engine URL (same pattern as LiquidationKeeper)
+	fundingKeeper := NewFundingKeeper(m.db, m.cache, &m.cfg.Blockchain, m.logger.Named("funding-keeper"), m.cfg.MatchingEngine.URL)
 	m.keepers = append(m.keepers, fundingKeeper)
 
 	// Order keeper - executes algo orders

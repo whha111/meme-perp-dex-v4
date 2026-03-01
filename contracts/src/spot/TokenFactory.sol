@@ -45,6 +45,11 @@ interface IPriceFeedFactory {
     function setTokenUniswapPair(address token, address pair) external;
 }
 
+/// @notice 清算合约回调接口（毕业后启用清算奖励）
+interface ILiquidationCallback {
+    function enableLiquidatorReward(address token) external;
+}
+
 // [C-01/C-05] Helper library for price sync to avoid stack too deep
 library PriceFeedHelper {
     function syncPrice(
@@ -139,6 +144,9 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
 
     // LendingPool 地址（用于自动开启 P2P 借贷）
     address public lendingPool;
+
+    // Liquidation 地址（毕业后启用清算奖励）
+    address public liquidation;
 
     // WETH 地址 (Base Sepolia)
     address public constant WETH = 0x4200000000000000000000000000000000000006;
@@ -606,6 +614,11 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
                 try IPriceFeedFactory(priceFeed).setTokenUniswapPair(tokenAddress, pairAddress) {} catch {}
             }
 
+            // 毕业后启用清算奖励（从系统清算0%切换到外部清算7.5%）
+            if (liquidation != address(0)) {
+                try ILiquidationCallback(liquidation).enableLiquidatorReward(tokenAddress) {} catch {}
+            }
+
             // 移除 Minter 权限
             IMemeTokenV2(tokenAddress).removeMinter(address(this));
 
@@ -678,6 +691,11 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         address oldLendingPool = lendingPool;
         lendingPool = newLendingPool;
         emit LendingPoolUpdated(oldLendingPool, newLendingPool);
+    }
+
+    function setLiquidation(address _liquidation) external onlyOwner {
+        if (_liquidation == address(0)) revert InvalidAddress();
+        liquidation = _liquidation;
     }
 
     /**

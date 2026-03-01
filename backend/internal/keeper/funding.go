@@ -2,9 +2,15 @@ package keeper
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
+	"encoding/json"
 	"fmt"
+	"io"
+	"math/big"
+	"net/http"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
@@ -25,6 +31,10 @@ type FundingKeeper struct {
 	fundingRepo    *repository.FundingRateRepository
 	instrumentRepo *repository.InstrumentRepository
 
+	// P3-P3: Matching engine HTTP client (Mode 2: positions live in engine memory/Redis)
+	matchingEngineURL string
+	httpClient        *http.Client
+
 	// Blockchain client and contract
 	ethClient       *blockchain.Client
 	fundingRateCtx  *blockchain.FundingRateContract
@@ -33,10 +43,12 @@ type FundingKeeper struct {
 	settlementsExecuted uint64
 	settlementsFailed   uint64
 	lastSettlementTime  time.Time
+	engineQuerySuccesses uint64
+	engineQueryFailures  uint64
 }
 
-func NewFundingKeeper(db *gorm.DB, cache *database.Cache, cfg *config.BlockchainConfig, logger *zap.Logger) *FundingKeeper {
-	return &FundingKeeper{
+func NewFundingKeeper(db *gorm.DB, cache *database.Cache, cfg *config.BlockchainConfig, logger *zap.Logger, matchingEngineURL ...string) *FundingKeeper {
+	k := &FundingKeeper{
 		db:             db,
 		cache:          cache,
 		cfg:            cfg,
@@ -44,7 +56,16 @@ func NewFundingKeeper(db *gorm.DB, cache *database.Cache, cfg *config.Blockchain
 		positionRepo:   repository.NewPositionRepository(db),
 		fundingRepo:    repository.NewFundingRateRepository(db),
 		instrumentRepo: repository.NewInstrumentRepository(db),
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
 	}
+	if len(matchingEngineURL) > 0 && matchingEngineURL[0] != "" {
+		k.matchingEngineURL = matchingEngineURL[0]
+		logger.Info("FundingKeeper: Matching engine integration enabled",
+			zap.String("url", k.matchingEngineURL))
+	}
+	return k
 }
 
 // InitBlockchain initializes blockchain connections
@@ -205,8 +226,27 @@ func (k *FundingKeeper) settleFundingInDB(ctx context.Context, fundingTime int64
 			continue
 		}
 
-		// Apply funding to all positions for this instrument
-		positions, err := k.positionRepo.GetByInstID(inst.InstID)
+		// P3-P3: Try matching engine first (positions live in engine memory/Redis)
+		var positions []model.Position
+		if k.matchingEngineURL != "" {
+			allPositions, engineErr := k.getPositionsFromEngine()
+			if engineErr != nil {
+				k.engineQueryFailures++
+				k.logger.Warn("Failed to get positions from engine, falling back to DB",
+					zap.Error(engineErr))
+				positions, err = k.positionRepo.GetByInstID(inst.InstID)
+			} else {
+				k.engineQuerySuccesses++
+				// Filter for this instrument only
+				for _, p := range allPositions {
+					if p.InstID == inst.InstID {
+						positions = append(positions, p)
+					}
+				}
+			}
+		} else {
+			positions, err = k.positionRepo.GetByInstID(inst.InstID)
+		}
 		if err != nil {
 			k.logger.Error("Failed to get positions",
 				zap.String("instId", inst.InstID),
@@ -237,6 +277,59 @@ func (k *FundingKeeper) settleFundingInDB(ctx context.Context, fundingTime int64
 	k.settlementsExecuted++
 }
 
+// P3-P3: getPositionsFromEngine fetches positions from matching engine (Mode 2)
+// Mirrors LiquidationKeeper.getPositionsFromEngine() pattern
+func (k *FundingKeeper) getPositionsFromEngine() ([]model.Position, error) {
+	if k.matchingEngineURL == "" {
+		return nil, fmt.Errorf("matching engine URL not configured")
+	}
+
+	resp, err := k.httpClient.Get(k.matchingEngineURL + "/api/internal/positions/all")
+	if err != nil {
+		return nil, fmt.Errorf("engine request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("engine returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result enginePositionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode engine response: %w", err)
+	}
+
+	positions := make([]model.Position, 0, len(result.Positions))
+	for _, ep := range result.Positions {
+		posSide := model.PosSideLong
+		if !ep.IsLong {
+			posSide = model.PosSideShort
+		}
+
+		pos := model.Position{
+			PosID:   ep.Trader,
+			InstID:  ep.Token,
+			PosSide: posSide,
+		}
+
+		if sz, ok := new(big.Int).SetString(ep.Size, 10); ok {
+			pos.Pos = model.Decimal{Decimal: decimal.NewFromBigInt(sz, -18)}
+			pos.AvailPos = pos.Pos
+		}
+		if px, ok := new(big.Int).SetString(ep.EntryPrice, 10); ok {
+			pos.AvgPx = model.Decimal{Decimal: decimal.NewFromBigInt(px, -18)}
+		}
+		if m, ok := new(big.Int).SetString(ep.Collateral, 10); ok {
+			pos.Margin = model.Decimal{Decimal: decimal.NewFromBigInt(m, -18)}
+		}
+
+		positions = append(positions, pos)
+	}
+
+	return positions, nil
+}
+
 func (k *FundingKeeper) calculateFundingRate(ctx context.Context, instID string) model.Decimal {
 	// If blockchain is available, try to get funding rate from contract
 	if k.fundingRateCtx != nil {
@@ -256,8 +349,21 @@ func (k *FundingKeeper) calculateFundingRate(ctx context.Context, instID string)
 	// Funding rate formula: (markPrice - spotPrice) / spotPrice
 	// Clamped to ±0.25%
 
-	// Get positions to determine market skew
-	positions, _ := k.positionRepo.GetByInstID(instID)
+	// P3-P3: Try engine first for position data
+	var positions []model.Position
+	if k.matchingEngineURL != "" {
+		allPositions, engineErr := k.getPositionsFromEngine()
+		if engineErr == nil {
+			for _, p := range allPositions {
+				if p.InstID == instID {
+					positions = append(positions, p)
+				}
+			}
+		}
+	}
+	if len(positions) == 0 {
+		positions, _ = k.positionRepo.GetByInstID(instID)
+	}
 
 	var longSize, shortSize model.Decimal
 	for _, pos := range positions {
@@ -348,11 +454,19 @@ func generateBillID() string {
 	return "BILL" + time.Now().Format("20060102150405") + randomString(6)
 }
 
+// P3-P3: Use crypto/rand instead of time.Now() in tight loop (identical seeds → identical chars)
 func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, n)
+	if _, err := crypto_rand.Read(b); err != nil {
+		// Fallback: at least use different seed per call
+		for i := range b {
+			b[i] = letters[i%len(letters)]
+		}
+		return string(b)
+	}
 	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+		b[i] = letters[int(b[i])%len(letters)]
 	}
 	return string(b)
 }

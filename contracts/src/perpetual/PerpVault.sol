@@ -29,10 +29,10 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     uint256 public constant PRECISION = 1e18;
     uint256 public constant FEE_PRECISION = 10000; // basis points
 
-    /// @notice Maximum utilization ratio — OI cannot exceed this % of pool value
-    uint256 public constant MAX_UTILIZATION = 8000; // 80%
+    /// @notice Maximum utilization ratio — OI cannot exceed this % of pool value (Meme 币需更低)
+    uint256 public maxUtilization = 5000; // 50% (was 80%, meme 币 50% 回撤 → 80% 利用 = 40% 池子蒸发)
 
-    /// @notice Maximum configurable cooldown (GMX allows up to 48h, HyperLiquid uses 4 days)
+    /// @notice Maximum configurable cooldown
     uint256 public constant MAX_COOLDOWN = 7 days;
 
     /// @notice Minimum pool liquidity after withdrawal
@@ -45,16 +45,15 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     /// @dev See: OpenZeppelin ERC4626 "virtual shares" pattern
     uint256 public constant DEAD_SHARES = 1000;
 
-    /// @notice Deposit/withdrawal fee in basis points (30 bps = 0.3%)
-    uint256 public constant DEPOSIT_FEE_BPS = 30;
-    uint256 public constant WITHDRAWAL_FEE_BPS = 30;
+    /// @notice Deposit/withdrawal fee in basis points (Meme 池需更高费用抑制频繁进出)
+    uint256 public depositFeeBps = 50;    // 0.5% (was 0.3%)
+    uint256 public withdrawalFeeBps = 50; // 0.5% (was 0.3%)
 
     /// @notice Dead address for burning shares
     address public constant DEAD_ADDRESS = address(0xdEaD);
 
-    /// @notice ADL threshold — trigger when pending profits exceed this % of pool balance
-    /// @dev GMX V2 uses MAX_PNL_FACTOR_FOR_ADL, typically 90%
-    uint256 public constant ADL_THRESHOLD_BPS = 9000; // 90%
+    /// @notice ADL threshold — trigger when pending profits exceed this % of pool balance (Meme 币提前触发)
+    uint256 public adlThresholdBps = 7000; // 70% (was 90%, 防止 90% → 150% 之间的死区)
 
     // ============================================================
     // State Variables
@@ -231,6 +230,25 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
         emit DepositsPausedSet(_paused);
     }
 
+    /// @notice 设置最大利用率（OI 不能超过池子价值的此比例）
+    function setMaxUtilization(uint256 _bps) external onlyOwner {
+        require(_bps >= 3000 && _bps <= 9500, "Out of range"); // 30%-95%
+        maxUtilization = _bps;
+    }
+
+    /// @notice 设置 ADL 触发阈值
+    function setAdlThreshold(uint256 _bps) external onlyOwner {
+        require(_bps >= 5000 && _bps <= 9500, "Out of range"); // 50%-95%
+        adlThresholdBps = _bps;
+    }
+
+    /// @notice 设置存取费率
+    function setFees(uint256 _depositBps, uint256 _withdrawalBps) external onlyOwner {
+        require(_depositBps <= 200 && _withdrawalBps <= 200, "Fee too high"); // Max 2%
+        depositFeeBps = _depositBps;
+        withdrawalFeeBps = _withdrawalBps;
+    }
+
     function pause() external onlyOwner {
         _pause();
     }
@@ -267,7 +285,7 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
         if (msg.value < MIN_DEPOSIT) revert InvalidAmount();
 
         // Deduct deposit fee (stays in pool → benefits existing LPs)
-        uint256 fee = (msg.value * DEPOSIT_FEE_BPS) / FEE_PRECISION;
+        uint256 fee = (msg.value * depositFeeBps) / FEE_PRECISION;
         uint256 depositAmount = msg.value - fee;
 
         uint256 sharesToMint;
@@ -364,7 +382,7 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
         uint256 grossETH = (pendingShares * getSharePrice()) / PRECISION;
 
         // Deduct withdrawal fee (stays in pool)
-        uint256 fee = (grossETH * WITHDRAWAL_FEE_BPS) / FEE_PRECISION;
+        uint256 fee = (grossETH * withdrawalFeeBps) / FEE_PRECISION;
         uint256 ethAmount = grossETH - fee;
 
         if (grossETH > address(this).balance) revert InsufficientPoolBalance();
@@ -636,7 +654,7 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
      * @notice Get maximum total OI allowed (80% of pool value)
      */
     function getMaxOI() public view returns (uint256) {
-        return (getPoolValue() * MAX_UTILIZATION) / FEE_PRECISION;
+        return (getPoolValue() * maxUtilization) / FEE_PRECISION;
     }
 
     /**
@@ -652,7 +670,7 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
         uint256 rawBalance = address(this).balance;
         if (rawBalance == 0) return (true, type(uint256).max);
         pnlToPoolBps = (pendingProfit * FEE_PRECISION) / rawBalance;
-        shouldTrigger = pnlToPoolBps >= ADL_THRESHOLD_BPS;
+        shouldTrigger = pnlToPoolBps >= adlThresholdBps;
     }
 
     /**
