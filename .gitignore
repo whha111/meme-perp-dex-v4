@@ -11,6 +11,14 @@ dist/
 contracts/out/
 contracts/cache/
 contracts/broadcast/
+contracts/crytic-export/
+
+# Compiled binaries
+backend/api
+backend/main
+backend/keeper
+backend/bin/
+backend/dist/
 
 # Environment files — AUDIT-FIX DP-C01/C02: catch ALL .env files at any depth
 .env
@@ -35,6 +43,12 @@ Thumbs.db
 logs/
 *.log
 npm-debug.log*
+stress-test-logs/
+
+# Test artifacts
+stress-test/reports/
+frontend/test-results/
+contracts/slither-report.json
 
 # Test coverage
 coverage/
@@ -51,6 +65,10 @@ credentials/
 # Debug/test scripts (one-off)
 check-all-bal.ts
 contracts/debug-*.ts
+
+# Redis dumps
+dump.rdb
+*.rdb
 
 # Testnet data (sensitive env + runtime data)
 testnet/.env.testnet
