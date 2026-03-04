@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Stress Test Report</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 1000px; margin: 2em auto; background: #0d1117; color: #c9d1d9; }
+  h1 { color: #58a6ff; } h2 { color: #79c0ff; border-bottom: 1px solid #30363d; padding-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; }
+  th, td { padding: 8px 12px; text-align: left; border: 1px solid #30363d; }
+  th { background: #161b22; color: #58a6ff; }
+  .pass { color: #3fb950; } .fail { color: #f85149; } .warn { color: #d29922; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1em; margin: 1em 0; }
+  .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1em; }
+  .stat-value { font-size: 1.8em; font-weight: bold; color: #58a6ff; }
+  .stat-label { color: #8b949e; font-size: 0.85em; }
+  .safety-box { background: #161b22; border: 2px solid #f85149; border-radius: 12px; padding: 1.5em; text-align: center; margin: 1.5em 0; }
+  .safety-score { font-size: 3em; font-weight: bold; color: #f85149; }
+  .safety-verdict { font-size: 1.2em; color: #f85149; margin-top: 0.5em; }
+  .breakdown { display: flex; gap: 1em; justify-content: center; margin-top: 1em; flex-wrap: wrap; }
+  .breakdown-item { padding: 0.5em 1em; background: #0d1117; border-radius: 6px; font-size: 0.85em; }
+</style></head><body>
+<h1>Meme-Perp-DEX Soak Test Report</h1>
+<p>Mode: <b>FULL</b> | Duration: <b>1.0 hours</b> | Wallets: <b>300</b> (200 spot + 100 perp)</p>
+<p>Period: 3/4/2026, 10:06:23 PM — 3/4/2026, 11:07:44 PM</p>
+
+<div class="safety-box">
+  <div style="color:#8b949e;font-size:0.9em;">FUND SAFETY SCORE</div>
+  <div class="safety-score">62%</div>
+  <div class="safety-verdict">NOT READY — DO NOT LAUNCH</div>
+  <div class="breakdown">
+    <div class="breakdown-item">auditPassRate: 37pts</div><div class="breakdown-item">perpVaultHealth: 0pts</div><div class="breakdown-item">oiConsistency: 15pts</div><div class="breakdown-item">engineChainDrift: 10pts</div><div class="breakdown-item">chainHealth: 0pts</div>
+  </div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-value">711</div><div class="stat-label">Total Trades</div></div>
+  <div class="stat-card"><div class="stat-value fail">92.3%</div><div class="stat-label">Fund Audit Pass Rate</div></div>
+  <div class="stat-card"><div class="stat-value">0</div><div class="stat-label">Liquidations Executed</div></div>
+  <div class="stat-card"><div class="stat-value">0</div><div class="stat-label">Token Graduations</div></div>
+</div>
+
+<h2>Chain Verification</h2>
+<table>
+  <tr><th>Check</th><th>Value</th><th>Status</th></tr>
+  <tr>
+    <td>SettlementV2 WETH Balance</td>
+    <td>2.56 WETH</td>
+    <td class="fail">⚠️</td>
+  </tr>
+  <tr>
+    <td>PerpVault Pool Value</td>
+    <td>0.498139262439779238 ETH</td>
+    <td class="pass">✅</td>
+  </tr>
+  <tr>
+    <td>PerpVault Total OI</td>
+    <td>0.24901385 ETH</td>
+    <td>ℹ️</td>
+  </tr>
+  <tr>
+    <td>PerpVault Health Checks</td>
+    <td>0/13 passed</td>
+    <td class="warn">⚠️</td>
+  </tr>
+  <tr>
+    <td>PerpVault Pool Min/Max</td>
+    <td>0.498131683332355169 — 0.498139262439779238 ETH</td>
+    <td>ℹ️</td>
+  </tr>
+  <tr>
+    <td>Engine-Chain Drift (max)</td>
+    <td>0.0495 ETH</td>
+    <td class="pass">✅</td>
+  </tr>
+  <tr>
+    <td>OI Consistency</td>
+    <td>0 mismatches in 0 checks</td>
+    <td class="pass">✅</td>
+  </tr>
+  <tr><td colspan="2" class="fail">PerpVault poolValue LOW: 0.498139262439779238</td><td class="fail">❌</td></tr>
+</table>
+
+<h2>Spot Trading</h2>
+<table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>Rounds</td><td>64</td></tr>
+  <tr><td>Buys</td><td>270</td></tr>
+  <tr><td>Sells</td><td>3</td></tr>
+  <tr><td>Token Creates</td><td>86</td></tr>
+  <tr><td>Graduations</td><td>0</td></tr>
+  <tr><td>PriceFeed Syncs</td><td>86</td></tr>
+  <tr><td>Price Verifications</td><td>269 (0 issues)</td></tr>
+  <tr><td>Success Rate</td><td class="pass">99.2%</td></tr>
+  <tr><td>Failures</td><td class="warn">3</td></tr>
+</table>
+
+<h2>Perpetual Trading</h2>
+<table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>Rounds</td><td>22</td></tr>
+  <tr><td>Orders Submitted</td><td>352</td></tr>
+  <tr><td>Orders Matched</td><td>71</td></tr>
+  <tr><td>Deposits Made</td><td>96</td></tr>
+  <tr><td>Withdrawal Tests</td><td>0 (0 failures)</td></tr>
+  <tr><td>Lifecycle Verifications</td><td>1 (0 failures)</td></tr>
+  <tr><td>Success Rate</td><td class="warn">68.5%</td></tr>
+  <tr><td>Failures</td><td class="warn">111</td></tr>
+</table>
+
+<h2>Fund Conservation Audit</h2>
+<table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>Total Audits</td><td>13</td></tr>
+  <tr><td>Passed</td><td class="pass">12</td></tr>
+  <tr><td>Failed</td><td class="fail">1</td></tr>
+  <tr><td>Max Deviation</td><td>1.5045 ETH</td></tr>
+</table>
+
+<h2>Liquidation & Profit Withdrawal</h2>
+<table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>Scans</td><td>60</td></tr>
+  <tr><td>Liquidations Triggered</td><td>0</td></tr>
+  <tr><td>Liquidations Succeeded</td><td>0</td></tr>
+  <tr><td>Profit Withdrawals</td><td>4</td></tr>
+</table>
+
+<h2>Extreme Market Scenarios</h2>
+<table>
+  <tr><th>Scenario</th><th>Executions</th></tr>
+  <tr><td>flash_crash</td><td>0</td></tr>
+  <tr><td>pump</td><td>1</td></tr>
+  <tr><td>dump</td><td>0</td></tr>
+  <tr><td>whipsaw</td><td>0</td></tr>
+  <tr><td>slow_bleed</td><td>0</td></tr>
+  <tr><td>near_zero</td><td>0</td></tr>
+  <tr><th>Total</th><th>1</th></tr>
+</table>
+
+<h2>RPC Usage</h2>
+<table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>Total Requests</td><td>10,532</td></tr>
+  <tr><td>Retries</td><td>0</td></tr>
+  <tr><td>Failures</td><td>3126</td></tr>
+  <tr><td>Failure Rate</td><td class="warn">29.68%</td></tr>
+</table>
+
+<h2>Launch Readiness Checklist</h2>
+<table>
+  <tr><th>Criterion</th><th>Threshold</th><th>Actual</th><th>Status</th></tr>
+  <tr>
+    <td>Fund Audit Pass Rate</td><td>≥ 95%</td>
+    <td>92.3%</td>
+    <td class="fail">❌</td>
+  </tr>
+  <tr>
+    <td>PerpVault Pool Value</td><td>> 0.5 ETH (continuous)</td>
+    <td>min 0.498131683332355169 ETH</td>
+    <td class="fail">❌</td>
+  </tr>
+  <tr>
+    <td>OI Consistency</td><td>0 mismatches</td>
+    <td>0 mismatches</td>
+    <td class="pass">✅</td>
+  </tr>
+  <tr>
+    <td>Engine-Chain Drift</td><td>< 0.5 ETH</td>
+    <td>0.0495 ETH</td>
+    <td class="pass">✅</td>
+  </tr>
+  <tr>
+    <td>Spot Success Rate</td><td>≥ 90%</td>
+    <td>99.2%</td>
+    <td class="pass">✅</td>
+  </tr>
+  <tr>
+    <td>Perp Success Rate</td><td>≥ 85%</td>
+    <td>68.5%</td>
+    <td class="warn">⚠️</td>
+  </tr>
+  <tr>
+    <td>RPC Failure Rate</td><td>< 5%</td>
+    <td>29.68%</td>
+    <td class="warn">⚠️</td>
+  </tr>
+  <tr>
+    <td>Price Verification</td><td>0 failures</td>
+    <td>0 failures</td>
+    <td class="pass">✅</td>
+  </tr>
+</table>
+
+<footer style="color:#8b949e;margin-top:2em;text-align:center;">
+Generated by meme-perp-dex soak test system | 2026-03-04T15:07:44.486Z
+</footer></body></html>

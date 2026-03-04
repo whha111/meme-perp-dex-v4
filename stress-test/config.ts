@@ -29,21 +29,22 @@ export const CHAIN = {
   name: "BSC Testnet",
 } as const;
 
-// ── Contract Addresses (BSC Testnet - Redeployed 2026-02-28) ──
+// ── Contract Addresses (BSC Testnet - Redeployed 2026-03-01) ──
 // Settlement must match matching engine's EIP-712 verifyingContract
 export const CONTRACTS = {
-  settlement: "0x1660b3571fB04f16F70aea40ac0E908607061DBE" as Address,       // Settlement V1
-  settlementV2: "0x733EccCf612F70621c772D63334Cf5606d7a7C75" as Address,     // SettlementV2 (dYdX-style Merkle)
-  tokenFactory: "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8" as Address,      // Spot trading (TokenFactory)
-  perpTokenFactory: "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8" as Address,  // Same as tokenFactory (unified)
-  positionManager: "0x7611a924622B5f6bc4c2ECAAdB6DE078E741AcF6" as Address,
-  priceFeed: "0x8A57904F9b9392dAB4163a6c372Df1c4Cdd1eb36" as Address,
-  liquidation: "0x53a5A82C95F3816179F9268002b1a2e4B5455CF4" as Address,
-  insuranceFund: "0x93F63c2EEc4bF77FF301Cd14Ef4A392E58e33C69" as Address,
-  fundingRate: "0xD6DD3947F8d80A031b69eBd825Be2384E787dC46" as Address,
-  vault: "0xcc4Fa8Df0686824F92d392Cb650057EA7D2EF46E" as Address,
-  lendingPool: "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4" as Address,
-  perpVault: "0x586FB78b8dB39d8D89C1Fd2Aa0c756C828e5251F" as Address,
+  settlement: "0x63df8d6acF3f99Ae59Bee6184A5EB6beA8663eb7" as Address,       // Settlement V1 (EIP-712 verifyingContract)
+  settlementV2: "0x7fF9d60aE49F14bB604FeF1961910D7931067873" as Address,     // SettlementV2 (dYdX-style Merkle)
+  tokenFactory: "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb" as Address,      // Spot trading (TokenFactory)
+  perpTokenFactory: "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb" as Address,  // Same as tokenFactory (unified)
+  priceFeed: "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48" as Address,
+  perpVault: "0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75" as Address,
+  // Legacy V1 contracts — not deployed on current BSC Testnet, kept for monitor compat
+  positionManager: "0x0000000000000000000000000000000000000000" as Address,
+  liquidation: "0x0000000000000000000000000000000000000000" as Address,
+  insuranceFund: "0x0000000000000000000000000000000000000000" as Address,
+  fundingRate: "0x0000000000000000000000000000000000000000" as Address,
+  vault: "0x0000000000000000000000000000000000000000" as Address,
+  lendingPool: "0x0000000000000000000000000000000000000000" as Address,
 } as const;
 
 // ── Matching Engine ────────────────────────────────────────────
@@ -112,9 +113,9 @@ export const PERP_CONFIG = {
   openShortProbability: 0.30,
   closeProbability: 0.25,
   addMarginProbability: 0.10,
-  highLeverageProbability: 0.05,     // 50x-100x for liquidation testing
-  leverageRange: [2, 30],            // Normal leverage range
-  highLeverageRange: [50, 100],
+  highLeverageProbability: 0.05,     // 10x for liquidation testing (engine max = 10x after H-07 fix)
+  leverageRange: [2, 10],            // Normal leverage range (max 10x)
+  highLeverageRange: [10, 10],       // High leverage = max 10x (was 50-100x, blocked by H-07 fix)
   minSizeEth: 0.001,                 // Matching engine minimum position size = 0.001 ETH
   maxSizeEth: 0.005,                 // Larger notional OK (margin = size/leverage is small)
   leveragePrecision: 10000n,         // Contract uses 1e4 for leverage
