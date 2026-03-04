@@ -109,14 +109,14 @@ describe('验证工具测试', () => {
 
   describe('validateChainId', () => {
     test('验证有效的链 ID', () => {
-      expect(validateChainId(84532)).toBe(true); // Base Sepolia
+      expect(validateChainId(97)).toBe(true); // BSC Testnet
       expect(validateChainId(8453)).toBe(true); // Base Mainnet
       expect(validateChainId(1, [1, 137, 8453])).toBe(true); // 自定义允许的链
     });
 
     test('验证无效的链 ID', () => {
       expect(validateChainId(1)).toBe(false); // 不在默认列表中
-      expect(validateChainId(84532, [1, 137])).toBe(false); // 不在自定义列表中
+      expect(validateChainId(97, [1, 137])).toBe(false); // 不在自定义列表中
     });
   });
 

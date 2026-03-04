@@ -134,14 +134,14 @@ export function formatTokenPrice(price: number): string {
 }
 
 /**
- * 格式化 ETH 金额
- * @param amount ETH 金额
- * @returns 格式化的字符串，如 "Ξ0.0234" 或 "Ξ1.2345"
+ * 格式化 BNB 金额
+ * @param amount BNB 金额
+ * @returns 格式化的字符串，如 "BNB 0.0234" 或 "BNB 1.2345"
  */
 export function formatEthAmount(amount: number): string {
-  if (amount === 0 || isNaN(amount)) return "Ξ0";
-  if (amount >= 1) return `Ξ${amount.toFixed(4)}`;
-  if (amount >= 0.0001) return `Ξ${amount.toFixed(6)}`;
+  if (amount === 0 || isNaN(amount)) return "BNB 0";
+  if (amount >= 1) return `BNB ${amount.toFixed(4)}`;
+  if (amount >= 0.0001) return `BNB ${amount.toFixed(6)}`;
 
   // 极小数使用下标格式
   const amountStr = amount.toFixed(18);
@@ -151,7 +151,7 @@ export function formatEthAmount(amount: number): string {
     const significantDigits = match[2].slice(0, 4);
     const subscripts = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
     const subscriptNum = zeroCount.toString().split("").map((d) => subscripts[parseInt(d)]).join("");
-    return `Ξ0.0${subscriptNum}${significantDigits}`;
+    return `BNB 0.0${subscriptNum}${significantDigits}`;
   }
-  return `Ξ${amount.toFixed(8)}`;
+  return `BNB ${amount.toFixed(8)}`;
 }

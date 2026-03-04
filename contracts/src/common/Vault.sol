@@ -67,6 +67,8 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
     event ContractAuthorized(address indexed contractAddr, bool authorized);
     event LendingPoolSet(address indexed pool);
     event InsuranceFundSet(address indexed fund);
+    // AUDIT-FIX SC-C03: 追踪保险基金转账失败
+    event InsuranceTransferFailed(address indexed user, uint256 amount);
     event FeeCollected(address indexed user, address indexed feeReceiver, uint256 amount);
     // L-004: Added missing event
     event LockedBalanceTransferred(address indexed from, address indexed to, uint256 amount);
@@ -463,13 +465,16 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
 
         // H-014: 将用户的保证金 ETH 转移到保险基金
         // 这部分 ETH 是用户亏损的，应该进入保险基金
+        // AUDIT-FIX SC-C03: 保险基金转账失败不再静默忽略，而是触发事件
+        // 管理员可通过事件监控并手动处理失败转账
         if (actualCollateral > 0 && insuranceFund != address(0)) {
             if (address(this).balance >= actualCollateral) {
                 (bool collateralSuccess,) = insuranceFund.call{value: actualCollateral}("");
                 if (!collateralSuccess) {
-                    // 如果转移失败，记录但不阻塞（管理员可后续处理）
-                    // 注：生产环境可考虑添加待处理队列
+                    emit InsuranceTransferFailed(user, actualCollateral);
                 }
+            } else {
+                emit InsuranceTransferFailed(user, actualCollateral);
             }
         }
 

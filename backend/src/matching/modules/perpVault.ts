@@ -750,6 +750,8 @@ export async function executeBatchSettlement(): Promise<void> {
             functionName: "settleTraderProfit",
             args: [item.trader, item.amount],
           });
+          // AUDIT-FIX ME-H04: profit 类型也需要累计 totalSettled（旧代码遗漏）
+          totalSettled += item.amount;
           logger.info("PerpVault", `Profit settled: trader=${item.trader.slice(0, 10)} amount=${item.amount} tx=${txHash}`);
         } else if (item.type === "loss") {
           txHash = await walletClient.writeContract({

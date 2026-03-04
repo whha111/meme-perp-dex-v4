@@ -111,13 +111,13 @@ export function PerpetualTradingTerminal({
   // 格式化账户余额 (ETH 本位)
   // 显示: Settlement 可用 + 钱包可存入 (下单时自动存入 Settlement)
   const formattedAccountBalance = useMemo(() => {
-    if (!accountBalance) return "Ξ0.00";
+    if (!accountBalance) return "BNB 0.00";
     const settlementAvailable = Number(accountBalance.available) / 1e18;
     const walletETH = accountBalance.walletBalance ? Number(accountBalance.walletBalance) / 1e18 : 0;
     const gasReserve = 0.001;
     const usableWalletETH = walletETH > gasReserve ? walletETH - gasReserve : 0;
     const totalAvailable = settlementAvailable + usableWalletETH;
-    return `Ξ${totalAvailable.toFixed(4)}`;
+    return `BNB ${totalAvailable.toFixed(4)}`;
   }, [accountBalance]);
 
   // WebSocket 实时订单簿和成交数据 - 从统一的 tradingDataStore 获取
@@ -511,8 +511,8 @@ export function PerpetualTradingTerminal({
   const marketInfo = useMemo(
     () => ({
       fundingRate: fundingRateFormatted,
-      openInterest: `Ξ${formattedOpenInterest}`,
-      volume24h: `Ξ${formattedVolume24h}`,
+      openInterest: `BNB ${formattedOpenInterest}`,
+      volume24h: `BNB ${formattedVolume24h}`,
       high24h: formattedHigh24h,    // Token/ETH 比率，无货币符号
       low24h: formattedLow24h,      // Token/ETH 比率，无货币符号
       currentPrice: formattedPrice !== "0.0000000000"
@@ -586,10 +586,10 @@ export function PerpetualTradingTerminal({
             <span className="text-okx-text-tertiary mr-2">市值</span>
             <span className="text-okx-text-primary">
               {marketInfo.marketCap >= 1000000
-                ? `Ξ${(marketInfo.marketCap / 1000000).toFixed(2)}M`
+                ? `BNB ${(marketInfo.marketCap / 1000000).toFixed(2)}M`
                 : marketInfo.marketCap >= 1000
-                ? `Ξ${(marketInfo.marketCap / 1000).toFixed(2)}K`
-                : `Ξ${marketInfo.marketCap.toFixed(4)}`}
+                ? `BNB ${(marketInfo.marketCap / 1000).toFixed(2)}K`
+                : `BNB ${marketInfo.marketCap.toFixed(4)}`}
             </span>
           </div>
           <div>
@@ -668,7 +668,7 @@ export function PerpetualTradingTerminal({
                 <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
               <span className="text-green-400 font-medium">
-                {insuranceFund.display?.balance || "Ξ0"}
+                {insuranceFund.display?.balance || "BNB 0"}
               </span>
               <span>IF</span>
             </div>
@@ -841,7 +841,7 @@ export function PerpetualTradingTerminal({
                               {/* 仓位大小 - ETH 名义价值 + 代币数量 */}
                               <td className="py-3 px-1 text-right">
                                 <div className="text-okx-text-primary font-medium">
-                                  Ξ{sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)}
+                                  BNB {sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)}
                                 </div>
                                 <div className="text-[9px] text-okx-text-tertiary">
                                   {tokenAmount >= 1000000000 ? `${(tokenAmount/1000000000).toFixed(1)}B` :
@@ -868,7 +868,7 @@ export function PerpetualTradingTerminal({
 
                               {/* 保证金 (ETH) */}
                               <td className="py-3 px-1 text-right">
-                                <span className="text-okx-text-primary">Ξ{marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(6)}</span>
+                                <span className="text-okx-text-primary">BNB {marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(6)}</span>
                                 <div className="text-[9px] text-okx-text-tertiary">MMR: {mmr.toFixed(2)}%</div>
                               </td>
 
@@ -879,7 +879,7 @@ export function PerpetualTradingTerminal({
 
                               {/* 未实现盈亏 - 后端实时推送 (ETH) */}
                               <td className={`py-3 px-1 text-right font-bold ${unrealizedPnlETH >= 0 ? "text-green-400" : "text-red-400"}`}>
-                                {unrealizedPnlETH >= 0 ? "+" : ""}Ξ{Math.abs(unrealizedPnlETH) >= 1 ? Math.abs(unrealizedPnlETH).toFixed(4) : Math.abs(unrealizedPnlETH).toFixed(6)}
+                                {unrealizedPnlETH >= 0 ? "+" : ""}BNB {Math.abs(unrealizedPnlETH) >= 1 ? Math.abs(unrealizedPnlETH).toFixed(4) : Math.abs(unrealizedPnlETH).toFixed(6)}
                               </td>
 
                               {/* ROE% - 后端实时推送 */}
@@ -987,11 +987,11 @@ export function PerpetualTradingTerminal({
                           // margin 是 ETH (1e18 精度)
                           const marginETH = order.margin ? Number(order.margin) / 1e18 : 0;
                           const marginDisplay = order.margin
-                            ? `Ξ${marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(6)}`
+                            ? `BNB ${marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(6)}`
                             : "--";
                           const feeETH = order.fee && order.fee !== "0" ? Number(order.fee) / 1e18 : 0;
                           const feeDisplay = feeETH > 0
-                            ? `Ξ${feeETH >= 0.0001 ? feeETH.toFixed(6) : feeETH.toFixed(8)}`
+                            ? `BNB ${feeETH >= 0.0001 ? feeETH.toFixed(6) : feeETH.toFixed(8)}`
                             : "--";
                           const orderTypeDisplay = order.orderType === "MARKET" ? "市价" : "限价";
                           const fillPercent = Number(order.size) > 0
@@ -1260,10 +1260,10 @@ export function PerpetualTradingTerminal({
                           const priceRaw = Number(trade.price) / 1e18;
                           const priceDisplay = formatSmallPrice(priceRaw);
                           const feeETH = Number(trade.fee) / 1e18;
-                          const feeDisplay = `Ξ${feeETH >= 0.0001 ? feeETH.toFixed(6) : feeETH.toFixed(8)}`;
+                          const feeDisplay = `BNB ${feeETH >= 0.0001 ? feeETH.toFixed(6) : feeETH.toFixed(8)}`;
                           const pnlETH = Number(trade.realizedPnL) / 1e18;
                           const pnlDisplay = pnlETH !== 0
-                            ? `${pnlETH >= 0 ? "+" : ""}Ξ${Math.abs(pnlETH) >= 1 ? Math.abs(pnlETH).toFixed(4) : Math.abs(pnlETH).toFixed(6)}`
+                            ? `${pnlETH >= 0 ? "+" : ""}BNB ${Math.abs(pnlETH) >= 1 ? Math.abs(pnlETH).toFixed(4) : Math.abs(pnlETH).toFixed(6)}`
                             : "--";
                           const roleDisplay = trade.isMaker ? "Maker" : "Taker";
                           const typeDisplay = trade.type === "liquidation" ? "强平"
@@ -1403,7 +1403,7 @@ export function PerpetualTradingTerminal({
                           || bill.type === "DEPOSIT"
                           || bill.type === "INSURANCE_INJECTION"
                           || bill.type === "MARGIN_REMOVE";
-                        const amountStr = `${rawValueETH >= 0 ? "+" : ""}Ξ${rawValueETH >= 1 ? rawValueETH.toFixed(4) : rawValueETH >= 0 ? rawValueETH.toFixed(6) : (Math.abs(rawValueETH) >= 1 ? rawValueETH.toFixed(4) : rawValueETH.toFixed(6))}`;
+                        const amountStr = `${rawValueETH >= 0 ? "+" : ""}BNB ${rawValueETH >= 1 ? rawValueETH.toFixed(4) : rawValueETH >= 0 ? rawValueETH.toFixed(6) : (Math.abs(rawValueETH) >= 1 ? rawValueETH.toFixed(4) : rawValueETH.toFixed(6))}`;
                         const amountColor = typeMeta.color || (rawValueETH >= 0 ? "text-okx-up" : "text-okx-down");
                         const ts = new Date(bill.createdAt);
                         const pad = (n: number) => n.toString().padStart(2, "0");
@@ -1414,11 +1414,11 @@ export function PerpetualTradingTerminal({
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-okx-text-tertiary text-[10px]">{timeStr}</span>
                               <span className="text-okx-text-tertiary text-[10px]">
-                                {t("billBalanceAfter")} Ξ{balanceAfterETH >= 1 ? balanceAfterETH.toFixed(4) : balanceAfterETH.toFixed(6)}
+                                {t("billBalanceAfter")} BNB {balanceAfterETH >= 1 ? balanceAfterETH.toFixed(4) : balanceAfterETH.toFixed(6)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-medium text-okx-text-primary">ETH</span>
+                              <span className="text-[11px] font-medium text-okx-text-primary">BNB</span>
                               <span className={`text-[12px] font-bold ${amountColor}`}>{amountStr}</span>
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">

@@ -127,10 +127,10 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
   // 格式化 ETH 金额 (1e18 精度)
   const formatETH = (value: string) => {
     const v = Number(value) / 1e18;
-    if (v >= 1000) return `${(v / 1000).toFixed(2)}K Ξ`;
-    if (v >= 1) return `${v.toFixed(3)} Ξ`;
-    if (v >= 0.001) return `${v.toFixed(4)} Ξ`;
-    return `${v.toFixed(6)} Ξ`;
+    if (v >= 1000) return `${(v / 1000).toFixed(2)}K BNB `;
+    if (v >= 1) return `${v.toFixed(3)} BNB `;
+    if (v >= 0.001) return `${v.toFixed(4)} BNB `;
+    return `${v.toFixed(6)} BNB `;
   };
 
   // 格式化地址
@@ -140,10 +140,10 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
   const formatPnL = (pnl: string) => {
     const p = Number(pnl) / 1e18;
     const sign = p >= 0 ? "+" : "";
-    if (Math.abs(p) >= 100) return `${sign}${(p / 1000).toFixed(2)}K Ξ`;
-    if (Math.abs(p) >= 1) return `${sign}${p.toFixed(3)} Ξ`;
-    if (Math.abs(p) >= 0.001) return `${sign}${p.toFixed(4)} Ξ`;
-    return `${sign}${p.toFixed(6)} Ξ`;
+    if (Math.abs(p) >= 100) return `${sign}${(p / 1000).toFixed(2)}K BNB `;
+    if (Math.abs(p) >= 1) return `${sign}${p.toFixed(3)} BNB `;
+    if (Math.abs(p) >= 0.001) return `${sign}${p.toFixed(4)} BNB `;
+    return `${sign}${p.toFixed(6)} BNB `;
   };
 
   // 格式化百分比 (基点 -> %)

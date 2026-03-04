@@ -105,11 +105,11 @@ const VALIDATION_MESSAGES: Record<string, MessagePair> = {
     en: "Insufficient balance",
   },
   [ValidationIds.INSUFFICIENT_GAS]: {
-    zh: "ETH 不足以支付手续费",
-    en: "Insufficient ETH for gas fees",
+    zh: "BNB 不足以支付手续费",
+    en: "Insufficient BNB for gas fees",
     suggestion: {
-      zh: "建议保留至少 0.005 ETH",
-      en: "Keep at least 0.005 ETH for gas",
+      zh: "建议保留至少 0.005 BNB",
+      en: "Keep at least 0.005 BNB for gas",
     },
   },
   [ValidationIds.AMOUNT_EMPTY]: {
@@ -260,19 +260,19 @@ export function validateWalletConnection(
 }
 
 /**
- * 校验 ETH 余额（包括 Gas 费）
+ * 校验 BNB 余额（包括 Gas 费）
  */
 export function validateEthBalance(
   balance: bigint | undefined,
   requiredAmount: bigint,
-  estimatedGas: bigint = parseEther("0.005") // 默认预估 0.005 ETH Gas
+  estimatedGas: bigint = parseEther("0.005") // 默认预估 0.005 BNB Gas
 ): ValidationResult[] {
   const results: ValidationResult[] = [];
 
   if (!balance || balance === 0n) {
     results.push(createValidation(ValidationIds.INSUFFICIENT_BALANCE, "error", {
-      zh: "ETH 余额为 0",
-      en: "ETH balance is 0",
+      zh: "BNB 余额为 0",
+      en: "BNB balance is 0",
     }));
     return results;
   }
@@ -283,14 +283,14 @@ export function validateEthBalance(
     if (balance < requiredAmount) {
       // 余额不足以支付金额
       results.push(createValidation(ValidationIds.INSUFFICIENT_BALANCE, "error", {
-        zh: `余额不足 (当前: ${formatEther(balance)} ETH)`,
-        en: `Insufficient balance (Current: ${formatEther(balance)} ETH)`,
+        zh: `余额不足 (当前: ${formatEther(balance)} BNB)`,
+        en: `Insufficient balance (Current: ${formatEther(balance)} BNB)`,
       }));
     } else {
       // 余额够，但 Gas 不够
       results.push(createValidation(ValidationIds.INSUFFICIENT_GAS, "warning", {
-        zh: `ETH 可能不足以支付手续费 (剩余: ${formatEther(balance - requiredAmount)} ETH)`,
-        en: `May not have enough ETH for gas (Remaining: ${formatEther(balance - requiredAmount)} ETH)`,
+        zh: `BNB 可能不足以支付手续费 (剩余: ${formatEther(balance - requiredAmount)} BNB)`,
+        en: `May not have enough BNB for gas (Remaining: ${formatEther(balance - requiredAmount)} BNB)`,
       }));
     }
   }
@@ -351,15 +351,15 @@ export function validateAmount(
 
     if (minAmount && amountBigInt < minAmount) {
       results.push(createValidation(ValidationIds.AMOUNT_TOO_SMALL, "error", {
-        zh: `最小金额: ${formatEther(minAmount)} ETH`,
-        en: `Minimum amount: ${formatEther(minAmount)} ETH`,
+        zh: `最小金额: ${formatEther(minAmount)} BNB`,
+        en: `Minimum amount: ${formatEther(minAmount)} BNB`,
       }));
     }
 
     if (maxAmount && amountBigInt > maxAmount) {
       results.push(createValidation(ValidationIds.AMOUNT_TOO_LARGE, "error", {
-        zh: `最大金额: ${formatEther(maxAmount)} ETH`,
-        en: `Maximum amount: ${formatEther(maxAmount)} ETH`,
+        zh: `最大金额: ${formatEther(maxAmount)} BNB`,
+        en: `Maximum amount: ${formatEther(maxAmount)} BNB`,
       }));
     }
   } catch {

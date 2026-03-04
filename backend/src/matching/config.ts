@@ -10,8 +10,8 @@ import type { Address, Hex } from "viem";
 // ============================================================
 
 export const PORT = parseInt(process.env.PORT || "8081");
-export const RPC_URL = process.env.RPC_URL || "https://base-sepolia-rpc.publicnode.com";
-export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "84532"); // P2: 从环境变量读取
+export const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "97"); // BSC Testnet
 
 // ============================================================
 // 合约地址
@@ -20,14 +20,14 @@ export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "84532"); // P2: 从环
 export const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
 export const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
 export const INSURANCE_FUND_ADDRESS = process.env.INSURANCE_FUND_ADDRESS as Address;
-export const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8") as Address;
-export const PRICE_FEED_ADDRESS = (process.env.PRICE_FEED_ADDRESS || "0x8A57904F9b9392dAB4163a6c372Df1c4Cdd1eb36") as Address;
-export const VAULT_ADDRESS = (process.env.VAULT_ADDRESS || "0xcc4Fa8Df0686824F92d392Cb650057EA7D2EF46E") as Address;
-export const POSITION_MANAGER_ADDRESS = (process.env.POSITION_MANAGER_ADDRESS || "0x7611a924622B5f6bc4c2ECAAdB6DE078E741AcF6") as Address;
-export const FUNDING_RATE_ADDRESS = (process.env.FUNDING_RATE_ADDRESS || "0xD6DD3947F8d80A031b69eBd825Be2384E787dC46") as Address;
-export const LIQUIDATION_ADDRESS = (process.env.LIQUIDATION_ADDRESS || "0x53a5A82C95F3816179F9268002b1a2e4B5455CF4") as Address;
+export const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb") as Address;
+export const PRICE_FEED_ADDRESS = (process.env.PRICE_FEED_ADDRESS || "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48") as Address;
+export const VAULT_ADDRESS = (process.env.VAULT_ADDRESS || "0xACE7014F60eF9c367E7fA5Dd80601A9945E6F4d1") as Address;
+export const POSITION_MANAGER_ADDRESS = (process.env.POSITION_MANAGER_ADDRESS || "0x04C515CcFac80BFFF27E0c5A9113e515171057b6") as Address;
+export const FUNDING_RATE_ADDRESS = (process.env.FUNDING_RATE_ADDRESS || "0x0a513bf3DE079Bf2439A5884583712bD014487aa") as Address;
+export const LIQUIDATION_ADDRESS = (process.env.LIQUIDATION_ADDRESS || "0x322AeeD67C12c10684B134e1727866425dc75F1c") as Address;
 export const LENDING_POOL_ADDRESS = (process.env.LENDING_POOL_ADDRESS || "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4") as Address;
-export const PERP_VAULT_ADDRESS = (process.env.PERP_VAULT_ADDRESS || "0x586FB78b8dB39d8D89C1Fd2Aa0c756C828e5251F") as Address;
+export const PERP_VAULT_ADDRESS = (process.env.PERP_VAULT_ADDRESS || "0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75") as Address;
 export const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address; // dYdX-style Merkle withdrawal contract
 export const COLLATERAL_TOKEN_ADDRESS = process.env.COLLATERAL_TOKEN_ADDRESS as Address;
 export const FEE_RECEIVER_ADDRESS = (process.env.FEE_RECEIVER_ADDRESS || "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE") as Address;
@@ -47,13 +47,13 @@ export const RISK_BROADCAST_INTERVAL_MS = parseInt(process.env.RISK_BROADCAST_IN
 export const REDIS_SYNC_CYCLES = parseInt(process.env.REDIS_SYNC_CYCLES || "10"); // 每10个周期(1秒)同步Redis
 
 // ============================================================
-// 精度配置 (ETH 本位)
+// 精度配置 (BNB 本位)
 // ============================================================
 
 export const PRECISION = {
   SIZE: 18n,           // Token 数量精度 1e18
-  PRICE: 18n,          // 价格精度 1e18 (ETH/Token, 直接用 Bonding Curve)
-  ETH: 18n,            // ETH 金额精度 1e18 (替代 USD)
+  PRICE: 18n,          // 价格精度 1e18 (BNB/Token, 直接用 Bonding Curve)
+  ETH: 18n,            // BNB 金额精度 1e18 (变量名保持 ETH 兼容)
   LEVERAGE: 4n,        // 杠杆精度 1e4
   RATE: 4n,            // 费率精度 1e4 (基点)
 } as const;
@@ -127,7 +127,9 @@ export const SUPPORTED_TOKENS: Address[] = [
 // 开发/测试配置
 // ============================================================
 
-export const SKIP_SIGNATURE_VERIFY = process.env.SKIP_SIGNATURE_VERIFY === "true";
+// AUDIT-FIX H-05: Must ALSO require NODE_ENV=test to prevent accidental bypass in production.
+// server.ts L91 has its own local guard, but this export could be imported by other modules.
+export const SKIP_SIGNATURE_VERIFY = process.env.NODE_ENV === "test" && process.env.SKIP_SIGNATURE_VERIFY === "true";
 
 // ============================================================
 // 资金流控制

@@ -553,3 +553,8 @@ await depositEngine(deployer.addr, parseEther("2"));
 >
 > **ConfigureSettlement.s.sol 已于 2026-03-01 成功执行**, 链上验证全部通过。
 > **下一步**: Phase E 端到端真实资金流测试 (存款→开仓→平仓→提款)
+>
+> ---
+>
+> **V2 逐行代码审查 (2026-03-03)** — 独立报告见 [`docs/CODE_REVIEW_V2.md`](./CODE_REVIEW_V2.md)
+> V2 是更细粒度的代码级审查（非重复 V1），发现 75 个 V1 未覆盖的新问题。

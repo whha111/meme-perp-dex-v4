@@ -525,7 +525,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
         {/* 左侧：交易对 */}
         <div className="flex items-center gap-2">
           <span className="text-okx-text-primary font-bold text-[16px]">{tokenSymbol}</span>
-          <span className="text-[#787B86] text-[12px]">/ETH Perp</span>
+          <span className="text-[#787B86] text-[12px]">/BNB Perp</span>
         </div>
 
         {displayOHLC && (
@@ -561,7 +561,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[#787B86]">{t("vol")}</span>
-                <span className="text-[#9CA3AF]">Ξ{formatVolume(displayOHLC.volume)}</span>
+                <span className="text-[#9CA3AF]">BNB {formatVolume(displayOHLC.volume)}</span>
               </div>
             </div>
           </>

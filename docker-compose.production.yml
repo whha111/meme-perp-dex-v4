@@ -117,7 +117,7 @@ services:
       - MEMEPERP_REDIS_PASSWORD=${REDIS_PASSWORD}
       # Blockchain configuration
       - MEMEPERP_BLOCKCHAIN_RPC_URL=${RPC_URL}
-      - MEMEPERP_BLOCKCHAIN_CHAIN_ID=${CHAIN_ID:-8453}
+      - MEMEPERP_BLOCKCHAIN_CHAIN_ID=${CHAIN_ID:-84532}
       - MEMEPERP_BLOCKCHAIN_PRIVATE_KEY=${KEEPER_PRIVATE_KEY}
       # Contract addresses
       - MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS=${VAULT_ADDRESS}
@@ -125,6 +125,7 @@ services:
       - MEMEPERP_BLOCKCHAIN_LIQUIDATION_ADDRESS=${LIQUIDATION_ADDRESS}
       - MEMEPERP_BLOCKCHAIN_FUNDING_RATE_ADDRESS=${FUNDING_RATE_ADDRESS}
       - MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS=${PRICE_FEED_ADDRESS}
+      - MEMEPERP_MATCHING_ENGINE_URL=${MATCHING_ENGINE_URL:-http://matching-engine:8081}
       - MEMEPERP_LOG_LEVEL=info
       - MEMEPERP_LOG_FORMAT=json
     depends_on:
@@ -139,6 +140,46 @@ services:
         reservations:
           memory: 128M
 
+  # Matching Engine (TypeScript Service)
+  matching-engine:
+    build:
+      context: ./backend/src
+      dockerfile: matching/Dockerfile
+    container_name: memeperp-matching-engine
+    restart: always
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      - PORT=8081
+      - RPC_URL=${RPC_URL}
+      - MATCHER_PRIVATE_KEY=${KEEPER_PRIVATE_KEY}
+      - SETTLEMENT_ADDRESS=${POSITION_ADDRESS}
+      - TOKEN_FACTORY_ADDRESS=${TOKEN_FACTORY_ADDRESS:-0x757eF02C2233b8cE2161EE65Fb7D626776b8CB73}
+      - PRICE_FEED_ADDRESS=${PRICE_FEED_ADDRESS:-0xfB347BC4Cc61C7FdCD862ED212A0e3866d205112}
+      - SETTLEMENT_V2_ADDRESS=${SETTLEMENT_V2_ADDRESS:-0x733EccCf612F70621c772D63334Cf5606d7a7C75}
+      - PERP_VAULT_ADDRESS=${PERP_VAULT_ADDRESS:-0x586FB78b8dB39d8D89C1Fd2Aa0c756C828e5251F}
+      - COLLATERAL_TOKEN_ADDRESS=0x4200000000000000000000000000000000000006
+      - INSURANCE_FUND_ADDRESS=${INSURANCE_FUND_ADDRESS:-0x93F63c2EEc4bF77FF301Cd14Ef4A392E58e33C69}
+      - VAULT_ADDRESS=${VAULT_ADDRESS}
+      - POSITION_MANAGER_ADDRESS=${POSITION_ADDRESS}
+      - FUNDING_RATE_ADDRESS=${FUNDING_RATE_ADDRESS}
+      - LIQUIDATION_ADDRESS=${LIQUIDATION_ADDRESS:-0x6Fb6325094B24AE5f458f7a34C63BE30Da9aAECA}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
   # Frontend Next.js App
   frontend:
     build:
@@ -147,7 +188,7 @@ services:
       args:
         - NEXT_PUBLIC_API_URL=${API_URL:-https://api.memeperp.xyz}
         - NEXT_PUBLIC_WEBSOCKET_URL=${WS_URL:-wss://api.memeperp.xyz/ws}
-        - NEXT_PUBLIC_CHAIN_ID=${CHAIN_ID:-8453}
+        - NEXT_PUBLIC_CHAIN_ID=${CHAIN_ID:-84532}
     container_name: memeperp-frontend
     restart: always
     ports:

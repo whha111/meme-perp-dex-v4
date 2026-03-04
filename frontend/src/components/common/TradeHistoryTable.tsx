@@ -79,7 +79,7 @@ export function TradeHistoryTable({ token, maxRows = 10, className = "" }: Trade
                   </td>
                   <td className="py-3 text-right">{formatNumber(trade.size, 2)}</td>
                   <td className="py-3 text-right">{formatNumber(trade.price, 6)}</td>
-                  <td className="py-3 text-right">{formatNumber(trade.value)} ETH</td>
+                  <td className="py-3 text-right">{formatNumber(trade.value)} BNB</td>
                   <td className="py-3 text-right">
                     {trade.txHash ? (
                       <a

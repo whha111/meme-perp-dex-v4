@@ -5,7 +5,7 @@
  * Token bucket algorithm limits to 90% of tested RPC maximums.
  */
 import { createPublicClient, createWalletClient, http, type PublicClient, type WalletClient } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { RPC, RATE_LIMITS } from "../config.js";
 
@@ -67,7 +67,7 @@ export class RpcPool {
 
   constructor() {
     this.httpClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC.http, {
         batch: { batchSize: RATE_LIMITS.batchSize },
         retryCount: 0, // We handle retries ourselves
@@ -139,7 +139,7 @@ export class RpcPool {
     const account = privateKeyToAccount(privateKey);
     return createWalletClient({
       account,
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC.http),
     });
   }

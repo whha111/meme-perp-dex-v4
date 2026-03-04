@@ -114,8 +114,9 @@ func (s *AccountService) GetPosition(userID int64, posID string) (*model.Positio
 }
 
 func (s *AccountService) SetLeverage(userID int64, instID string, lever int16, mgnMode, posSide string) error {
-	// Validate leverage
-	if lever < 1 || lever > 100 {
+	// AUDIT-FIX M-26: Align max leverage with matching engine (10x).
+	// Previously allowed 100x which mismatched the engine's 10x limit.
+	if lever < 1 || lever > 10 {
 		return errors.New(errors.CodeInvalidLeverage)
 	}
 
@@ -168,7 +169,7 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		return errors.New(errors.CodePositionNotFound)
 	}
 
-	// AUDIT-FIX GO-C04: Platform uses ETH on Base Sepolia, not BNB
+	// Platform uses BNB on BSC
 	balance, err := s.balanceRepo.GetByUserAndCcy(userID, "ETH")
 	if err != nil {
 		return errors.New(errors.CodeInsufficientBalance)

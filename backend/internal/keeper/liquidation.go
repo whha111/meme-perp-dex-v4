@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -40,12 +41,12 @@ type LiquidationKeeper struct {
 	liquidationCtx  *blockchain.LiquidationContract
 	positionMgrCtx  *blockchain.PositionManagerContract
 
-	// Metrics
-	liquidationsExecuted uint64
-	liquidationsFailed   uint64
+	// Metrics — AUDIT-FIX GO-C04: 使用 atomic 防止 ticker goroutine 和 HTTP handler 间的数据竞争
+	liquidationsExecuted atomic.Uint64
+	liquidationsFailed   atomic.Uint64
 	lastCheckTime        time.Time
-	engineQuerySuccesses uint64
-	engineQueryFailures  uint64
+	engineQuerySuccesses atomic.Uint64
+	engineQueryFailures  atomic.Uint64
 }
 
 // NewLiquidationKeeper creates a new LiquidationKeeper with blockchain integration
@@ -155,8 +156,8 @@ func (k *LiquidationKeeper) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			k.logger.Info("Liquidation keeper stopped",
-				zap.Uint64("totalLiquidations", k.liquidationsExecuted),
-				zap.Uint64("failedLiquidations", k.liquidationsFailed))
+				zap.Uint64("totalLiquidations", k.liquidationsExecuted.Load()),
+				zap.Uint64("failedLiquidations", k.liquidationsFailed.Load()))
 			if k.ethClient != nil {
 				k.ethClient.Close()
 			}
@@ -255,16 +256,16 @@ func (k *LiquidationKeeper) checkPositions(ctx context.Context) {
 	if k.matchingEngineURL != "" {
 		positions, err = k.getPositionsFromEngine()
 		if err != nil {
-			k.engineQueryFailures++
+			k.engineQueryFailures.Add(1)
 			k.logger.Warn("Failed to get positions from engine, falling back to DB",
 				zap.Error(err),
-				zap.Uint64("failures", k.engineQueryFailures))
+				zap.Uint64("failures", k.engineQueryFailures.Load()))
 			// Fallback to PostgreSQL
 			positions, err = k.positionRepo.GetAllNonZero()
 		} else {
 			fromEngine = true
-			k.engineQuerySuccesses++
-			if k.engineQuerySuccesses%100 == 1 {
+			k.engineQuerySuccesses.Add(1)
+			if k.engineQuerySuccesses.Load()%100 == 1 {
 				k.logger.Debug("Got positions from engine",
 					zap.Int("count", len(positions)))
 			}
@@ -484,7 +485,7 @@ func (k *LiquidationKeeper) liquidateOnChain(ctx context.Context, pos *model.Pos
 		zap.Uint64("blockNumber", receipt.BlockNumber.Uint64()),
 		zap.Uint64("gasUsed", receipt.GasUsed))
 
-	k.liquidationsExecuted++
+	k.liquidationsExecuted.Add(1)
 
 	// Update local database to sync with chain state
 	// The actual position update happens on-chain, we just mark it in our DB
@@ -536,7 +537,7 @@ func (k *LiquidationKeeper) liquidateInDB(pos *model.Position, markPrice model.D
 
 	if err := k.db.Create(liq).Error; err != nil {
 		k.logger.Error("Failed to create liquidation record", zap.Error(err))
-		k.liquidationsFailed++
+		k.liquidationsFailed.Add(1)
 		return
 	}
 
@@ -548,22 +549,22 @@ func (k *LiquidationKeeper) liquidateInDB(pos *model.Position, markPrice model.D
 
 	if err := k.positionRepo.Update(pos); err != nil {
 		k.logger.Error("Failed to update position after liquidation", zap.Error(err))
-		k.liquidationsFailed++
+		k.liquidationsFailed.Add(1)
 		return
 	}
 
-	k.liquidationsExecuted++
+	k.liquidationsExecuted.Add(1)
 }
 
 // GetMetrics returns keeper metrics
 func (k *LiquidationKeeper) GetMetrics() map[string]interface{} {
 	return map[string]interface{}{
-		"liquidations_executed":    k.liquidationsExecuted,
-		"liquidations_failed":      k.liquidationsFailed,
+		"liquidations_executed":    k.liquidationsExecuted.Load(),
+		"liquidations_failed":      k.liquidationsFailed.Load(),
 		"last_check_time":          k.lastCheckTime,
 		"blockchain_enabled":       k.ethClient != nil,
 		"engine_enabled":           k.matchingEngineURL != "",
-		"engine_query_successes":   k.engineQuerySuccesses,
-		"engine_query_failures":    k.engineQueryFailures,
+		"engine_query_successes":   k.engineQuerySuccesses.Load(),
+		"engine_query_failures":    k.engineQueryFailures.Load(),
 	}
 }

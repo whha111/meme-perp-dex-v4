@@ -118,7 +118,7 @@ export function TierProgress({ currentTier, activeInvites, totalVolume, tierConf
             <div>
               <div className="flex justify-between text-xs mb-1">
                 <span className="text-okx-text-secondary">{t("tradeVolume")}</span>
-                <span>{totalVolume} / {nextTier.minVolume} ETH</span>
+                <span>{totalVolume} / {nextTier.minVolume} BNB</span>
               </div>
               <div className="h-2 bg-okx-bg-hover rounded-full overflow-hidden">
                 <div

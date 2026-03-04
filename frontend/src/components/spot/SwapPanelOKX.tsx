@@ -356,12 +356,12 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
           </p>
           {isGraduated && (
             <a
-              href={`https://app.uniswap.org/swap?chain=base_sepolia&inputCurrency=ETH&outputCurrency=${tokenAddress}`}
+              href={`https://pancakeswap.finance/swap?chain=bscTestnet&inputCurrency=BNB&outputCurrency=${tokenAddress}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 inline-block bg-[#FF007A] text-okx-text-primary px-3 py-1.5 rounded-lg text-[12px] font-bold hover:opacity-90"
+              className="mt-2 inline-block bg-[#1FC7D4] text-okx-text-primary px-3 py-1.5 rounded-lg text-[12px] font-bold hover:opacity-90"
             >
-              🦄 {t("tradeOnUniswap")}
+              🥞 {t("tradeOnUniswap")}
             </a>
           )}
         </div>
@@ -424,7 +424,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                   ? (ethBalance?.value ? parseFloat(formatUnits(ethBalance.value, 18)).toFixed(4) : "0.0000")
                   : (effectiveBalance?.value ? parseFloat(formatUnits(effectiveBalance.value, 18)).toFixed(2) : "0.00")
                 }
-              </span> {mode === "buy" ? "ETH" : tokenLabel}
+              </span> {mode === "buy" ? "BNB" : tokenLabel}
             </button>
           </div>
           <div className="bg-okx-bg-primary border border-okx-border-primary rounded-lg p-3 flex items-center focus-within:border-[#A3E635] transition-colors">
@@ -436,10 +436,10 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
               placeholder="0.00"
             />
             <div className="flex items-center gap-2">
-              <span className="text-okx-text-secondary text-[14px] font-bold">{mode === "buy" ? "ETH" : tokenLabel}</span>
+              <span className="text-okx-text-secondary text-[14px] font-bold">{mode === "buy" ? "BNB" : tokenLabel}</span>
               {mode === "buy" && (
-                <div className="w-5 h-5 rounded-full bg-[#627EEA] flex items-center justify-center">
-                  <span className="text-[10px]">Ξ</span>
+                <div className="w-5 h-5 rounded-full bg-[#F3BA2F] flex items-center justify-center">
+                  <span className="text-[10px] font-bold text-black">B</span>
                 </div>
               )}
             </div>
@@ -701,13 +701,13 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
             <div className="flex justify-between">
               <span>{t("expectedReceive")}</span>
               <span className="text-okx-text-primary font-mono">
-                {formatUnits(quote.amountOut, 18)} {mode === "buy" ? tokenLabel : "ETH"}
+                {formatUnits(quote.amountOut, 18)} {mode === "buy" ? tokenLabel : "BNB"}
               </span>
             </div>
             <div className="flex justify-between">
               <span>{t("minReceiveSlippage")}</span>
               <span className="text-okx-text-primary font-mono">
-                {formatUnits(quote.minimumReceived, 18)} {mode === "buy" ? tokenLabel : "ETH"}
+                {formatUnits(quote.minimumReceived, 18)} {mode === "buy" ? tokenLabel : "BNB"}
               </span>
             </div>
             <div className="flex justify-between">

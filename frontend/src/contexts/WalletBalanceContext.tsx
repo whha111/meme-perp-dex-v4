@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * 全局钱包余额 Context (ETH 本位)
+ * 全局钱包余额 Context (BNB 本位)
  *
  * 读取派生钱包的完整余额:
- * - WETH 链上余额 (ERC20 balanceOf)
- * - Native ETH 余额 (用于显示未 wrap 的 ETH)
+ * - WBNB 链上余额 (ERC20 balanceOf)
+ * - Native BNB 余额 (用于显示未 wrap 的 BNB)
  * - Settlement 合约可用余额 (链上托管 + 链下盈亏调整)
  * 数据源: wagmi useReadContract/useBalance + backend balance API + WS "balance" 消息触发 refetch
  */
@@ -25,11 +25,11 @@ import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
 // ============================================================
-// Constants (ETH 本位)
+// Constants (BNB 本位)
 // ============================================================
 
-// Base WETH address
-const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0x4200000000000000000000000000000000000006") as Address;
+// BSC Testnet WBNB address
+const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
 
 const ERC20_BALANCE_ABI = [
   {
@@ -72,7 +72,7 @@ const WalletBalanceContext = createContext<WalletBalanceContextType | null>(
   null
 );
 
-// Gas reserve: 0.0005 ETH
+// Gas reserve: 0.0005 BNB
 const GAS_RESERVE = parseEther("0.0005");
 
 export function WalletBalanceProvider({
@@ -166,7 +166,7 @@ export function WalletBalanceProvider({
     }
   }, [storeBalance, refreshBalance]);
 
-  // Formatted total balance (18 decimals for ETH)
+  // Formatted total balance (18 decimals for BNB)
   const formattedWethBalance = useMemo(() => {
     const balance = Number(totalBalance) / 1e18;
     if (balance >= 1) {

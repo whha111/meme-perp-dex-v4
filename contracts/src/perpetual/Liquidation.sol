@@ -368,9 +368,15 @@ contract Liquidation is Ownable, ReentrancyGuard {
                 _handleInsuranceShortfall(deficit - insuranceFund);
                 insuranceFund = 0;
             }
+            // AUDIT-FIX SC-C02: 破产路径需检查 Vault 余额是否能支付清算奖励
+            // 旧代码未检查 Vault 余额，可能导致 distributeLiquidation revert
             if (effectiveRewardRate > 0 && pos.collateral > 0) {
                 liquidatorReward = pos.collateral / 20;
-                vault.distributeLiquidation(user, liquidator, liquidatorReward, 0);
+                if (address(vault).balance >= liquidatorReward && liquidatorReward > 0) {
+                    vault.distributeLiquidation(user, liquidator, liquidatorReward, 0);
+                } else {
+                    liquidatorReward = 0; // Vault 余额不足，跳过奖励
+                }
             }
         }
 

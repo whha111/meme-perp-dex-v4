@@ -143,7 +143,7 @@ export function TokenSelector({
               DEX
             </span>
           )}
-          <span className="text-okx-text-tertiary text-[12px]">/ETH</span>
+          <span className="text-okx-text-tertiary text-[12px]">/BNB</span>
         </div>
 
         <ChevronDown
@@ -200,7 +200,7 @@ export function TokenSelector({
           <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] text-okx-text-tertiary border-b border-okx-border-primary">
             <div className="col-span-6">{t("selectToken")}</div>
             <div className="col-span-3 text-right">{t("price")}</div>
-            <div className="col-span-3 text-right">ETH Reserve</div>
+            <div className="col-span-3 text-right">BNB Reserve</div>
           </div>
 
           {/* 代币列表 */}

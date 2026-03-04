@@ -282,7 +282,7 @@ export function OrderBook({
               <span className="text-[15px] font-bold text-okx-text-primary">--</span>
             )}
           </div>
-          <span className="text-[10px] text-okx-text-tertiary">ETH</span>
+          <span className="text-[10px] text-okx-text-tertiary">BNB</span>
         </div>
       </div>
 

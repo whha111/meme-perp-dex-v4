@@ -7,7 +7,7 @@
  * that actually hold tokens. Uses concurrent selling for speed.
  */
 import { formatEther, erc20Abi, type Address, type Hex } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { getRpcPool } from "../utils/rpc-pool.js";
 import { CONTRACTS, TOKEN_FACTORY_ABI } from "../config.js";
@@ -144,7 +144,7 @@ async function main() {
         const wc = pool.createWallet(wallet.privateKey);
         const approveTx = await pool.call(() =>
           wc.writeContract({
-            chain: baseSepolia,
+            chain: bscTestnet,
             address: holding.token,
             abi: erc20Abi,
             functionName: "approve",
@@ -165,7 +165,7 @@ async function main() {
       const wc = pool.createWallet(wallet.privateKey);
       const hash = await pool.call(() =>
         wc.writeContract({
-          chain: baseSepolia,
+          chain: bscTestnet,
           address: CONTRACTS.tokenFactory,
           abi: TOKEN_FACTORY_ABI,
           functionName: "sell",

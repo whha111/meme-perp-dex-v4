@@ -8,7 +8,7 @@ import { formatUnits, erc20Abi } from "viem";
 interface MyHoldingsProps {
   tokenAddress?: string;
   currentPrice: bigint; // price in ETH (wei)
-  ethPriceUsd: number;
+  bnbPriceUsd: number;
   displaySymbol: string;
   className?: string;
 }
@@ -48,12 +48,12 @@ function fmtUsdPrice(usd: number): string {
 }
 
 /**
- * 格式化 ETH 价格，小价格用下标: 0.0₈1695 ETH
+ * 格式化 BNB 价格，小价格用下标: 0.0₈1695 BNB
  */
 function fmtEthPrice(eth: number): string {
-  if (eth <= 0) return "0 ETH";
-  if (eth >= 0.001) return `${eth.toFixed(6)} ETH`;
-  if (eth >= 0.0001) return `${eth.toFixed(8)} ETH`;
+  if (eth <= 0) return "0 BNB";
+  if (eth >= 0.001) return `${eth.toFixed(6)} BNB`;
+  if (eth >= 0.0001) return `${eth.toFixed(8)} BNB`;
 
   const s = eth.toFixed(18);
   const m = s.match(/^0\.(0*)([1-9]\d*)/);
@@ -62,15 +62,15 @@ function fmtEthPrice(eth: number): string {
     const digits = m[2].slice(0, 5);
     const subs = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
     const sub = zeros.toString().split("").map(d => subs[parseInt(d)]).join("");
-    return `0.0${sub}${digits} ETH`;
+    return `0.0${sub}${digits} BNB`;
   }
-  return `${eth.toFixed(10)} ETH`;
+  return `${eth.toFixed(10)} BNB`;
 }
 
 export function MyHoldings({
   tokenAddress,
   currentPrice,
-  ethPriceUsd,
+  bnbPriceUsd,
   displaySymbol,
   className,
 }: MyHoldingsProps) {
@@ -114,7 +114,7 @@ export function MyHoldings({
   const tokenBalance = balance ?? 0n;
   const balNum = Number(formatUnits(tokenBalance, 18));
   const priceEth = Number(formatUnits(currentPrice, 18));
-  const priceUsd = priceEth * ethPriceUsd;
+  const priceUsd = priceEth * bnbPriceUsd;
   const valueUsd = balNum * priceUsd;
   const valueEth = balNum * priceEth;
   const hasBalance = tokenBalance > 0n;
@@ -147,7 +147,7 @@ export function MyHoldings({
         <div className="px-4 py-3 space-y-3">
           {/* 详细数据行 */}
           <InfoRow label={t("common.price")} value={fmtEthPrice(priceEth)} sub={fmtUsdPrice(priceUsd)} />
-          <InfoRow label="ETH" value={fmtEthPrice(valueEth)} />
+          <InfoRow label="BNB" value={fmtEthPrice(valueEth)} />
           <InfoRow label={t("holders.percentage")} value={supplyPct >= 0.01 ? `${supplyPct.toFixed(2)}%` : "< 0.01%"} />
         </div>
       ) : (

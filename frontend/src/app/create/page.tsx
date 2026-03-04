@@ -334,9 +334,9 @@ export default function CreateTokenPage() {
                 />
                 <div className="flex items-center gap-2 bg-okx-bg-hover rounded-lg px-3 py-2">
                   <div className="w-6 h-6 rounded-full bg-okx-accent flex items-center justify-center">
-                    <span className="text-xs">Ξ</span>
+                    <span className="text-xs">B</span>
                   </div>
-                  <span className="font-bold text-okx-text-primary">ETH</span>
+                  <span className="font-bold text-okx-text-primary">BNB</span>
                 </div>
               </div>
               {/* 快捷金额按钮 */}
@@ -369,7 +369,7 @@ export default function CreateTokenPage() {
                 <div className="w-px h-3 bg-okx-border-secondary"></div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-okx-text-tertiary">{t("graduation")}</span>
-                  <span className="text-okx-up font-medium">~5.16 ETH</span>
+                  <span className="text-okx-up font-medium">~5.16 BNB</span>
                 </div>
                 <div className="w-px h-3 bg-okx-border-secondary"></div>
                 <div className="flex items-center gap-1.5">
@@ -424,9 +424,9 @@ export default function CreateTokenPage() {
             {/* 费用提示 */}
             <div className="mt-4 text-center space-y-1">
               <p className="text-okx-text-tertiary text-xs">
-                {t("serviceFee")} {serviceFeeEth} ETH + {t("gas")}
+                {t("serviceFee")} {serviceFeeEth} BNB + {t("gas")}
                 {initialBuyEth && parseFloat(initialBuyEth) > 0 && (
-                  <span className="text-okx-up"> + {initialBuyEth} ETH {t("buyAmount")}</span>
+                  <span className="text-okx-up"> + {initialBuyEth} BNB {t("buyAmount")}</span>
                 )}
               </p>
               {txHash && (

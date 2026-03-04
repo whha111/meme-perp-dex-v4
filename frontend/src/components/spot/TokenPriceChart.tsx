@@ -222,10 +222,10 @@ function formatPrice(price: number): string {
 }
 
 function formatVolume(vol: number): string {
-  if (vol >= 1000000) return (vol / 1000000).toFixed(2) + "M ETH";
-  if (vol >= 1000) return (vol / 1000).toFixed(2) + "K ETH";
-  if (vol >= 1) return vol.toFixed(2) + " ETH";
-  return vol.toFixed(4) + " ETH";
+  if (vol >= 1000000) return (vol / 1000000).toFixed(2) + "M BNB";
+  if (vol >= 1000) return (vol / 1000).toFixed(2) + "K BNB";
+  if (vol >= 1) return vol.toFixed(2) + " BNB";
+  return vol.toFixed(4) + " BNB";
 }
 
 // 注意: 后端现已统一返回小数格式，不再需要精度转换
@@ -257,7 +257,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
   const theme = useAppStore((state) => state.preferences.theme);
 
   // ✅ 获取实时 ETH 价格
-  const { price: ethPriceUsd } = useETHPrice();
+  const { price: bnbPriceUsd } = useETHPrice();
 
   // i18n
   const t = useTranslations("trading");
@@ -327,7 +327,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     onTrade: (trade) => {
       // 实时更新 K 线
       if (aggregatorRef.current && candleSeriesRef.current && volumeSeriesRef.current && chartRef.current) {
-        const bar = aggregatorRef.current.addTrade(trade, ethPriceUsd);
+        const bar = aggregatorRef.current.addTrade(trade, bnbPriceUsd);
         setTradeCount(aggregatorRef.current.size);
 
         // 应用与历史数据相同的缩放因子
@@ -790,10 +790,10 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     <div className={`flex flex-col w-full h-full ${className}`} style={{ backgroundColor: chartColors.background }}>
       {/* 顶部价格信息栏 */}
       <div className="h-[48px] flex items-center px-4" style={{ backgroundColor: chartColors.background, borderBottom: `1px solid ${chartColors.borderColor}` }}>
-        {/* 左侧：交易对 - TOKEN/WETH 格式，大小一致 */}
+        {/* 左侧：交易对 - TOKEN/WBNB 格式，大小一致 */}
         <div className="flex items-center">
           <span className="text-okx-text-primary font-bold text-[14px]">{tokenSymbol}</span>
-          <span className="text-okx-text-primary font-bold text-[14px]">/WETH</span>
+          <span className="text-okx-text-primary font-bold text-[14px]">/WBNB</span>
         </div>
 
         {displayOHLC && (

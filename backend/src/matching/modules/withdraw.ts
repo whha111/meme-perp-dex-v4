@@ -35,7 +35,7 @@ import { type MerkleProof } from "./merkle";
 const EIP712_DOMAIN = {
   name: "SettlementV2",
   version: "1",
-  chainId: 84532, // Base Sepolia
+  chainId: 97, // BSC Testnet
   verifyingContract: "0x0000000000000000000000000000000000000000" as Address, // Will be set on init
 };
 
@@ -263,7 +263,9 @@ export async function generateWithdrawalAuthorization(
   }
 
   // 4. Check deadline
-  if (request.deadline < Date.now()) {
+  // AUDIT-FIX ME-C02: deadline 是 Unix 秒 (L358 createWithdrawalRequest)，Date.now() 是毫秒
+  // 旧代码 `deadline < Date.now()` 导致所有提款立即过期 (秒 ~1.7M < 毫秒 ~1.7T)
+  if (request.deadline < Math.floor(Date.now() / 1000)) {
     return {
       success: false,
       error: "Withdrawal deadline has passed",
@@ -306,7 +308,13 @@ export async function generateWithdrawalAuthorization(
     );
     state.pendingWithdrawals.set(hash, authorization);
 
-    console.log(`[Withdraw] Generated authorization for ${request.user.slice(0, 10)}, amount=$${Number(request.amount) / 1e6}`);
+    // AUDIT-FIX H-04: Increment nonce IMMEDIATELY after signing to prevent
+    // multiple authorizations with the same nonce. Previously, nonce was only
+    // incremented in markWithdrawalCompleted() (after on-chain confirmation),
+    // allowing users to request unlimited signatures with the same nonce.
+    incrementNonce(request.user);
+
+    console.log(`[Withdraw] Generated authorization for ${request.user.slice(0, 10)}, amount=$${Number(request.amount) / 1e6}, nonce=${request.nonce}→${getUserNonce(request.user)}`);
 
     return {
       success: true,
@@ -325,8 +333,35 @@ export async function generateWithdrawalAuthorization(
  * Mark withdrawal as completed (after on-chain confirmation)
  */
 export function markWithdrawalCompleted(user: Address, nonce: bigint): void {
-  incrementNonce(user);
-  console.log(`[Withdraw] Marked withdrawal completed for ${user.slice(0, 10)}, new nonce=${getUserNonce(user)}`);
+  // AUDIT-FIX H-04: Nonce is now incremented in generateWithdrawalAuthorization() immediately
+  // after signing. Do NOT increment again here — only clean up pending withdrawals.
+  // Old code: incrementNonce(user); // caused double-increment
+  // AUDIT-FIX ME-H01: 清理已完成的 pendingWithdrawals 条目（旧代码只 set 不 delete，导致内存泄漏）
+  for (const [hash, auth] of state.pendingWithdrawals.entries()) {
+    if (auth.user.toLowerCase() === user.toLowerCase() && auth.nonce === nonce) {
+      state.pendingWithdrawals.delete(hash);
+      break;
+    }
+  }
+  console.log(`[Withdraw] Marked withdrawal completed for ${user.slice(0, 10)}, new nonce=${getUserNonce(user)}, pending=${state.pendingWithdrawals.size}`);
+}
+
+/**
+ * Clean up expired pending withdrawals (call periodically from server.ts)
+ * AUDIT-FIX ME-H01: 防止长期运行时 pendingWithdrawals Map 无限增长
+ */
+export function cleanupExpiredWithdrawals(): void {
+  const now = Math.floor(Date.now() / 1000);
+  let cleaned = 0;
+  for (const [hash, auth] of state.pendingWithdrawals.entries()) {
+    if (auth.deadline < now) {
+      state.pendingWithdrawals.delete(hash);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[Withdraw] Cleaned ${cleaned} expired pending withdrawals, remaining=${state.pendingWithdrawals.size}`);
+  }
 }
 
 /**

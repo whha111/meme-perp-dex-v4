@@ -12,7 +12,7 @@
  *   bun run spot-blast.ts --wallets 30 --duration 10m
  */
 import { parseEther, formatEther, erc20Abi, type Address, type Hex } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { loadWallets, type StressWallet } from "./utils/wallet-manager.js";
 import { getRpcPool } from "./utils/rpc-pool.js";
@@ -83,7 +83,7 @@ async function executeBuy(wallet: StressWallet, token: Address): Promise<void> {
 
   const hash = await pool.call(() =>
     walletClient.writeContract({
-      chain: baseSepolia,
+      chain: bscTestnet,
       address: CONTRACTS.tokenFactory,
       abi: TOKEN_FACTORY_ABI,
       functionName: "buy",
@@ -128,7 +128,7 @@ async function executeSell(wallet: StressWallet, token: Address): Promise<void> 
   // Approve
   await pool.call(() =>
     walletClient.writeContract({
-      chain: baseSepolia,
+      chain: bscTestnet,
       address: token,
       abi: erc20Abi,
       functionName: "approve",
@@ -140,7 +140,7 @@ async function executeSell(wallet: StressWallet, token: Address): Promise<void> 
   // Sell
   const hash = await pool.call(() =>
     walletClient.writeContract({
-      chain: baseSepolia,
+      chain: bscTestnet,
       address: CONTRACTS.tokenFactory,
       abi: TOKEN_FACTORY_ABI,
       functionName: "sell",

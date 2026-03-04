@@ -8,7 +8,7 @@
  */
 
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import type { Address, Hex } from "viem";
 
 // ── Config ─────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ const TOKENS: { addr: Address; name: string }[] = [
 const DOMAIN = {
   name: "MemePerp",
   version: "1",
-  chainId: baseSepolia.id,
+  chainId: bscTestnet.id,
   verifyingContract: "0x1660b3571fB04f16F70aea40ac0E908607061DBE" as Address,
 } as const;
 

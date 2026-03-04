@@ -310,7 +310,7 @@ export default function InvitePage() {
                                   <td className="py-3 px-4 text-okx-text-secondary">
                                     {idx === 0
                                       ? t("noRequirements")
-                                      : `${tier.minInvites} ${t("inviteesOr")} ${tier.minVolume} ETH`}
+                                      : `${tier.minInvites} ${t("inviteesOr")} ${tier.minVolume} BNB`}
                                   </td>
                                   <td className="py-3 px-4 text-right text-okx-up">
                                     {(tier.rebateBps / 100).toFixed(0)}%

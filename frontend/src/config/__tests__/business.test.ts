@@ -11,7 +11,7 @@ import {
 
 describe('业务配置测试', () => {
   test('环境配置读取', () => {
-    expect(ENV_CONFIG.TARGET_CHAIN_ID).toBe(84532);
+    expect(ENV_CONFIG.TARGET_CHAIN_ID).toBe(97);
     expect(ENV_CONFIG.DEFAULT_BUY_AMOUNT).toBe('0.01');
     expect(ENV_CONFIG.DEFAULT_SERVICE_FEE).toBe('0.001');
     expect(ENV_CONFIG.ERROR_THRESHOLD).toBe(0.1);

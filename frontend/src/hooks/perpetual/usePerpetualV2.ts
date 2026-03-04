@@ -22,7 +22,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
 import { createWalletClient, createPublicClient, http, keccak256, parseEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { MATCHING_ENGINE_URL, SETTLEMENT_ADDRESS, SETTLEMENT_V2_ADDRESS } from "@/config/api";
 import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI } from "@/lib/contracts";
 import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
@@ -306,7 +306,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       const account = privateKeyToAccount(privateKey);
       return createWalletClient({
         account,
-        chain: baseSepolia,
+        chain: bscTestnet,
         transport: http(),
       });
     } catch (e) {
@@ -317,7 +317,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
 
   // Public client for reading chain state and waiting for tx receipts
   const publicClient = useMemo(() => createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(),
   }), []);
 
@@ -344,7 +344,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       async (msg: string) => {
         const walletClient = createWalletClient({
           account,
-          chain: baseSepolia,
+          chain: bscTestnet,
           transport: http(),
         });
         return walletClient.signMessage({ account, message: msg });
@@ -747,6 +747,21 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       let withdrawTxHash: string | null = null;
       if (data.authorization && settlementV2Address && tradingWalletClient) {
         const { userEquity, merkleProof, deadline, signature } = data.authorization;
+
+        // AUDIT-FIX FE-C03: 验证 Merkle proof 元素格式，避免无效数据导致不可读的合约错误
+        if (!Array.isArray(merkleProof) || merkleProof.length === 0) {
+          throw new Error("Invalid merkle proof: empty or not an array");
+        }
+        const validatedProof = merkleProof.map((p: unknown, i: number) => {
+          if (typeof p !== 'string' || !p.match(/^0x[0-9a-fA-F]{64}$/)) {
+            throw new Error(`Invalid merkle proof element at index ${i}: ${String(p)}`);
+          }
+          return p as `0x${string}`;
+        });
+        if (typeof signature !== 'string' || !signature.match(/^0x[0-9a-fA-F]+$/)) {
+          throw new Error("Invalid signature format from server");
+        }
+
         const txHash = await tradingWalletClient.writeContract({
           address: settlementV2Address,
           abi: SETTLEMENT_V2_ABI,
@@ -754,7 +769,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
           args: [
             BigInt(amountInWei),
             BigInt(userEquity),
-            merkleProof as `0x${string}`[],
+            validatedProof,
             BigInt(deadline),
             signature as `0x${string}`,
           ],

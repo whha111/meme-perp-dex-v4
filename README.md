@@ -4,7 +4,7 @@
 
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.20-blue)](https://soliditylang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
-[![Base](https://img.shields.io/badge/Chain-Base%20Sepolia-0052FF)](https://base.org/)
+[![BSC](https://img.shields.io/badge/Chain-BSC%20Testnet%2097-F0B90B)](https://www.bnbchain.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
@@ -14,23 +14,23 @@
 MEME Perp DEX is a full-stack decentralized exchange that combines:
 
 - **Meme Token Launchpad** — Create and trade meme tokens via bonding curve (TokenFactory)
-- **Perpetual Futures (V2)** — Up to 100x leverage with P2P order matching and EIP-712 signed orders
-- **Multi-Token Lending** — Deposit tokens to earn yield, powering the perpetual system
+- **Perpetual Futures (V2)** — Up to 10x leverage with P2P order matching and EIP-712 signed orders
 - **Spot AMM Trading** — Automated market making with real-time price feeds
 
-### Architecture: V2 Settlement (P2P Model)
+### Architecture: Simplified dYdX v3
 
 ```
-User places order → Signs EIP-712 typed data (gasless)
-                          ↓
-              Off-chain Matching Engine pairs long/short
-                          ↓
-              Batch submission to on-chain Settlement contract
-                          ↓
-              Signature verification + collateral escrow
-                          ↓
-              PnL transfers directly between counterparties
-              (Insurance fund only used for bankruptcy)
+User places order -> Signs EIP-712 typed data (gasless)
+                          |
+              Off-chain Matching Engine (TypeScript/Bun)
+                          |
+              Positions managed in Redis + mode2PnLAdjustments
+                          |
+              PerpVault (LP pool + OI tracking + insurance fund)
+                          |
+              Merkle snapshot -> SettlementV2.updateStateRoot()
+                          |
+              User withdrawal -> Merkle proof + EIP-712 sig -> SettlementV2.withdraw()
 ```
 
 > Inspired by dYdX v3's signature-derived trading wallet pattern and GMX's PnL calculation model.
@@ -44,29 +44,31 @@ meme-perp-dex/
 ├── contracts/                 # Solidity smart contracts (Foundry)
 │   ├── src/
 │   │   ├── common/            # Shared: PriceFeed, Vault, ContractRegistry
-│   │   ├── perpetual/         # V2: Settlement, PerpVault, Liquidation
+│   │   ├── perpetual/         # V2: SettlementV2, PerpVault, Liquidation
 │   │   └── spot/              # TokenFactory, LendingPool
 │   ├── test/                  # Foundry tests
 │   └── script/                # Deployment scripts
 │
 ├── frontend/                  # Next.js 14 frontend
 │   ├── src/
-│   │   ├── app/               # Pages: trade, lend, earnings
-│   │   ├── components/        # UI: common, spot, perpetual, lending
-│   │   ├── hooks/             # React hooks: common, spot, perpetual, lending
+│   │   ├── app/               # Pages: trade, create, earnings, wallet
+│   │   ├── components/        # UI: common, spot, perpetual, referral
+│   │   ├── hooks/             # React hooks: common, spot, perpetual
 │   │   ├── lib/               # Contracts config, stores, utilities
 │   │   └── config/            # API endpoints
 │   └── messages/              # i18n: en, zh, ja, ko
 │
 ├── backend/
-│   ├── src/matching/          # TypeScript matching engine (Bun)
+│   ├── src/matching/          # TypeScript matching engine (Bun, 13000+ lines)
 │   ├── src/spot/              # Spot trading backend
-│   └── internal/keeper/       # Go keeper: liquidation, funding
+│   └── internal/              # Go backend: API + Keeper (liquidation, funding)
 │
-├── docs/                      # 23+ documentation files
+├── stress-test/               # 400-wallet soak test + liquidation verification
+├── scripts/                   # Market maker, deployment, E2E test scripts
+├── docs/                      # Documentation (audit reports, architecture)
 ├── DEVELOPMENT_RULES.md       # Development standards & audit fixes
-├── PERPVAULT_AUDIT_REPORT.md  # Security audit report
-└── CLAUDE.md                  # AI assistant instructions
+├── CLAUDE.md                  # AI assistant instructions
+└── docker-compose.yml         # PostgreSQL + Redis + services
 ```
 
 ---
@@ -77,11 +79,11 @@ meme-perp-dex/
 |-------|-----------|
 | **Smart Contracts** | Solidity 0.8.20, Foundry, OpenZeppelin |
 | **Frontend** | Next.js 14, TypeScript, Wagmi v2, Viem, TailwindCSS |
-| **State Management** | TanStack Query, Zustand |
+| **State Management** | TanStack Query, Zustand 5 |
 | **Matching Engine** | TypeScript + Bun runtime, WebSocket |
 | **Backend Services** | Go 1.22+, Gin, GORM |
-| **Database** | PostgreSQL + TimescaleDB, Redis |
-| **Chain** | Base / Base Sepolia |
+| **Database** | PostgreSQL + Redis |
+| **Chain** | BSC Testnet (Chain ID 97) |
 | **Charts** | TradingView Lightweight Charts |
 | **i18n** | next-intl (EN, ZH, JA, KO) |
 
@@ -93,10 +95,10 @@ meme-perp-dex/
 
 | Contract | Description |
 |----------|-------------|
-| `Settlement.sol` | P2P perpetual settlement with EIP-712 signature verification |
-| `PerpVault.sol` | Perpetual collateral vault (WETH-based) |
+| `SettlementV2.sol` | User WBNB custody + Merkle proof withdrawal |
+| `PerpVault.sol` | LP pool + insurance fund + OI management |
 | `TokenFactory.sol` | Meme token launchpad with bonding curve |
-| `LendingPool.sol` | Multi-token lending pool with interest accrual |
+| `Liquidation.sol` | Position liquidation + ADL |
 | `PriceFeed.sol` | Oracle price feed for all supported tokens |
 | `Vault.sol` | Shared asset vault |
 
@@ -105,37 +107,17 @@ meme-perp-dex/
 - **PnL Calculation**: GMX standard — `delta = size * |currentPrice - avgPrice| / avgPrice`
 - **Liquidation Price**: Bybit standard — `liqPrice = entryPrice * (1 - 1/leverage + MMR)`
 - **Funding Rate**: 8-hour settlement intervals with configurable base rate
-- **Share Inflation Protection**: Virtual offset pattern (OpenZeppelin ERC4626) in LendingPool
 - **Slippage Protection**: Mandatory `minAmountOut` on all swap/trade functions
 
----
+### Deployed Contracts (BSC Testnet)
 
-## Features
-
-### Meme Token Launchpad
-- One-click token creation with metadata URI
-- Bonding curve pricing (buy/sell along curve)
-- Automatic graduation to DEX when threshold reached
-
-### Perpetual Futures (V2)
-- Up to 100x leverage
-- EIP-712 signed orders (gasless order placement)
-- Off-chain matching engine with on-chain settlement
-- Signature-derived trading wallets (dYdX v3 pattern)
-- Funding rate settlement every 8 hours
-- Auto-Deleveraging (ADL) when insurance fund depleted
-- Real-time WebSocket price/orderbook/trade feeds
-
-### Lending
-- Multi-token lending pools
-- Supply tokens to earn interest
-- Dynamic interest rate model (utilization-based)
-- Claim accrued interest anytime
-
-### Spot Trading
-- AMM-based token swaps
-- Real-time price charts
-- Slippage protection with minimum output amounts
+| Contract | Address |
+|----------|---------|
+| SettlementV2 | `0x7fF9d60aE49F14bB604FeF1961910D7931067873` |
+| PerpVault | `0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75` |
+| TokenFactory | `0x22276744bAF24eD503dB50Cc999a9c5AD62728cb` |
+| PriceFeed | `0xe2b22673fFBeB7A2a4617125E885C12EC072ee48` |
+| WBNB | `0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd` |
 
 ---
 
@@ -143,10 +125,11 @@ meme-perp-dex/
 
 ### Prerequisites
 
-- Node.js 18+ & pnpm
+- Bun runtime (for matching engine)
+- Node.js 18+ & pnpm (for frontend)
 - Foundry (`curl -L https://foundry.paradigm.xyz | bash`)
 - Go 1.22+ (for keeper services)
-- Bun runtime (for matching engine)
+- Docker (for PostgreSQL + Redis)
 
 ### Install
 
@@ -154,6 +137,9 @@ meme-perp-dex/
 # Clone
 git clone https://github.com/whha111/meme-perp-dex.git
 cd meme-perp-dex
+
+# Start infrastructure
+docker-compose up -d  # PostgreSQL + Redis
 
 # Contracts
 cd contracts && forge install && forge build
@@ -168,50 +154,29 @@ cd backend/src/matching && bun install
 ### Development
 
 ```bash
-# Start frontend dev server
-cd frontend && pnpm dev
-
 # Start matching engine
 cd backend/src/matching && bun run server.ts
+
+# Start frontend dev server
+cd frontend && pnpm dev
 
 # Run contract tests
 cd contracts && forge test -vvv
 ```
 
-### Deploy Contracts
-
-```bash
-cd contracts
-
-# Deploy TokenFactory
-forge script script/DeployTokenFactory.s.sol --rpc-url $RPC_URL --broadcast
-
-# Deploy Settlement (V2)
-forge script script/DeploySettlement.s.sol --rpc-url $RPC_URL --broadcast
-
-# Deploy LendingPool
-forge script script/DeployLendingPool.s.sol --rpc-url $RPC_URL --broadcast
-```
-
 ---
 
-## Security
+## Security & Audits
 
-### Completed Audit Fixes (V2)
+Three rounds of internal audits have been completed:
 
-| ID | Severity | Issue | Status |
-|----|----------|-------|--------|
-| C-01 | Critical | Settlement funding fee double-charging | Fixed |
-| C-03 | Critical | LendingPool share inflation attack | Fixed |
-| C-04 | Critical | parseFloat precision loss (>9007 ETH) | Fixed |
-| C-05 | Critical | Zero slippage protection on swaps | Fixed |
-| C-06 | Critical | Private key exposed in React state | Fixed |
-| H-08 | High | closePair missing signature verification | Fixed |
-| H-10 | High | HTTP plaintext signature transmission | Fixed |
-| H-11 | High | Floating-point slippage calculation | Fixed |
-| H-09 | High | Redundant WebSocket connections | Mitigated |
+| Audit | Date | Findings | Report |
+|-------|------|----------|--------|
+| V1 Architecture | 2026-03-01 | 48 (35 fixed) | [ISSUES_AUDIT_REPORT.md](docs/ISSUES_AUDIT_REPORT.md) |
+| V2 Code Review | 2026-03-03 | 75 (8 fixed) | [CODE_REVIEW_V2.md](docs/CODE_REVIEW_V2.md) |
+| V3 Full Audit | 2026-03-04 | 56 remain / 25+ fixed | [AUDIT_V3_FULL.md](docs/AUDIT_V3_FULL.md) |
 
-See [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) for full details and [PERPVAULT_AUDIT_REPORT.md](PERPVAULT_AUDIT_REPORT.md) for the complete audit report.
+See [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) for development standards and fix history.
 
 ---
 
@@ -219,15 +184,11 @@ See [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) for full details and [PERPVAULT
 
 | Document | Description |
 |----------|-------------|
-| [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) | Development standards, formulas, and audit fix log |
-| [PERPVAULT_AUDIT_REPORT.md](PERPVAULT_AUDIT_REPORT.md) | Production security audit report |
-| [docs/SYSTEM_ARCHITECTURE.md](docs/SYSTEM_ARCHITECTURE.md) | System architecture overview |
-| [docs/SETTLEMENT_DESIGN.md](docs/SETTLEMENT_DESIGN.md) | V2 Settlement P2P design |
-| [docs/CONTRACTS.md](docs/CONTRACTS.md) | Smart contract interfaces |
+| [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) | Development standards, formulas, audit fix log |
+| [docs/AUDIT_V3_FULL.md](docs/AUDIT_V3_FULL.md) | V3 full codebase audit (latest) |
+| [docs/SETTLEMENT_DESIGN.md](docs/SETTLEMENT_DESIGN.md) | V2 Settlement dYdX-style design |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture overview |
 | [docs/API_SPECIFICATION_V2.md](docs/API_SPECIFICATION_V2.md) | V2 API specification |
-| [docs/PRD.md](docs/PRD.md) | Product requirements document |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Development roadmap |
-| [docs/PERP_MECHANISM.md](docs/PERP_MECHANISM.md) | Perpetual mechanism deep dive |
 
 ---
 
@@ -235,14 +196,16 @@ See [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) for full details and [PERPVAULT
 
 ```bash
 # Frontend (.env.local)
-NEXT_PUBLIC_MATCHING_ENGINE_WS_URL=wss://your-ws-endpoint
-NEXT_PUBLIC_MATCHING_ENGINE_URL=https://your-api-endpoint
-NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your-wc-project-id
+NEXT_PUBLIC_MATCHING_ENGINE_URL=http://localhost:8081
+NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_CHAIN_ID=97
+NEXT_PUBLIC_SETTLEMENT_ADDRESS=0x7fF9d60aE49F14bB604FeF1961910D7931067873
 
-# Contracts (.env)
-PRIVATE_KEY=your-deployer-private-key
-RPC_URL=https://your-rpc-url
-ETHERSCAN_API_KEY=your-etherscan-key
+# Matching Engine (.env)
+RPC_URL=https://data-seed-prebsc-1-s1.binance.org:8545/
+CHAIN_ID=97
+SETTLEMENT_ADDRESS=0x7fF9d60aE49F14bB604FeF1961910D7931067873
+MATCHER_PRIVATE_KEY=0x...
 ```
 
 > **Warning**: Never commit `.env` files. See `.gitignore` for excluded patterns.

@@ -8,10 +8,10 @@ import { useTranslations } from "next-intl";
 export interface Trade {
   timestamp: number;
   type: "buy" | "sell";
-  totalValue: string; // e.g., "0.0099 ETH"
-  price: string; // e.g., "0.0₉21100 ETH"
+  totalValue: string; // e.g., "0.0099 BNB"
+  price: string; // e.g., "0.0₉21100 BNB"
   quantity: string; // e.g., "-1.88M TOKEN"
-  quantitySol: string; // e.g., "+0.00990 ETH"
+  quantitySol: string; // e.g., "+0.00990 BNB"
   address: string; // e.g., "9VXWLE...C3YX"
   txHash: string;
   isDev?: boolean; // 是否为开发者钱包

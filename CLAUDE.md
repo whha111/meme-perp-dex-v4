@@ -10,21 +10,21 @@
 cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 ```
 
-## 审计修复状态 (2026-03-01 全面审计 → 已修复)
+## 审计状态
 
-**审计发现 48 个问题: 12 CRITICAL, 15 HIGH, 21 MEDIUM — 已修复 35 个, 5 个部分修复, 8 个架构限制**
+三轮独立审计，检查维度不同：
 
-链上资金托管已连通:
-- ✅ PerpVault 已有 2 ETH LP 种子（ConfigureSettlement.s.sol 已执行）
-- ✅ 前端存款走 SettlementV2.deposit() 链上 3 步流程（AccountBalance.tsx）
-- ✅ 前端提款走 Merkle proof → SettlementV2.withdraw()（AccountBalance.tsx）
-- ✅ `POST /api/user/:trader/deposit` 假充值 API 已加 ALLOW_FAKE_DEPOSIT 守卫
-- ✅ PerpVault batch settlement 已实现（loss/fee/liquidation/profit 队列）
-- ✅ Keeper 从撮合引擎获取仓位数据（不再读空 PostgreSQL）
-- ⚠️ PnL 结算仍以 mode2Adj 为主路径，PerpVault 为异步同步层
-- ⚠️ 余额/仓位主数据仍在 Redis，PostgreSQL 仅镜像订单
+| 审计 | 日期 | 维度 | 问题数 | 报告文件 |
+|------|------|------|--------|---------|
+| **V1 架构审计** | 2026-03-01 | 资金流、链上/链下一致性 | 48 (35 fixed) | `docs/ISSUES_AUDIT_REPORT.md` |
+| **V2 代码审查** | 2026-03-03 | 逐行代码 bug、安全漏洞 | 75 (8 fixed) | `docs/CODE_REVIEW_V2.md` |
+| **V3 全量审计** | 2026-03-04 | 全层全量 + 修复验证 | 56 remain / 25+ fixed | `docs/AUDIT_V3_FULL.md` |
 
-**详见**: `docs/ISSUES_AUDIT_REPORT.md`
+**当前关键状态 (BSC Testnet, Chain 97)**:
+- ✅ 链上资金托管已连通（PerpVault LP, SettlementV2 存取款）
+- ✅ 合约部署到 BSC Testnet (97)，E2E 测试 36/36 通过
+- ✅ V1/V2 审计中 25+ 问题已确认修复
+- ❌ V3 发现 1 个 CRITICAL + 10 个 HIGH 待修复（详见 AUDIT_V3_FULL.md）
 
 ## 项目概述
 
@@ -55,6 +55,21 @@ cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 - ⚠️ 余额/仓位主数据在 Redis，PostgreSQL 仅镜像订单
 - ⏳ 端到端真实资金流测试 (Phase E)
 
+**V3 审计确认已修复 (2026-03-04 验证):**
+- ✅ `broadcastBalanceUpdate()` — 改用 wsTraderClients 逐用户发送
+- ✅ `withdraw.ts` deadline — 改用 `Math.floor(Date.now()/1000)`
+- ✅ `currentTimeMillis()` — 正确返回 `Date.now()`
+- ✅ Auth nonce TOCTOU — withLock() 保护
+- ✅ Nonce Redis 持久化 — write-through cache
+
+**V3 审计仍存在的关键问题 (2026-03-04):**
+- ❌ `/api/v2/withdraw/request` 无鉴权+不扣余额 (CRITICAL)
+- ❌ `subscribe_risk` WS 无鉴权，泄露任意用户仓位
+- ❌ `broadcastMarginUpdate` 泄露到所有 WS 客户端
+- ❌ 前端允许 100x 杠杆，引擎限制 10x
+- ❌ TokenFactory `_distributeTradingFee` 无推荐人时多扣 10%
+- 详见 `docs/AUDIT_V3_FULL.md` — 完整 56 个问题
+
 ## 行业标准 (必须遵循)
 
 ### PnL 计算 (GMX 标准)
@@ -82,7 +97,9 @@ hasProfit = isLong ? (currentPrice > avgPrice) : (avgPrice > currentPrice)
 | 前端余额显示 | frontend/src/components/common/AccountBalance.tsx |
 | 做市商脚本 | scripts/market-maker-all.ts |
 | 部署配置 | frontend/contracts/deployments/base-sepolia.json |
-| 审计报告 | docs/ISSUES_AUDIT_REPORT.md |
+| V1 审计报告 | docs/ISSUES_AUDIT_REPORT.md |
+| V2 代码审查 | docs/CODE_REVIEW_V2.md |
+| V3 全量审计 | docs/AUDIT_V3_FULL.md |
 
 ### 目录结构
 
@@ -115,6 +132,11 @@ backend/internal/     # Go API + Keeper
 5. ❌ 不要忘记 TokenFactory 交易后更新 PriceFeed
 6. ❌ 不要使用 `POST /api/user/:trader/deposit` 虚假充值接口
 7. ❌ 不要在 mode2Adj 上建设新功能 — 所有资金流必须走链上合约
+8. ❌ 不要在合约中 external call 之后修改状态（CEI 违规 SC-C01）
+9. ❌ 不要用 `broadcastBalanceUpdate` 广播全量余额（ME-C01 隐私泄漏）
+10. ❌ 不要混淆 Unix 秒和 `Date.now()` 毫秒（ME-C02）
+11. ❌ 不要在前端用 `parseFloat` 处理 ETH 金额 — 使用 BigInt 全程（FE-C02）
+12. ❌ 修改合约地址时必须同步更新 7 个配置文件（见 CODE_REVIEW_V2.md 第八部分）
 
 ## 修改检查清单
 
@@ -123,4 +145,9 @@ backend/internal/     # Go API + Keeper
 - [ ] 前端是否同步更新?
 - [ ] 公式是否符合行业标准?
 - [ ] 资金流是否走链上合约（不是 mode2Adj）?
+- [ ] 合约地址变更是否同步到所有 7 个配置文件?
+- [ ] 合约状态更新是否在 external call 之前（CEI 模式）?
+- [ ] 时间比较是否统一使用秒或毫秒?
+- [ ] ETH 金额计算是否全程使用 BigInt?
+- [ ] WS 广播是否只发送给目标用户（不是全量广播）?
 - [ ] DEVELOPMENT_RULES.md 是否需要更新?

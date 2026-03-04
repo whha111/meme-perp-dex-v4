@@ -8,9 +8,9 @@ import type { Address } from "viem";
 
 // ── RPC Endpoints ──────────────────────────────────────────────
 export const RPC = {
-  http: "https://base-sepolia-rpc.publicnode.com",
-  wss: "wss://base-sepolia-rpc.publicnode.com",
-  httpBackup: "https://base-sepolia.g.alchemy.com/v2/Dr8sMe-1MYIF7jBYuZZj8PMOPAAeJ16d",
+  http: "https://data-seed-prebsc-1-s1.binance.org:8545/",
+  wss: "wss://bsc-testnet-rpc.publicnode.com",
+  httpBackup: "https://bsc-testnet.nodereal.io/v1/",
 } as const;
 
 // ── Rate Limits (90% of empirically tested maximums) ───────────
@@ -25,11 +25,11 @@ export const RATE_LIMITS = {
 
 // ── Chain Config ───────────────────────────────────────────────
 export const CHAIN = {
-  id: 84532,
-  name: "Base Sepolia",
+  id: 97,
+  name: "BSC Testnet",
 } as const;
 
-// ── Contract Addresses (Base Sepolia - Redeployed 2026-02-28) ──
+// ── Contract Addresses (BSC Testnet - Redeployed 2026-02-28) ──
 // Settlement must match matching engine's EIP-712 verifyingContract
 export const CONTRACTS = {
   settlement: "0x1660b3571fB04f16F70aea40ac0E908607061DBE" as Address,       // Settlement V1
@@ -52,8 +52,8 @@ export const MATCHING_ENGINE = {
   submitEndpoint: "/api/order/submit",
 } as const;
 
-// ── WETH (Base Sepolia native wrapped ETH) ───────────────────
-export const WETH_ADDRESS = "0x4200000000000000000000000000000000000006" as Address;
+// ── WBNB (BSC Testnet native wrapped BNB) ───────────────────
+export const WETH_ADDRESS = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address;
 
 // ── EIP-712 Signing ────────────────────────────────────────────
 // MUST use Settlement V1 address as verifyingContract because the matching engine's

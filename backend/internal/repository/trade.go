@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"gorm.io/gorm"
 
 	"github.com/memeperp/backend/internal/model"
@@ -79,5 +81,6 @@ type Trade24hStats struct {
 }
 
 func currentTimeMillis() int64 {
-	return model.NewDecimalFromInt(0).Decimal.IntPart()
+	// AUDIT-FIX GO-C03: 原实现返回常量 0，导致 Get24hStats 查询所有历史交易
+	return time.Now().UnixMilli()
 }

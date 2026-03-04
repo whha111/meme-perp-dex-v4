@@ -10,7 +10,7 @@ import "dotenv/config";
 import { enableStructuredConsole } from "./utils/logger";
 enableStructuredConsole(); // In production: all console.* outputs become JSON
 import { type Address, type Hex, verifyTypedData, verifyMessage, createPublicClient, http, webSocket, parseEther, formatUnits } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { WebSocketServer, WebSocket } from "ws";
 import { MatchingEngine, OrderType, OrderStatus, TimeInForce, OrderSource, registerPriceChangeCallback, type Order, type Match, type Trade, type Kline, type TokenStats } from "./engine";
 // ❌ Mode 2: SettlementSubmitter 已从导入中移除
@@ -27,11 +27,11 @@ import db, {
   type SettlementLog,
   type MarketStats,
 } from "./database";
-import { connectRedis as connectNewRedis, disconnectRedis, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, SettlementLogRepo as RedisSettlementLogRepo, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
+import { connectRedis as connectNewRedis, disconnectRedis, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, NonceRepo, SettlementLogRepo as RedisSettlementLogRepo, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
 // P1-5: PostgreSQL 订单镜像 (Write-Through Cache)
 import { connectPostgres, disconnectPostgres, isPostgresConnected, OrderMirrorRepo, type PgOrderMirror } from "./database/postgres";
 // P2-4: 仓位大小限制常量
-import { TRADING, ALLOW_FAKE_DEPOSIT } from "./config";
+import { TRADING, ALLOW_FAKE_DEPOSIT, PRECISION_MULTIPLIER } from "./config";
 import { verifyOrderSignature } from "./utils/crypto";
 import { createWalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -41,7 +41,7 @@ import { getTokenHolders } from "./modules/tokenHolders";
 // Mode 2 Modules (Off-chain Execution + On-chain Attestation)
 // ============================================================
 import { initializeSnapshotModule, startSnapshotJob, stopSnapshotJob, getUserProof, getSnapshotJobStatus } from "./modules/snapshot";
-import { initializeWithdrawModule, syncNoncesFromChain, requestWithdrawal, getWithdrawModuleStatus } from "./modules/withdraw";
+import { initializeWithdrawModule, syncNoncesFromChain, requestWithdrawal, getWithdrawModuleStatus, cleanupExpiredWithdrawals } from "./modules/withdraw";
 import {
   initLendingLiquidation,
   detectLendingLiquidations,
@@ -74,8 +74,8 @@ import {
 // ============================================================
 
 const PORT = parseInt(process.env.PORT || "8081");
-const RPC_URL = process.env.RPC_URL || "https://base-sepolia-rpc.publicnode.com";
-const WSS_URL = process.env.WSS_URL || "wss://base-sepolia-rpc.publicnode.com";
+const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+const WSS_URL = process.env.WSS_URL || "wss://bsc-testnet-rpc.publicnode.com";
 const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
 const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
 const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address; // dYdX v3 style Merkle withdrawal contract
@@ -116,9 +116,9 @@ const serverStartTime = Date.now();
 let totalRequestCount = 0;
 let totalOrdersSubmitted = 0;
 
-// ETH/USD 价格 - 仅用于 UI 参考显示，不影响 ETH 本位交易逻辑
+// BNB/USD 价格 - 仅用于 UI 参考显示，不影响 BNB 本位交易逻辑
 // TODO: 可后续接入价格预言机 (如 Chainlink) 获取实时价格
-let currentEthPriceUsd = 2500;
+let currentEthPriceUsd = 600;
 
 // 支持的代币列表（动态从 TokenFactory 获取）
 const SUPPORTED_TOKENS: Address[] = [
@@ -148,8 +148,8 @@ const TOKEN_POOL_CACHE = new Map<string, CachedPoolState>();
 // 当代币从 bonding curve 毕业到 Uniswap V2 后，价格源需要切换
 // token address (lowercase) => { pairAddress, isWethToken0 }
 
-const WETH_ADDRESS = "0x4200000000000000000000000000000000000006" as Address;
-const UNISWAP_V2_FACTORY_ADDRESS = "0x02a84c1b3BBD7401a5f7fa98a384EBC70bB5749E" as Address;
+const WETH_ADDRESS = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address; // WBNB on BSC Testnet
+const UNISWAP_V2_FACTORY_ADDRESS = "0x6725F303b657a9451d8BA641348b6761A6CC7a17" as Address; // PancakeSwap V2 Factory on BSC Testnet
 
 interface GraduatedTokenInfo {
   pairAddress: Address;    // Uniswap V2 Pair 地址
@@ -184,7 +184,7 @@ function evictOldest<K, V>(map: Map<K, V>, maxSize: number): void {
 const EIP712_DOMAIN = {
   name: "MemePerp",
   version: "1",
-  chainId: 84532, // Base Sepolia
+  chainId: 97, // BSC Testnet
   verifyingContract: SETTLEMENT_ADDRESS,
 };
 
@@ -606,6 +606,7 @@ const LIQUIDATION_MAP_BROADCAST_INTERVAL_MS = 2000; // 2 seconds between broadca
 
 // User nonces - 撮合引擎自行追踪，防止签名重放攻击
 // P0-1: 每个 trader 的 nonce 必须严格递增
+// AUDIT-FIX ME-C06: L1 in-memory cache, backed by Redis (loaded on startup, write-through on update)
 const userNonces = new Map<Address, bigint>();
 
 // Submitted pairs tracking
@@ -845,7 +846,7 @@ async function loadOrdersFromRedis(): Promise<void> {
           avgFillPrice: BigInt(dbOrder.avgFillPrice),
           totalFillValue: 0n,
           fee: BigInt(dbOrder.fee),
-          feeCurrency: "ETH",
+          feeCurrency: "BNB",
           margin: BigInt(dbOrder.margin),
           collateral: BigInt(dbOrder.margin),
           takeProfitPrice: dbOrder.triggerPrice ? BigInt(dbOrder.triggerPrice) : undefined,
@@ -1347,7 +1348,7 @@ async function executeADL(
         const adlAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
         const adlWalletClient = createWalletClient({
           account: adlAccount,
-          chain: baseSepolia,
+          chain: bscTestnet,
           transport: http(RPC_URL),
         });
 
@@ -1645,18 +1646,21 @@ function runRiskCheck(): void {
 
       const entryPrice = BigInt(pos.entryPrice);
 
-      // ========== 安全检查: 价格精度验证 ==========
-      // 入场价格和当前价格应该在合理范围内 (10x)
-      if (entryPrice > 0n) {
+      // ========== 安全检查: 价格精度验证 (参考 GMX validateLiquidation 多状态) ==========
+      // 入场价格和当前价格偏差过大时记录告警，但不跳过风险计算
+      // dYdX v4: 清算决策基于 maintenance margin，不做 priceRatio 跳过
+      // GMX v1: validateLiquidation 返回状态码 (0/1/2)，不跳过计算
+      if (entryPrice > 0n && currentPrice > 0n) {
         const priceRatio = entryPrice > currentPrice
           ? Number(entryPrice / currentPrice)
           : Number(currentPrice / entryPrice);
 
         if (priceRatio > 10) {
-          console.warn(`[RiskEngine] Position ${pos.pairId.slice(0, 8)} has suspicious price ratio: ${priceRatio.toFixed(2)}x (entry=${entryPrice}, current=${currentPrice})`);
-          // 不将此仓位标记为可强平，可能是精度问题
-          pos.isLiquidatable = false;
-          continue;
+          // 记录告警但继续计算 — 让 marginRatio 决定是否清算
+          console.error(
+            `[RiskEngine] PRICE ANOMALY: ${pos.pairId.slice(0, 8)} ` +
+            `entry=${entryPrice} current=${currentPrice} ratio=${priceRatio}x`
+          );
         }
       }
 
@@ -2115,6 +2119,7 @@ async function processLiquidations(): Promise<void> {
  * 广播强平事件
  */
 function broadcastLiquidationEvent(position: Position): void {
+  // AUDIT-FIX M-03: Send only to the trader's own WS clients (not all clients)
   const message = JSON.stringify({
     type: "liquidation_warning",
     pairId: position.pairId,
@@ -2127,9 +2132,11 @@ function broadcastLiquidationEvent(position: Position): void {
     timestamp: Date.now(),
   });
 
-  for (const [client] of wsClients.entries()) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+  const trader = position.trader.toLowerCase() as Address;
+  const wsSet = wsTraderClients.get(trader);
+  if (wsSet) {
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
     }
   }
 }
@@ -3091,6 +3098,7 @@ function broadcastTPSLTriggered(
   triggerType: "tp" | "sl",
   triggerPrice: bigint
 ): void {
+  // AUDIT-FIX M-02: Send only to the trader's own WS clients (not all clients)
   const message = JSON.stringify({
     type: "tpsl_triggered",
     pairId: position.pairId,
@@ -3102,9 +3110,11 @@ function broadcastTPSLTriggered(
     timestamp: Date.now(),
   });
 
-  for (const [client] of wsClients.entries()) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+  const trader = position.trader.toLowerCase() as Address;
+  const wsSet = wsTraderClients.get(trader);
+  if (wsSet) {
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
     }
   }
 }
@@ -3119,6 +3129,7 @@ function broadcastTPSLExecuted(
   pnl: bigint,
   fee: bigint
 ): void {
+  // AUDIT-FIX M-02: Send only to the trader's own WS clients (not all clients)
   const message = JSON.stringify({
     type: "tpsl_executed",
     pairId: position.pairId,
@@ -3132,9 +3143,11 @@ function broadcastTPSLExecuted(
     timestamp: Date.now(),
   });
 
-  for (const [client] of wsClients.entries()) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+  const trader = position.trader.toLowerCase() as Address;
+  const wsSet = wsTraderClients.get(trader);
+  if (wsSet) {
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
     }
   }
 }
@@ -4122,7 +4135,7 @@ async function syncUserBalanceFromChain(trader: Address): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -4354,7 +4367,7 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
     await syncUserBalanceFromChain(trader);
     const balance = getUserBalance(trader);
     if (balance.availableBalance < requiredAmount) {
-      throw new Error(`余额不足: 需要 Ξ${Number(requiredAmount) / 1e18}，可用 Ξ${Number(balance.availableBalance) / 1e18}。请通过 SettlementV2 合约存入 WETH。`);
+      throw new Error(`余额不足: 需要 ${Number(requiredAmount) / 1e18} BNB，可用 ${Number(balance.availableBalance) / 1e18} BNB。请通过 SettlementV2 合约存入 WBNB。`);
     }
     return;
   }
@@ -4380,7 +4393,7 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
   const shortfall = requiredAmount - settlementUsable;
 
   // gas 预留: depositETH() 大约消耗 50000-80000 gas
-  // Base Sepolia gas price ~0.01 gwei, 保守估计 0.002 ETH
+  // BSC Testnet gas price ~0.01 gwei, 保守估计 0.002 BNB
   const gasReserve = 2000000000000000n; // 0.002 ETH gas 预留
 
   // 钱包可存入金额 = 钱包余额 - gas 预留
@@ -4392,8 +4405,8 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
     // 钱包余额也不够
     const totalAvailable = settlementUsable + walletAvailable;
     const pendingLocked = getPendingOrdersLocked(trader);
-    const details = `钱包: Ξ${Number(balance.walletBalance) / 1e18}, Settlement+调整 可用: Ξ${Number(settlementUsable) / 1e18}, mode2Adj: Ξ${Number(mode2Adj) / 1e18}, 仓位占用: Ξ${Number(balance.usedMargin) / 1e18}, 挂单占用: Ξ${Number(pendingLocked) / 1e18}`;
-    throw new Error(`余额不足: 需要 Ξ${Number(requiredAmount) / 1e18}，可用 Ξ${Number(totalAvailable) / 1e18}。[${details}] 请先存入资金。`);
+    const details = `钱包: ${Number(balance.walletBalance) / 1e18} BNB, Settlement+调整 可用: ${Number(settlementUsable) / 1e18} BNB, mode2Adj: ${Number(mode2Adj) / 1e18} BNB, 仓位占用: ${Number(balance.usedMargin) / 1e18} BNB, 挂单占用: ${Number(pendingLocked) / 1e18} BNB`;
+    throw new Error(`余额不足: 需要 ${Number(requiredAmount) / 1e18} BNB，可用 ${Number(totalAvailable) / 1e18} BNB。[${details}] 请先存入资金。`);
   }
 
   // 4. 计算存入策略: 优先用 WETH (approve+deposit)，不够再用 native ETH (depositETH)
@@ -4403,7 +4416,7 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
   // - 如果 native ETH 不多，value + gas 容易超出余额
   // - WETH 是 ERC20，approve+deposit 只需要 gas (native ETH)，value 从 WETH 余额出
   //
-  const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0x4200000000000000000000000000000000000006") as Address;
+  const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
 
   console.log(`[Deposit] ${trader.slice(0, 10)} 需要存入 Ξ${Number(shortfall) / 1e18} 到 Settlement (native=Ξ${Number(balance.nativeEthBalance) / 1e18}, weth=Ξ${Number(balance.wethBalance) / 1e18})`);
 
@@ -4427,12 +4440,12 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
     const account = privateKeyToAccount(signingKey);
     const walletClient = createWalletClient({
       account,
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -4710,7 +4723,7 @@ async function syncSupportedTokens(): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -4755,7 +4768,7 @@ async function syncTokenInfoCache(): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -4795,7 +4808,7 @@ async function syncFullTokenData(): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -4929,7 +4942,7 @@ function startSwapEventWatching(
 
   try {
     const wsClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: webSocket(WSS_URL),
     });
 
@@ -5099,7 +5112,7 @@ async function detectGraduatedTokens(): Promise<void> {
   if (SUPPORTED_TOKENS.length === 0) return;
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
 
@@ -5214,7 +5227,7 @@ async function startEventWatching(): Promise<void> {
   console.log("[Events] Using WebSocket endpoint:", WSS_URL);
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: webSocket(WSS_URL),
   });
 
@@ -5284,7 +5297,7 @@ async function startEventWatching(): Promise<void> {
 
     // 创建独立的 WebSocket client (SettlementV2 合约地址不同于 V1)
     const v2PublicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: webSocket(WSS_URL),
     });
 
@@ -5433,7 +5446,7 @@ async function startEventWatching(): Promise<void> {
 
           // 转换为 ETH (与 syncSpotPrices 完全一致的计算方式)
           const initialPriceEth = Number(priceWei) / 1e18;
-          const ethPriceUsd = currentEthPriceUsd || 2500;
+          const ethPriceUsd = currentEthPriceUsd || 600;
           const initialPriceUsd = initialPriceEth * ethPriceUsd;
 
           await initializeTokenKline(
@@ -5475,7 +5488,7 @@ async function startEventWatching(): Promise<void> {
         addSupportedToken(token);
 
         // 获取当前 ETH 价格 (从内存缓存)
-        const ethPriceUsd = currentEthPriceUsd || 2500;
+        const ethPriceUsd = currentEthPriceUsd || 600;
 
         // 处理交易事件并存储
         try {
@@ -5625,13 +5638,13 @@ const TRADE_POLL_INTERVAL_MS = 15_000; // 15 秒轮询一次
 
 async function startTradeEventPoller(): Promise<void> {
   const { createPublicClient, http, parseAbiItem } = await import("viem");
-  const { baseSepolia } = await import("viem/chains");
+  const { bscTestnet } = await import("viem/chains");
 
   // 使用 publicnode.com 的 HTTP RPC（无 getLogs 区块范围限制）
-  const POLL_RPC_URL = "https://base-sepolia-rpc.publicnode.com";
+  const POLL_RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 
   const pollClient = createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(POLL_RPC_URL),
   });
 
@@ -5709,7 +5722,7 @@ async function pollTradeEvents(
 
       try {
         const { processTradeEvent } = await import("../spot/spotHistory");
-        const ethPriceUsd = currentEthPriceUsd || 2500;
+        const ethPriceUsd = currentEthPriceUsd || 600;
 
         // processTradeEvent 内部会检查 exists() 自动去重
         await processTradeEvent(
@@ -5814,9 +5827,14 @@ function broadcastBalanceUpdate(user: Address): void {
     timestamp: Math.floor(Date.now() / 1000),
   });
 
-  for (const [client, subscriptions] of wsClients.entries()) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+  // AUDIT-FIX ME-C01: 仅向该用户自己的 WS 客户端发送余额 (通过 subscribe_risk 订阅)
+  // 旧代码遍历所有 wsClients 导致 User A 能看到 User B 的余额 — 严重隐私泄露
+  const wsSet = wsTraderClients.get(normalizedUser as Address);
+  if (wsSet) {
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
     }
   }
 }
@@ -6129,7 +6147,13 @@ function createOrUpdatePosition(
     // 计算新的平均入场价
     const newEntryPrice = (oldSize * oldEntryPrice + size * entryPrice) / newSize;
     const newCollateral = BigInt(existing.collateral) + collateral;
-    const newLiquidationPrice = calculateLiquidationPrice(newEntryPrice, leverage, isLong);
+    // AUDIT-FIX ME-C03: 加仓路径也需要动态 MMR (与新开仓路径 L6029-6032 保持一致)
+    // 旧代码缺少 mmr 参数，使用默认 200n，高杠杆时强平价格计算错误
+    const baseMmr = 200n;
+    const initialMarginRateBp = (10000n * 10000n) / leverage;
+    const maxMmr = initialMarginRateBp / 2n;
+    const effectiveMmr = baseMmr < maxMmr ? baseMmr : maxMmr;
+    const newLiquidationPrice = calculateLiquidationPrice(newEntryPrice, leverage, isLong, effectiveMmr);
 
     const updatedPosition = {
       ...existing,
@@ -6231,13 +6255,48 @@ async function verifyTraderSignature(
   }
 }
 
+// AUDIT-FIX CR-01: Auth signature verification for withdrawal requests
+// Verifies the user signed a "withdraw:{amount}:{nonce}:{deadline}" message
+async function verifyAuthSignature(
+  trader: Address,
+  nonce: bigint,
+  deadline: bigint,
+  signature: Hex,
+): Promise<{ valid: boolean; error?: string }> {
+  if (SKIP_SIGNATURE_VERIFY_ENV) return { valid: true };
+  // Check deadline hasn't passed
+  if (deadline < BigInt(Math.floor(Date.now() / 1000))) {
+    return { valid: false, error: "Auth signature expired" };
+  }
+  const message = `withdraw:${nonce.toString()}:${deadline.toString()}`;
+  return verifyTraderSignature(trader as string, signature as string, message);
+}
+
 function getUserNonce(trader: Address): bigint {
+  // AUDIT-FIX ME-C06: L1 in-memory cache (loaded from Redis on startup)
   return userNonces.get(trader.toLowerCase() as Address) || 0n;
 }
 
+async function persistNonce(trader: Address, nonce: bigint): Promise<void> {
+  // AUDIT-FIX ME-C06: Write-through to Redis for crash recovery
+  const normalized = trader.toLowerCase() as Address;
+  userNonces.set(normalized, nonce);
+  // Fire-and-forget Redis write (in-memory is source of truth during runtime)
+  NonceRepo.set(normalized, nonce).catch((e) => {
+    console.error(`[Nonce] Failed to persist nonce for ${normalized.slice(0, 10)}: ${e}`);
+  });
+}
+
+/** @deprecated Use persistNonce() instead — kept for backward compat */
 function incrementUserNonce(trader: Address): void {
   const current = getUserNonce(trader);
-  userNonces.set(trader.toLowerCase() as Address, current + 1n);
+  const next = current + 1n;
+  const normalized = trader.toLowerCase() as Address;
+  userNonces.set(normalized, next);
+  // Write-through to Redis
+  NonceRepo.set(normalized, next).catch((e) => {
+    console.error(`[Nonce] Failed to persist nonce for ${normalized.slice(0, 10)}: ${e}`);
+  });
 }
 
 // ============================================================
@@ -6290,6 +6349,16 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     }
     if (sizeBigInt < TRADING.MIN_POSITION_SIZE) {
       return errorResponse(`Position too small. Minimum: ${TRADING.MIN_POSITION_SIZE} (0.001 ETH)`);
+    }
+
+    // ============================================================
+    // AUDIT-FIX H-07: Validate leverage against MAX_LEVERAGE
+    // Leverage is in 1e4 precision (10x = 100000n), so compare scaled values
+    // ============================================================
+    const maxLeverageScaled = TRADING.MAX_LEVERAGE * PRECISION_MULTIPLIER.LEVERAGE; // 10 * 10000 = 100000
+    const minLeverageScaled = TRADING.MIN_LEVERAGE * PRECISION_MULTIPLIER.LEVERAGE; // 1 * 10000 = 10000
+    if (leverageBigInt < minLeverageScaled || leverageBigInt > maxLeverageScaled) {
+      return errorResponse(`Invalid leverage: must be between ${TRADING.MIN_LEVERAGE}x and ${TRADING.MAX_LEVERAGE}x`);
     }
 
     // ============================================================
@@ -6385,6 +6454,27 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     }
 
     // ============================================================
+    // 价格带验证 (参考 dYdX v4 fillable price / Hyperliquid price band)
+    // 限价单价格不能偏离当前标记价格超过 MAX_PRICE_DEVIATION_PCT
+    // 防止因客户端 bug 提交精度错误的价格 (如 1e28 vs 1e10)
+    // ============================================================
+    if (priceBigInt > 0n) {
+      const markPrice = orderBook.getCurrentPrice();
+      if (markPrice > 0n) {
+        const deviation = priceBigInt > markPrice
+          ? ((priceBigInt - markPrice) * 100n) / markPrice
+          : ((markPrice - priceBigInt) * 100n) / priceBigInt;
+
+        if (deviation > 100n) { // > 100% deviation → reject
+          return errorResponse(
+            `Order price deviates ${deviation}% from mark price (max 100%). ` +
+            `Order: ${priceBigInt}, Mark: ${markPrice}. Check price precision.`
+          );
+        }
+      }
+    }
+
+    // ============================================================
     // 保证金存入 Settlement + 内部扣款 (加锁防竞争)
     // ============================================================
     //
@@ -6439,7 +6529,8 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
           }
 
           // P3-P2: Nonce increment inside lock — atomic with balance deduction
-          userNonces.set(trader.toLowerCase() as Address, nonceBigInt + 1n);
+          // AUDIT-FIX ME-C06: Write-through to Redis for persistence
+          await persistNonce(trader as Address, nonceBigInt + 1n);
 
           return { success: true };
         },
@@ -6801,7 +6892,7 @@ async function handleGetNonce(trader: string): Promise<Response> {
   if (SETTLEMENT_ADDRESS) {
     try {
       const publicClient = createPublicClient({
-        chain: baseSepolia,
+        chain: bscTestnet,
         transport: http(RPC_URL),
       });
       const chainNonce = await publicClient.readContract({
@@ -6816,9 +6907,9 @@ async function handleGetNonce(trader: string): Promise<Response> {
       const memoryNonce = getUserNonce(normalizedTrader);
       const effectiveNonce = chainNonce > memoryNonce ? chainNonce : memoryNonce;
 
-      // 同步内存
+      // AUDIT-FIX ME-C06: 同步到内存 + Redis
       if (effectiveNonce > memoryNonce) {
-        userNonces.set(normalizedTrader, effectiveNonce);
+        await persistNonce(normalizedTrader, effectiveNonce);
       }
 
       return jsonResponse({ nonce: effectiveNonce.toString() });
@@ -7475,7 +7566,7 @@ async function handleGetUserOrders(trader: string): Promise<Response> {
 
     // === 费用信息 ===
     fee: (o.fee || 0n).toString(),
-    feeCurrency: o.feeCurrency || "ETH",
+    feeCurrency: o.feeCurrency || "BNB",
 
     // === 保证金信息 ===
     margin: (o.margin || 0n).toString(),
@@ -7519,7 +7610,7 @@ async function handleGetUserOrders(trader: string): Promise<Response> {
         avgFillPrice: t.price,
         totalFillValue: "0",
         fee: t.fee,
-        feeCurrency: "ETH",
+        feeCurrency: "BNB",
         margin: "0",
         collateral: "0",
         takeProfitPrice: null,
@@ -7720,7 +7811,7 @@ async function handleGetUserBalance(trader: string): Promise<Response> {
   let walletEthBalance = 0n;
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
 
@@ -7871,19 +7962,19 @@ async function handleGetUserBalance(trader: string): Promise<Response> {
     // 数据来源标记
     source: chainAvailable > 0n || walletEthBalance > 0n ? "chain+backend" : "backend",
     mode: "mode2",  // 标记当前运行模式
-    // 人类可读格式
+    // 人类可读格式 (BSC: BNB 本位)
     display: {
-      totalBalance: `Ξ${(Number(totalBalance) / 1e18).toFixed(6)}`,
-      availableBalance: `Ξ${(Number(availableBalance) / 1e18).toFixed(6)}`,
-      walletBalance: `Ξ${(Number(walletEthBalance) / 1e18).toFixed(6)}`,
-      settlementAvailable: `Ξ${(Number(chainAvailable) / 1e18).toFixed(6)}`,
-      mode2Adjustment: `Ξ${(Number(mode2Adj) / 1e18).toFixed(6)}`,
-      effectiveAvailable: `Ξ${(Number(effectiveAvailable) / 1e18).toFixed(6)}`,
-      positionMargin: `Ξ${(Number(positionMargin) / 1e18).toFixed(6)}`,
-      pendingOrdersLocked: `Ξ${(Number(pendingOrdersLocked) / 1e18).toFixed(6)}`,
-      usedMargin: `Ξ${(Number(usedMargin) / 1e18).toFixed(6)}`,
-      unrealizedPnL: `Ξ${(Number(totalPnL) / 1e18).toFixed(6)}`,
-      equity: `Ξ${(Number(equity) / 1e18).toFixed(6)}`,
+      totalBalance: `BNB ${(Number(totalBalance) / 1e18).toFixed(6)}`,
+      availableBalance: `BNB ${(Number(availableBalance) / 1e18).toFixed(6)}`,
+      walletBalance: `BNB ${(Number(walletEthBalance) / 1e18).toFixed(6)}`,
+      settlementAvailable: `BNB ${(Number(chainAvailable) / 1e18).toFixed(6)}`,
+      mode2Adjustment: `BNB ${(Number(mode2Adj) / 1e18).toFixed(6)}`,
+      effectiveAvailable: `BNB ${(Number(effectiveAvailable) / 1e18).toFixed(6)}`,
+      positionMargin: `BNB ${(Number(positionMargin) / 1e18).toFixed(6)}`,
+      pendingOrdersLocked: `BNB ${(Number(pendingOrdersLocked) / 1e18).toFixed(6)}`,
+      usedMargin: `BNB ${(Number(usedMargin) / 1e18).toFixed(6)}`,
+      unrealizedPnL: `BNB ${(Number(totalPnL) / 1e18).toFixed(6)}`,
+      equity: `BNB ${(Number(equity) / 1e18).toFixed(6)}`,
     }
   });
 }
@@ -8368,6 +8459,7 @@ async function handleClosePair(req: Request, pairId: string): Promise<Response> 
  * 广播全部平仓事件
  */
 function broadcastPositionClosed(position: Position, exitPrice: bigint, pnl: bigint): void {
+  // AUDIT-FIX M-04: Send only to the trader's own WS clients (not all clients)
   const message = JSON.stringify({
     type: "position_closed",
     pairId: position.pairId,
@@ -8379,9 +8471,11 @@ function broadcastPositionClosed(position: Position, exitPrice: bigint, pnl: big
     timestamp: Date.now(),
   });
 
-  for (const [client] of wsClients.entries()) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+  const trader = position.trader.toLowerCase() as Address;
+  const wsSet = wsTraderClients.get(trader);
+  if (wsSet) {
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
     }
   }
 }
@@ -8390,6 +8484,7 @@ function broadcastPositionClosed(position: Position, exitPrice: bigint, pnl: big
  * 广播部分平仓事件
  */
 function broadcastPartialClose(position: Position, closedSize: bigint, exitPrice: bigint, pnl: bigint): void {
+  // AUDIT-FIX M-04: Send only to the trader's own WS clients (not all clients)
   const message = JSON.stringify({
     type: "partial_close",
     pairId: position.pairId,
@@ -8403,9 +8498,11 @@ function broadcastPartialClose(position: Position, closedSize: bigint, exitPrice
     timestamp: Date.now(),
   });
 
-  for (const [client] of wsClients.entries()) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+  const trader = position.trader.toLowerCase() as Address;
+  const wsSet = wsTraderClients.get(trader);
+  if (wsSet) {
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
     }
   }
 }
@@ -9705,6 +9802,7 @@ function getMarginAdjustmentInfo(pairId: string): {
  * 广播保证金更新事件
  */
 function broadcastMarginUpdate(position: Position, action: "add" | "remove", amount: bigint): void {
+  // AUDIT-FIX H-02: Send only to the trader's own WS clients (not all clients)
   const message = JSON.stringify({
     type: "margin_updated",
     pairId: position.pairId,
@@ -9718,8 +9816,12 @@ function broadcastMarginUpdate(position: Position, action: "add" | "remove", amo
     timestamp: Date.now(),
   });
 
-  for (const [client] of wsClients.entries()) {
-    if (client.readyState === WebSocket.OPEN) client.send(message);
+  const trader = position.trader.toLowerCase() as Address;
+  const wsSet = wsTraderClients.get(trader);
+  if (wsSet) {
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) client.send(message);
+    }
   }
 }
 
@@ -10298,17 +10400,55 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // Request withdrawal authorization
+  // AUDIT-FIX CR-01: Add authentication + balance deduction
   if (path === "/api/v2/withdraw/request" && method === "POST") {
     try {
       const body = await req.json();
-      const { user, amount } = body;
+      const { user, amount, signature, nonce: authNonce, deadline: authDeadline } = body;
       if (!user || !amount) {
         return errorResponse("Missing user or amount");
       }
-      const result = await requestWithdrawal(user as Address, BigInt(amount));
+
+      const normalizedUser = (user as string).toLowerCase() as Address;
+      const withdrawAmount = BigInt(amount);
+
+      // CR-01 FIX: Require signature authentication — verify the requester IS the user
+      if (!signature || !authNonce || !authDeadline) {
+        return errorResponse("Authentication required: signature, nonce, deadline", 401);
+      }
+      if (!SKIP_SIGNATURE_VERIFY) {
+        const authResult = await verifyAuthSignature(
+          normalizedUser,
+          BigInt(authNonce),
+          BigInt(authDeadline),
+          signature as Hex
+        );
+        if (!authResult.valid) {
+          return errorResponse("Invalid authentication signature", 401);
+        }
+      }
+
+      // CR-01 FIX: Check and deduct user balance BEFORE generating signature
+      const balance = getUserBalance(normalizedUser);
+      if (!balance || balance.available < withdrawAmount) {
+        const avail = balance ? balance.available.toString() : "0";
+        return errorResponse(`Insufficient balance: available=${avail}, requested=${withdrawAmount.toString()}`);
+      }
+
+      // Deduct balance atomically (freeze the withdrawal amount)
+      balance.available -= withdrawAmount;
+      balance.frozen = (balance.frozen || 0n) + withdrawAmount;
+
+      const result = await requestWithdrawal(normalizedUser, withdrawAmount);
       if (!result.success) {
+        // Rollback balance deduction on failure
+        balance.available += withdrawAmount;
+        balance.frozen = (balance.frozen || 0n) - withdrawAmount;
         return errorResponse(result.error || "Withdrawal request failed");
       }
+
+      console.log(`[Withdraw] CR-01 FIX: Authenticated withdrawal for ${normalizedUser.slice(0, 10)}, amount=${withdrawAmount.toString()}, balance deducted`);
+
       return jsonResponse({
         success: true,
         authorization: {
@@ -10718,11 +10858,11 @@ async function handleRequest(req: Request): Promise<Response> {
       const account = privateKeyToAccount(signingKey);
       const walletClient = createWalletClient({
         account,
-        chain: baseSepolia,
+        chain: bscTestnet,
         transport: http(RPC_URL),
       });
       const pubClient = createPublicClient({
-        chain: baseSepolia,
+        chain: bscTestnet,
         transport: http(RPC_URL),
       });
 
@@ -11087,7 +11227,16 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // POST /api/internal/snapshot/trigger — 手动触发 Merkle 快照 (测试/运维)
+  // AUDIT-FIX H-03: Require INTERNAL_API_KEY authentication
   if (path === "/api/internal/snapshot/trigger" && method === "POST") {
+    const internalKey = url.searchParams.get("key") || req.headers.get("x-internal-key");
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    if (!expectedKey) {
+      return errorResponse("INTERNAL_API_KEY not configured — internal API disabled for security", 503);
+    }
+    if (internalKey !== expectedKey) {
+      return errorResponse("Unauthorized: internal API key required", 401);
+    }
     try {
       const { runSnapshotCycle } = await import("./modules/snapshot");
       const snapshot = await runSnapshotCycle({ submitToChain: !!SETTLEMENT_V2_ADDRESS });
@@ -11107,7 +11256,16 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // POST /api/internal/liquidation/trigger — Keeper 触发强平检查
+  // AUDIT-FIX H-03: Require INTERNAL_API_KEY authentication
   if (path === "/api/internal/liquidation/trigger" && method === "POST") {
+    const internalKey = url.searchParams.get("key") || req.headers.get("x-internal-key");
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    if (!expectedKey) {
+      return errorResponse("INTERNAL_API_KEY not configured — internal API disabled for security", 503);
+    }
+    if (internalKey !== expectedKey) {
+      return errorResponse("Unauthorized: internal API key required", 401);
+    }
     try {
       const body = await req.json();
       const { trader, token } = body as { trader: string; token: string };
@@ -11218,7 +11376,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
     try {
       const publicClient = createPublicClient({
-        chain: baseSepolia,
+        chain: bscTestnet,
         transport: http(RPC_URL),
       });
       const currentBlock = toBlock || await publicClient.getBlockNumber();
@@ -12036,7 +12194,8 @@ function broadcastPendingOrders(trader: Address): void {
   }
 }
 
-function handleWSMessage(ws: WebSocket, message: string): void {
+// AUDIT-FIX H-01: Changed to async for signature verification in subscribe_risk
+async function handleWSMessage(ws: WebSocket, message: string): Promise<void> {
   // 处理 ping/pong 心跳
   if (message === "ping") {
     ws.send("pong");
@@ -12161,9 +12320,47 @@ function handleWSMessage(ws: WebSocket, message: string): void {
       }
       console.log(`[WS] Client unsubscribed from token: ${msg.token}`);
     }
-    // 风控数据订阅 - 用户仓位风险
+    // AUDIT-FIX H-01: subscribe_risk requires signature authentication
+    // Client must send: { type: "subscribe_risk", trader, signature, timestamp }
+    // Signature signs message: "subscribe_risk:{trader}:{timestamp}"
+    // Timestamp must be within 5 minutes to prevent replay attacks
     else if (msg.type === "subscribe_risk" && msg.trader) {
       const trader = msg.trader.toLowerCase() as Address;
+
+      // Verify ownership of trader address
+      if (!SKIP_SIGNATURE_VERIFY_ENV) {
+        const { signature, timestamp } = msg;
+        if (!signature || !timestamp) {
+          ws.send(JSON.stringify({
+            type: "error",
+            error: "subscribe_risk requires signature and timestamp for authentication",
+            timestamp: Date.now(),
+          }));
+          return;
+        }
+        // Anti-replay: timestamp must be within 5 minutes
+        const now = Math.floor(Date.now() / 1000);
+        const ts = Number(timestamp);
+        if (Math.abs(now - ts) > 300) {
+          ws.send(JSON.stringify({
+            type: "error",
+            error: "subscribe_risk timestamp expired (must be within 5 minutes)",
+            timestamp: Date.now(),
+          }));
+          return;
+        }
+        const expectedMessage = `subscribe_risk:${trader}:${timestamp}`;
+        const auth = await verifyTraderSignature(trader, signature, expectedMessage);
+        if (!auth.valid) {
+          ws.send(JSON.stringify({
+            type: "error",
+            error: `subscribe_risk auth failed: ${auth.error}`,
+            timestamp: Date.now(),
+          }));
+          return;
+        }
+      }
+
       const wsSet = wsTraderClients.get(trader) || new Set();
       wsSet.add(ws);
       wsTraderClients.set(trader, wsSet);
@@ -12401,6 +12598,17 @@ async function startServer(): Promise<void> {
     // 从 Redis 加载已有仓位到内存 (兼容现有风控引擎)
     await loadPositionsFromRedis();
 
+    // AUDIT-FIX ME-C06: 从 Redis 恢复用户 nonce (防重启后重放攻击)
+    try {
+      const savedNonces = await NonceRepo.getAll();
+      for (const [user, nonce] of savedNonces) {
+        userNonces.set(user.toLowerCase() as Address, nonce);
+      }
+      console.log(`[Server] Restored ${savedNonces.size} user nonces from Redis`);
+    } catch (e) {
+      console.error("[Server] Failed to restore user nonces:", e);
+    }
+
     // 从 Redis 恢复订单保证金记录 (重启后撤单退款依赖此数据)
     try {
       const savedMargins = await OrderMarginRepo.getAll();
@@ -12448,7 +12656,7 @@ async function startServer(): Promise<void> {
     const v2UpdaterAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
     const v2WalletClient = createWalletClient({
       account: v2UpdaterAccount,
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -12479,13 +12687,13 @@ async function startServer(): Promise<void> {
     initializeWithdrawModule({
       signerPrivateKey: MATCHER_PRIVATE_KEY,
       contractAddress: SETTLEMENT_V2_ADDRESS,
-      chainId: 84532, // Base Sepolia
+      chainId: 97, // BSC Testnet
     });
     console.log("[Server] Mode 2: Withdraw module initialized (Merkle + EIP-712)");
 
     // 从链上同步提款 nonce（防止引擎重启后 nonce 重放攻击）
     const v2ReadClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
     const knownUsers = Array.from(userBalances.keys()) as Address[];
@@ -12514,7 +12722,7 @@ async function startServer(): Promise<void> {
     initializeWithdrawModule({
       signerPrivateKey: MATCHER_PRIVATE_KEY,
       contractAddress: SETTLEMENT_ADDRESS,
-      chainId: 84532,
+      chainId: 97, // BSC Testnet
     });
 
     startSnapshotJob({
@@ -12536,7 +12744,7 @@ async function startServer(): Promise<void> {
   // ============================================================
   {
     const lendingPublicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -12545,7 +12753,7 @@ async function startServer(): Promise<void> {
       const matcherAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
       lendingWalletClient = createWalletClient({
         account: matcherAccount,
-        chain: baseSepolia,
+        chain: bscTestnet,
         transport: http(RPC_URL),
       });
     }
@@ -12563,7 +12771,7 @@ async function startServer(): Promise<void> {
   // ============================================================
   if (PERP_VAULT_ADDRESS_LOCAL) {
     const vaultPublicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(RPC_URL),
     });
 
@@ -12572,7 +12780,7 @@ async function startServer(): Promise<void> {
       const matcherAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
       vaultWalletClient = createWalletClient({
         account: matcherAccount,
-        chain: baseSepolia,
+        chain: bscTestnet,
         transport: http(RPC_URL),
       });
     }
@@ -12618,6 +12826,9 @@ async function startServer(): Promise<void> {
   runRedisCleanup();
   setInterval(runRedisCleanup, 24 * 60 * 60 * 1000);
 
+  // AUDIT-FIX ME-H01: 定期清理过期的 pendingWithdrawals（每 5 分钟）
+  setInterval(cleanupExpiredWithdrawals, 5 * 60 * 1000);
+
   // 定期从 TokenFactory / Uniswap V2 Pair 同步现货价格并更新 K 线
   // ✅ ETH 本位: 直接使用 Token/ETH 价格 (1e18 精度)，不做 USD 转换
   // ✅ 毕业代币: 自动从 Uniswap V2 Pair 读取真实市场价格
@@ -12629,9 +12840,9 @@ async function startServer(): Promise<void> {
     const { updateKlineWithCurrentPrice } = await import("../spot/spotHistory");
 
     // 使用备用 RPC 避免限流 (publicnode 比 sepolia.base.org 限制更宽松)
-    const SYNC_RPC = process.env.SPOT_SYNC_RPC_URL || "https://base-sepolia-rpc.publicnode.com";
+    const SYNC_RPC = process.env.SPOT_SYNC_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bscTestnet,
       transport: http(SYNC_RPC),
     });
 
@@ -12820,7 +13031,7 @@ async function startServer(): Promise<void> {
                 avgFillPrice: BigInt(pgOrder.avg_fill_price),
                 totalFillValue: 0n,
                 fee: BigInt(pgOrder.fee),
-                feeCurrency: "ETH",
+                feeCurrency: "BNB",
                 margin: BigInt(pgOrder.margin),
                 collateral: BigInt(pgOrder.margin),
                 takeProfitPrice: pgOrder.trigger_price ? BigInt(pgOrder.trigger_price) : undefined,
@@ -13003,10 +13214,10 @@ async function startServer(): Promise<void> {
   (async () => {
     try {
       const { createPublicClient, http } = await import("viem");
-      const { baseSepolia } = await import("viem/chains");
+      const { bscTestnet } = await import("viem/chains");
       const backfillClient = createPublicClient({
-        chain: baseSepolia,
-        transport: http("https://base-sepolia-rpc.publicnode.com"),
+        chain: bscTestnet,
+        transport: http("https://data-seed-prebsc-1-s1.binance.org:8545/"),
       });
       const currentBlock = await backfillClient.getBlockNumber();
       const backfillFrom = currentBlock > 50000n ? currentBlock - 50000n : 0n;
@@ -13014,7 +13225,7 @@ async function startServer(): Promise<void> {
       const { backfillHistoricalTrades } = await import("../spot/spotHistory");
       for (const token of SUPPORTED_TOKENS) {
         try {
-          const count = await backfillHistoricalTrades(token, backfillFrom, currentBlock, currentEthPriceUsd || 2500);
+          const count = await backfillHistoricalTrades(token, backfillFrom, currentBlock, currentEthPriceUsd || 600);
           if (count > 0) {
             console.log(`[Startup] Backfilled ${count} trades for ${token.slice(0, 10)}`);
           }

@@ -1,14 +1,15 @@
 import { createWalletClient, http, parseEther, type Address, type Hex, encodePacked, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 
-const RPC_URL = "https://base-sepolia-rpc.publicnode.com";
+const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const ENGINE_URL = "http://localhost:8081";
 const SETTLEMENT = "0x35ce4ed5e5d2515Ea05a2f49A70170Fa78e13F7c" as Address;
 const TOKEN = "0x01eA557E2B17f65604568791Edda8dE1Ae702BE8" as Address;
 
-// Use matcher wallet (already has deposit)
-const MATCHER_KEY = "0xe842b617657055de85d504a3cd268bfd42e35edfdce2be79b1968cf861d0292a" as Hex;
+// AUDIT-FIX DP-C01: Matcher key from env (never hardcode)
+const MATCHER_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
+if (!MATCHER_KEY) throw new Error("Set MATCHER_PRIVATE_KEY env var");
 
 // Generate 2 test wallets
 const TEST_KEY1 = "0x" + "a".repeat(63) + "1" as Hex;
@@ -24,7 +25,7 @@ console.log("Wallet 2 (Short):", account2.address);
 const domain = {
   name: "MemePerp",
   version: "1",
-  chainId: 84532,
+  chainId: 97,
   verifyingContract: SETTLEMENT,
 };
 
@@ -59,7 +60,7 @@ async function depositETH(key: Hex, amount: bigint) {
   const account = privateKeyToAccount(key);
   const client = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
   
@@ -73,7 +74,7 @@ async function depositETH(key: Hex, amount: bigint) {
   
   // Wait for confirmation
   const { createPublicClient } = await import("viem");
-  const pub = createPublicClient({ chain: baseSepolia, transport: http(RPC_URL) });
+  const pub = createPublicClient({ chain: bscTestnet, transport: http(RPC_URL) });
   await pub.waitForTransactionReceipt({ hash });
   
   // Sync with matching engine
@@ -133,7 +134,7 @@ async function main() {
   const matcherAccount = privateKeyToAccount(MATCHER_KEY);
   const client = createWalletClient({
     account: matcherAccount,
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
   
@@ -147,7 +148,7 @@ async function main() {
       });
       console.log(`Sent 0.02 ETH to ${addr}: ${hash}`);
       const { createPublicClient } = await import("viem");
-      const pub = createPublicClient({ chain: baseSepolia, transport: http(RPC_URL) });
+      const pub = createPublicClient({ chain: bscTestnet, transport: http(RPC_URL) });
       await pub.waitForTransactionReceipt({ hash });
     } catch (e: any) {
       console.log(`Funding ${addr} error:`, e.message?.slice(0, 100));

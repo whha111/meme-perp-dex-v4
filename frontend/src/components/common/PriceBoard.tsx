@@ -176,7 +176,7 @@ export function PriceBoard({
             <span className={`${price24hChange >= 0 ? "text-[#00D26A]" : "text-[#FF3B30]"} font-medium`}>
               {price24hChange >= 0 ? "+" : ""}{price24hChange.toFixed(2)}%
             </span>
-            <span className="text-okx-text-secondary">Base Sepolia</span>
+            <span className="text-okx-text-secondary">BSC Testnet</span>
             <span className="bg-[#00D26A] text-black px-1 rounded-[2px] text-[9px] font-bold italic">{t("verified")}</span>
           </div>
         </div>

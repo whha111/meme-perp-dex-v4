@@ -17,7 +17,7 @@
  */
 
 import { createPublicClient, http, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { RPC_URL, SETTLEMENT_ADDRESS } from "../config";
 import { BalanceRepo } from "../database/redis";
 import { logger } from "../utils/logger";
@@ -28,7 +28,7 @@ import type { UserBalance } from "../types";
 // ============================================================
 
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: bscTestnet,
   transport: http(RPC_URL),
 });
 
@@ -57,9 +57,8 @@ const SETTLEMENT_ABI = [
   },
 ] as const;
 
-// WETH 地址 (Base Mainnet/Sepolia)
-// Base WETH: 0x4200000000000000000000000000000000000006
-const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0x4200000000000000000000000000000000000006") as Address;
+// WBNB 地址 (BSC Testnet)
+const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
 
 // ============================================================
 // Balance Functions

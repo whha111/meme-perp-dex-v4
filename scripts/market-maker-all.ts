@@ -27,7 +27,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 
 // ============================================================
 // Config
@@ -35,26 +35,28 @@ import { baseSepolia } from "viem/chains";
 
 const RPC_URL = "https://sepolia.base.org";
 const API_URL = "http://localhost:8081";
-const CHAIN_ID = 84532;
+const CHAIN_ID = 97;
 
 // AUDIT-FIX DP-C01/C05: Deployer key from env (optional — can use pre-funded wallets)
 const DEPLOYER_KEY = (process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY) as Hex | undefined;
 // EIP-712 verifyingContract MUST match matching engine's SETTLEMENT_ADDRESS (V1)
 const SETTLEMENT = (process.env.SETTLEMENT_ADDRESS || "0x1660b3571fB04f16F70aea40ac0E908607061DBE") as Address;
 const SETTLEMENT_V2 = (process.env.SETTLEMENT_V2_ADDRESS || "0x733EccCf612F70621c772D63334Cf5606d7a7C75") as Address;
-const WETH_ADDRESS = "0x4200000000000000000000000000000000000006" as Address;
-const TOKEN_FACTORY = (process.env.TOKEN_FACTORY_ADDRESS || "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8") as Address;
+const WETH_ADDRESS = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address; // BSC Testnet WBNB
+const TOKEN_FACTORY = (process.env.TOKEN_FACTORY_ADDRESS || "0x757eF02C2233b8cE2161EE65Fb7D626776b8CB73") as Address;
 
+// Token addresses from the CURRENT TokenFactory deployment (2026-02-28 redeploy)
+// These must match TokenFactory.getAllTokens() so syncSpotPrices() keeps prices updated
 const TOKENS: [string, Address][] = [
-  ["DOGE", "0x736f32BcAF09c2C5B469D5e46E9E645bFdDb49aC"],
-  ["PEPE", "0x0e85a2602Cb589Ed4b50E32093e0a21eFCD278AF"],
-  ["SHIB", "0xC78486166D6915bA3D285e69435A90421a72eD28"],
+  ["DOGE", "0x1BC7c612e55b8CC8e24aA4041FAC3732d50C4C6F"],
+  ["PEPE", "0x0d0156063c5f805805d5324af69932FB790819D5"],
+  ["SHIB", "0x0724863BD88e1F4919c85294149ae87209E917Da"],
 ];
 
 // Pre-funded wallets from main-wallets.json (no deployer funding needed)
 const MAIN_WALLETS_PATH = resolve(import.meta.dir, "../backend/src/matching/main-wallets.json");
-const SPOT_WALLET_COUNT = 10;   // Use top 10 richest wallets for spot
-const PERP_WALLET_COUNT = 5;    // Use next 5 richest for perp
+const SPOT_WALLET_COUNT = 5;    // Use 5 wallets for spot trading
+const PERP_WALLET_COUNT = 3;    // Use 3 wallets for perp trading
 const PERP_DEPOSIT_ETH = 0.02;  // Each perp wallet deposits this much into SettlementV2
 
 // Speed knobs
@@ -107,7 +109,7 @@ const LEV_PREC = 10000n;
 // ============================================================
 
 const transport = http(RPC_URL, { timeout: 30_000 });
-const pub = createPublicClient({ chain: baseSepolia, transport });
+const pub = createPublicClient({ chain: bscTestnet, transport });
 
 // ============================================================
 // Wallet
@@ -122,7 +124,7 @@ interface W {
 
 function mkW(key: Hex): W {
   const acc = privateKeyToAccount(key);
-  return { key, addr: acc.address, acc, cli: createWalletClient({ account: acc, chain: baseSepolia, transport }), nonce: -1, busy: false };
+  return { key, addr: acc.address, acc, cli: createWalletClient({ account: acc, chain: bscTestnet, transport }), nonce: -1, busy: false };
 }
 
 // Load pre-funded wallets sorted by balance (will be determined in setup)
@@ -250,8 +252,9 @@ async function enginePrice(token: Address): Promise<bigint> {
   try {
     const r = await fetch(`${API_URL}/api/stats/${token.toLowerCase()}`);
     const d = (await r.json()) as any;
-    const f = parseFloat(d.price || "0");
-    return f > 0 ? BigInt(Math.floor(f * 1e18)) : 0n;
+    // price is already a 1e18-precision bigint string from the engine — use directly
+    const p = BigInt(d.price || "0");
+    return p > 0n ? p : 0n;
   } catch { return 0n; }
 }
 

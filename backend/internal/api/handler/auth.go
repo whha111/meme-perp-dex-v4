@@ -158,11 +158,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Check nonce (P1: mutex-protected)
-	nonceMu.RLock()
+	// AUDIT-FIX GO-C01: 原子化 nonce 验证 + 消费
+	// 旧代码: RLock→read→RUnlock→...→Lock→delete 存在 TOCTOU 竞态
+	// 修复: 用 Lock 原子完成 read + validate + delete，再释放锁后做签名验证
+	nonceMu.Lock()
 	storedNonce, exists := nonceStore[address]
-	nonceMu.RUnlock()
 	if !exists {
+		nonceMu.Unlock()
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": "40002",
 			"msg":  "Nonce not found, please request a new one",
@@ -171,9 +173,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Check nonce expiration
 	if time.Now().After(storedNonce.ExpiresAt) {
-		nonceMu.Lock()
 		delete(nonceStore, address)
 		nonceMu.Unlock()
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -184,8 +184,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Verify nonce matches
 	if storedNonce.Nonce != req.Nonce {
+		nonceMu.Unlock()
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": "40004",
 			"msg":  "Invalid nonce",
@@ -195,10 +195,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	// P1: 使用存储的完整消息（与 GetNonce 返回给前端的完全一致）
-	// 修复了旧代码中 GetNonce("...Nonce+Timestamp") vs Login("...Nonce only") 的格式不匹配
 	message := storedNonce.Message
+	// 原子消费 nonce — 第二个并发请求到此时 nonce 已不存在
+	delete(nonceStore, address)
+	nonceMu.Unlock()
 
-	// Verify signature
+	// 签名验证（在锁外执行，避免阻塞其他地址的登录）
 	recoveredAddr, err := recoverAddress(message, req.Signature)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -218,18 +220,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Delete used nonce (P1: mutex-protected)
-	nonceMu.Lock()
-	delete(nonceStore, address)
-	nonceMu.Unlock()
-
 	// Get or create user
 	// P1: API Secret 以明文存储是 HMAC 认证模型的必要条件（与 Binance/OKX 一致）。
 	// 服务端需要原始 secret 来计算 HMAC-SHA256。bcrypt 不适用于此场景。
 	// 未来可考虑 AES-GCM 加密存储（application-level encryption-at-rest）。
+	// AUDIT-FIX GO-C02: 追踪是否新用户，仅新用户返回 API Secret
+	isNewUser := false
 	user, err := h.userRepo.GetByAddress(req.Address)
 	if err == gorm.ErrRecordNotFound {
 		// Create new user with API credentials
+		isNewUser = true
 		apiKey := generateAPIKey()
 		apiSecret := generateAPISecret()
 
@@ -284,12 +284,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	// Return API credentials and JWT tokens
+	// AUDIT-FIX GO-C02: 仅新用户首次登录返回 API Secret（HMAC 模型需用户自行保存）
+	// 已有用户重复登录不再泄露 secret
+	responseSecret := ""
+	if isNewUser {
+		responseSecret = user.APISecret
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"code": "0",
 		"msg":  "success",
 		"data": LoginResponse{
 			APIKey:       user.APIKey,
-			APISecret:    user.APISecret,
+			APISecret:    responseSecret,
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
 			Address:      user.Address,

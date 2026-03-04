@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * 钱包管理页面 (ETH 本位)
+ * 钱包管理页面 (BNB 本位)
  *
- * ETH 本位永续合约:
+ * BNB 本位永续合约:
  * - 所有余额以 ETH 计价 (1e18 精度)
  * - 充值: 发送 ETH 到派生钱包
  * - 提现: Settlement → 派生钱包 → 主钱包
@@ -19,8 +19,8 @@ import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
 import { useToast } from "@/components/shared/Toast";
 import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI } from "@/lib/contracts";
 
-// ETH 本位: 使用 WETH 或原生 ETH
-const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0x4200000000000000000000000000000000000006") as Address;
+// BNB 本位: 使用 WETH 或原生 ETH (BSC Testnet)
+const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
 
 export default function WalletPage() {
   const t = useTranslations("walletManagement");
@@ -101,7 +101,7 @@ export default function WalletPage() {
     return val.toFixed(6);
   };
 
-  // Handle deposit (ETH 本位: 存入 ETH/WETH)
+  // Handle deposit (BNB 本位: 存入 ETH/WETH)
   const handleDeposit = async () => {
     if (!depositAmount || parseFloat(depositAmount) <= 0) {
       setActionError(t("errors.invalidAmount"));
@@ -121,7 +121,7 @@ export default function WalletPage() {
     }
   };
 
-  // Handle withdraw (ETH 本位: Settlement → derived wallet → main wallet)
+  // Handle withdraw (BNB 本位: Settlement → derived wallet → main wallet)
   const handleWithdraw = async () => {
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
       setActionError(t("errors.invalidAmount"));
@@ -204,7 +204,7 @@ export default function WalletPage() {
                   <div>
                     <div className="text-okx-text-tertiary text-sm">{t("walletBalance")}</div>
                     <div className="text-xl font-bold text-okx-text-primary">
-                      Ξ {formatBalance(derivedWalletBalance)}
+                      BNB  {formatBalance(derivedWalletBalance)}
                     </div>
                   </div>
                 </div>
@@ -222,21 +222,21 @@ export default function WalletPage() {
                   <div>
                     <div className="text-okx-text-tertiary text-sm">{t("vaultBalance")}</div>
                     <div className="text-xl font-bold text-okx-text-primary">
-                      Ξ {formatBalance(vaultBalance)}
+                      BNB  {formatBalance(vaultBalance)}
                     </div>
                   </div>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-okx-text-tertiary">{t("available")}:</span>
-                  <span className="text-okx-up">Ξ {formatBalance(availableBalance)}</span>
+                  <span className="text-okx-up">BNB  {formatBalance(availableBalance)}</span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-okx-text-tertiary">Settlement:</span>
-                  <span className="text-blue-400">Ξ {formatBalance(settlementAvailable)}</span>
+                  <span className="text-blue-400">BNB  {formatBalance(settlementAvailable)}</span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-okx-text-tertiary">{t("locked")}:</span>
-                  <span className="text-yellow-500">Ξ {formatBalance(settlementLocked)}</span>
+                  <span className="text-yellow-500">BNB  {formatBalance(settlementLocked)}</span>
                 </div>
               </div>
             </div>
@@ -297,7 +297,7 @@ export default function WalletPage() {
                         </button>
                       </div>
                       <div className="text-okx-text-tertiary text-sm mt-2">
-                        {t("walletBalance")}: Ξ {formatBalance(derivedWalletBalance)}
+                        {t("walletBalance")}: BNB  {formatBalance(derivedWalletBalance)}
                       </div>
                     </div>
 
@@ -338,7 +338,7 @@ export default function WalletPage() {
                         </button>
                       </div>
                       <div className="text-okx-text-tertiary text-sm mt-2">
-                        {t("available")}: Ξ {formatBalance(availableBalance)}
+                        {t("available")}: BNB  {formatBalance(availableBalance)}
                       </div>
                     </div>
 

@@ -155,10 +155,10 @@ export function HunterLeaderboard({
   // 格式化地址
   const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
-  // 格式化利润 (ETH 本位: 1e18 精度)
+  // 格式化利润 (BNB 本位: 1e18 精度)
   const formatProfit = (profit: string) => {
     const p = Number(profit) / 1e18;
-    return `Ξ${p >= 1 ? p.toFixed(4) : p.toFixed(6)}`;
+    return `BNB ${p >= 1 ? p.toFixed(4) : p.toFixed(6)}`;
   };
 
   // 格式化时间
@@ -268,7 +268,7 @@ export function HunterLeaderboard({
               >
                 <span className="text-red-400">{formatAddress(liq.liquidatedTrader)}</span>
                 <span className="text-gray-500"> → </span>
-                <span className="text-gray-400">Ξ{(Number(liq.collateralLost) / 1e18).toFixed(4)}</span>
+                <span className="text-gray-400">BNB {(Number(liq.collateralLost) / 1e18).toFixed(4)}</span>
               </div>
             ))}
           </div>

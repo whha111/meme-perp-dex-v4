@@ -4,7 +4,7 @@
  */
 
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import type { Address, Hex } from "viem";
 
 const ME = "http://127.0.0.1:8081";
@@ -13,7 +13,7 @@ const DOGE = "0x1BC7c612e55b8CC8e24aA4041FAC3732d50C4C6F" as Address;
 const DOMAIN = {
   name: "MemePerp",
   version: "1",
-  chainId: baseSepolia.id,
+  chainId: bscTestnet.id,
   verifyingContract: "0x1660b3571fB04f16F70aea40ac0E908607061DBE" as Address,
 } as const;
 

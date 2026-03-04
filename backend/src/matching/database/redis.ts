@@ -273,6 +273,10 @@ export const Keys = {
   // Mode 2 PnL adjustments (链下盈亏调整，必须持久化)
   mode2Adjustment: (user: Address) => `mode2_adj:${user.toLowerCase()}`,
   allMode2Adjustments: () => "mode2_adj:all",
+
+  // Auth nonce keys (防重放攻击，必须持久化)
+  userNonce: (user: Address) => `nonce:${user.toLowerCase()}`,
+  allUserNonces: () => "nonces:all",
 };
 
 // ============================================================
@@ -1388,6 +1392,64 @@ export const Mode2AdjustmentRepo = {
 };
 
 // ============================================================
+// Nonce Repository (防重放攻击，持久化到 Redis — AUDIT-FIX ME-C06)
+// ============================================================
+
+export const NonceRepo = {
+  /**
+   * 获取用户当前 nonce (0n if not set)
+   */
+  async get(trader: Address): Promise<bigint> {
+    if (!isRedisConnected()) return 0n;
+    try {
+      const client = getRedisClient();
+      const value = await client.get(Keys.userNonce(trader));
+      return value ? BigInt(value) : 0n;
+    } catch (e) {
+      logger.error("Redis", `Failed to get nonce for ${trader}: ${e}`);
+      return 0n;
+    }
+  },
+
+  /**
+   * 设置用户 nonce (原子写入)
+   */
+  async set(trader: Address, nonce: bigint): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      const normalizedTrader = trader.toLowerCase();
+      await client.set(Keys.userNonce(trader), nonce.toString());
+      await client.sadd(Keys.allUserNonces(), normalizedTrader);
+    } catch (e) {
+      logger.error("Redis", `Failed to set nonce for ${trader}: ${e}`);
+    }
+  },
+
+  /**
+   * 加载所有用户 nonce (启动时恢复)
+   * @returns Map<lowercase address, nonce>
+   */
+  async getAll(): Promise<Map<string, bigint>> {
+    const result = new Map<string, bigint>();
+    if (!isRedisConnected()) return result;
+    try {
+      const client = getRedisClient();
+      const users = await client.smembers(Keys.allUserNonces());
+      for (const user of users) {
+        const value = await client.get(Keys.userNonce(user as Address));
+        if (value) {
+          result.set(user.toLowerCase(), BigInt(value));
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load all nonces: ${e}`);
+    }
+    return result;
+  },
+};
+
+// ============================================================
 // 定期清理任务
 // ============================================================
 
@@ -1486,6 +1548,7 @@ export default {
   MarketStatsRepo,
   WalletRepo,
   OrderMarginRepo,
+  NonceRepo,
   // 工具函数
   safeBigInt,
   withLock,

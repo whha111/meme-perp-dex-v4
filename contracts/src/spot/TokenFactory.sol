@@ -148,8 +148,8 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     // Liquidation 地址（毕业后启用清算奖励）
     address public liquidation;
 
-    // WETH 地址 (Base Sepolia)
-    address public constant WETH = 0x4200000000000000000000000000000000000006;
+    // WBNB 地址 (BSC Testnet)
+    address public constant WETH = 0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd;
 
     // P0-2: 毕业后的 Uniswap V2 Pair 地址 (token => pair)
     mapping(address => address) public uniswapPairs;
@@ -418,24 +418,24 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
 
         if (tokensOut < minTokensOut) revert InsufficientLiquidity(tokensOut, minTokensOut);
 
-        // 分配手续费 (创建者25% + 邀请人10% + 平台65%)
-        if (fee > 0) {
-            _distributeTradingFee(tokenAddress, buyer, fee);
-        }
-
-        // 退还多余 ETH
-        if (refundAmount > 0) {
-            (bool refundSuccess,) = buyer.call{value: refundAmount}("");
-            require(refundSuccess, "Refund failed");
-        }
-
-        // 更新状态
+        // AUDIT-FIX SC-C01: CEI 模式 — 状态更新在外部调用之前
         state.realETHReserve += amountIn;
         state.realTokenReserve -= tokensOut;
         state.soldTokens += tokensOut;
 
-        // 铸造代币给买家
+        // 铸造代币给买家 (内部调用，安全)
         IMemeTokenV2(tokenAddress).mint(buyer, tokensOut);
+
+        // 分配手续费 (创建者25% + 邀请人10% + 平台65%) — 包含 ETH 外部调用
+        if (fee > 0) {
+            _distributeTradingFee(tokenAddress, buyer, fee);
+        }
+
+        // 退还多余 ETH — 外部调用在状态更新之后
+        if (refundAmount > 0) {
+            (bool refundSuccess,) = buyer.call{value: refundAmount}("");
+            require(refundSuccess, "Refund failed");
+        }
 
         emit Trade(tokenAddress, buyer, true, amountIn, tokensOut, virtualEth, virtualToken, block.timestamp);
 
@@ -503,20 +503,22 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         // 转移代币到合约
         IERC20(tokenAddress).safeTransferFrom(seller, address(this), tokenAmount);
 
-        // 分配手续费 (创建者25% + 邀请人10% + 平台65%)
-        _distributeTradingFee(tokenAddress, seller, fee);
-
-        // 转移 ETH 给卖家
-        (bool success,) = seller.call{value: ethOut}("");
-        require(success, "ETH transfer failed");
-
-        // 更新状态
+        // AUDIT-FIX SC-C01: CEI (Checks-Effects-Interactions) 模式
+        // 状态更新必须在 ETH 外部调用之前完成，防止重入攻击
+        // (合约已有 nonReentrant 保护，此为纵深防御)
         state.realETHReserve -= ethOutTotal;
         state.realTokenReserve += tokenAmount;
         state.soldTokens -= tokenAmount;
 
-        // 销毁代币
+        // 销毁代币 (内部调用，安全)
         IMemeTokenV2(tokenAddress).burn(tokenAmount);
+
+        // 分配手续费 (创建者25% + 邀请人10% + 平台65%) — 包含 ETH 外部调用
+        _distributeTradingFee(tokenAddress, seller, fee);
+
+        // 转移 ETH 给卖家 — 外部调用在状态更新之后
+        (bool success,) = seller.call{value: ethOut}("");
+        require(success, "ETH transfer failed");
 
         emit Trade(tokenAddress, seller, false, ethOut, tokenAmount, virtualEth, virtualToken, block.timestamp);
 

@@ -35,15 +35,8 @@ const nextConfig = {
     ];
   },
 
-  // 代理外部 API 避免浏览器 CORS 限制
-  async rewrites() {
-    return [
-      {
-        source: '/api/proxy/binance/:path*',
-        destination: 'https://api.binance.com/api/:path*',
-      },
-    ];
-  },
+  // BNB 价格 API 已升级为 Route Handler (/api/bnb-price)
+  // 不再需要 rewrites 代理 — 服务端直接聚合 Binance US + OKX
 
   // 关闭 Strict Mode 避免双重挂载导致的 WebSocket 连接/断开循环
   reactStrictMode: false,

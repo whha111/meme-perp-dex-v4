@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * PerpetualOrderPanelV2 - 用户对赌模式交易面板 (ETH 本位)
+ * PerpetualOrderPanelV2 - 用户对赌模式交易面板 (BNB 本位)
  *
  * 新架构流程：
  * 1. 用户签名 EIP-712 订单（链下，不花 Gas）
  * 2. 撮合引擎配对多空订单（链下）
  * 3. 撮合引擎批量提交配对结果（链上）
- * 4. Settlement 合约验证签名并执行 ETH 结算
+ * 4. Settlement 合约验证签名并执行 BNB 结算
  * 5. 盈亏直接在多空之间转移，保险基金仅用于穿仓
  *
- * ETH 本位:
- * - 保证金/PnL 以 ETH 计价 (1e18 精度)
- * - 价格为 Token/ETH (从 Bonding Curve 直接获取)
+ * BNB 本位:
+ * - 保证金/PnL 以 BNB 计价 (1e18 精度)
+ * - 价格为 Token/BNB (从 Bonding Curve 直接获取)
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from "react";
@@ -38,8 +38,9 @@ import { usePoolState } from "@/hooks/spot/usePoolState";
 import { useWalletBalance } from "@/contexts/WalletBalanceContext";
 import { Copy, Check, Key, RefreshCw, ExternalLink } from "lucide-react";
 
-// Leverage options
-const LEVERAGE_OPTIONS = [1, 2, 3, 5, 10, 20, 50, 75, 100];
+// AUDIT-FIX H-06: Leverage options must match engine MAX_LEVERAGE (10x).
+// Previously allowed up to 100x which caused confusing UX failures when engine rejected >10x.
+const LEVERAGE_OPTIONS = [1, 2, 3, 5, 10];
 
 interface PerpetualOrderPanelV2Props {
   symbol: string;
@@ -142,8 +143,8 @@ export function PerpetualOrderPanelV2({
   const [showLeverageSlider, setShowLeverageSlider] = useState(false);
   const [amountError, setAmountError] = useState<string | null>(null);
 
-  // 单位选择: ETH / 代币 (ETH 本位)
-  const [amountUnit, setAmountUnit] = useState<"ETH" | "TOKEN">("ETH");
+  // 单位选择: BNB / 代币 (BNB 本位)
+  const [amountUnit, setAmountUnit] = useState<"BNB" | "TOKEN">("BNB");
 
   // Order type state (市价/限价)
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -204,7 +205,7 @@ export function PerpetualOrderPanelV2({
     let valueUSD = 0;  // 仅用于 UI 参考显示
     let tokenAmount = 0;
 
-    if (amountUnit === "ETH") {
+    if (amountUnit === "BNB") {
       valueETH = inputAmount;
       valueUSD = inputAmount * (ethPrice || 0);  // 仅参考
       tokenAmount = valueUSD / tokenPriceUSD;
@@ -227,8 +228,8 @@ export function PerpetualOrderPanelV2({
 
   // 格式化保证金显示 (ETH 本位)
   const requiredMarginDisplay = useMemo(() => {
-    if (requiredMarginETH <= 0) return "Ξ0.0000";
-    return `Ξ${requiredMarginETH >= 1 ? requiredMarginETH.toFixed(4) : requiredMarginETH.toFixed(6)}`;
+    if (requiredMarginETH <= 0) return "BNB 0.0000";
+    return `BNB ${requiredMarginETH >= 1 ? requiredMarginETH.toFixed(4) : requiredMarginETH.toFixed(6)}`;
   }, [requiredMarginETH]);
 
   // Check if balance is sufficient
@@ -301,12 +302,15 @@ export function PerpetualOrderPanelV2({
       // ETH 本位：传 ETH 名义价值（1e18 精度）
       // 合约 Settlement 计算保证金：collateral = size / leverage
       // 所以 size 必须是 ETH 价值（1e18 精度）
-      const sizeEthString = positionValueETH.toFixed(18);
+      // AUDIT-FIX FE-C02: 当单位为 ETH 时直接传原始字符串，避免 parseFloat 精度丢失
+      const sizeEthString = amountUnit === "BNB"
+        ? amount  // 直接用用户输入字符串，不经过 float 往返
+        : positionValueETH.toFixed(18);
 
-      console.log(`[Order] Unit: ${amountUnit}, Input: ${amount}, Value: Ξ${positionValueETH.toFixed(4)} (~$${positionValueUSD.toFixed(2)}), Token Amount: ${positionSizeToken.toLocaleString()}, Size for contract: ${sizeEthString} ETH`);
+      console.log(`[Order] Unit: ${amountUnit}, Input: ${amount}, Value: BNB ${positionValueETH.toFixed(4)} (~$${positionValueUSD.toFixed(2)}), Token Amount: ${positionSizeToken.toLocaleString()}, Size for contract: ${sizeEthString} BNB`);
 
       showToast(
-        `正在签名 ${isLong ? "做多" : "做空"} Ξ${positionValueETH.toFixed(4)} (~$${positionValueUSD.toFixed(2)})...`,
+        `正在签名 ${isLong ? "做多" : "做空"} BNB ${positionValueETH.toFixed(4)} (~$${positionValueUSD.toFixed(2)})...`,
         "info"
       );
 
@@ -439,7 +443,7 @@ export function PerpetualOrderPanelV2({
               <span className="text-okx-text-secondary text-[12px]">{tw("account")}</span>
               <div className="flex items-center gap-2">
                 <span className="text-okx-text-primary text-[14px] font-semibold">
-                  Ξ{availableBalanceETH.toFixed(4)}
+                  BNB {availableBalanceETH.toFixed(4)}
                 </span>
               </div>
             </div>
@@ -448,7 +452,7 @@ export function PerpetualOrderPanelV2({
                 onClick={() => setShowDepositModal(true)}
                 className="flex-1 py-2 text-[12px] font-medium bg-[#A3E635] hover:bg-[#84cc16] text-black rounded transition-colors"
               >
-                充值 ETH/WETH
+                充值 BNB/WBNB
               </button>
               <button
                 onClick={() => setShowSettings(true)}
@@ -751,7 +755,7 @@ export function PerpetualOrderPanelV2({
               <span className="text-okx-text-tertiary">
                 {t("price") || "Price"}
               </span>
-              <span className="text-okx-text-tertiary">ETH</span>
+              <span className="text-okx-text-tertiary">BNB</span>
             </div>
             <input
               type="text"
@@ -769,7 +773,7 @@ export function PerpetualOrderPanelV2({
             <span className="text-okx-text-tertiary">开仓数量</span>
             {/* 单位切换按钮 (ETH 本位) */}
             <div className="flex gap-1 bg-okx-bg-tertiary rounded p-0.5">
-              {(["ETH", "TOKEN"] as const).map((unit) => (
+              {(["BNB", "TOKEN"] as const).map((unit) => (
                 <button
                   key={unit}
                   onClick={() => {
@@ -793,7 +797,7 @@ export function PerpetualOrderPanelV2({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder={
-                amountUnit === "ETH" ? "输入 ETH 数量" :
+                amountUnit === "BNB" ? "输入 BNB 数量" :
                 "输入代币数量"
               }
               className={`w-full bg-okx-bg-hover border rounded px-3 py-2 pr-20 text-[14px] text-okx-text-primary placeholder:text-okx-text-tertiary outline-none ${
@@ -811,7 +815,7 @@ export function PerpetualOrderPanelV2({
           )}
           {/* 快捷按钮 - 根据单位显示不同选项 (ETH 本位) */}
           <div className="flex gap-2 mt-2">
-            {amountUnit === "ETH" && [0.01, 0.05, 0.1, 0.5].map((val) => (
+            {amountUnit === "BNB" && [0.01, 0.05, 0.1, 0.5].map((val) => (
               <button
                 key={val}
                 onClick={() => setAmount(val.toString())}
@@ -857,7 +861,7 @@ export function PerpetualOrderPanelV2({
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-okx-up">{t("takeProfit") || "Take Profit"}</span>
-                  <span className="text-okx-text-tertiary">ETH</span>
+                  <span className="text-okx-text-tertiary">BNB</span>
                 </div>
                 <input
                   type="text"
@@ -871,7 +875,7 @@ export function PerpetualOrderPanelV2({
               <div>
                 <div className="flex justify-between text-[11px] mb-1">
                   <span className="text-okx-down">{t("stopLoss") || "Stop Loss"}</span>
-                  <span className="text-okx-text-tertiary">ETH</span>
+                  <span className="text-okx-text-tertiary">BNB</span>
                 </div>
                 <input
                   type="text"
@@ -898,7 +902,7 @@ export function PerpetualOrderPanelV2({
           <div className="flex justify-between">
             <span className="text-okx-text-tertiary">仓位价值</span>
             <span className="text-okx-text-primary">
-              ≈ Ξ{positionValueETH.toFixed(4)} (~${positionValueUSD.toFixed(2)})
+              ≈ BNB {positionValueETH.toFixed(4)} (~${positionValueUSD.toFixed(2)})
             </span>
           </div>
           {/* 代币价格（如果选择代币单位时显示）- ETH 本位: Token/ETH 比率 */}
@@ -906,7 +910,7 @@ export function PerpetualOrderPanelV2({
             <div className="flex justify-between">
               <span className="text-okx-text-tertiary">代币价格</span>
               <span className="text-okx-text-secondary">
-                {formatTokenPrice(tokenPriceETH)} ETH
+                {formatTokenPrice(tokenPriceETH)} BNB
               </span>
             </div>
           )}
@@ -932,7 +936,7 @@ export function PerpetualOrderPanelV2({
           <div className="flex justify-between">
             <span className="text-okx-text-tertiary">手续费 (0.1%)</span>
             <span className="text-okx-text-primary">
-              Ξ{(positionValueETH * 0.001).toFixed(6)}
+              BNB {(positionValueETH * 0.001).toFixed(6)}
             </span>
           </div>
           {/* 合计所需 */}
@@ -950,7 +954,7 @@ export function PerpetualOrderPanelV2({
                 hasSufficientBalance ? "text-okx-text-primary" : "text-okx-down"
               }`}
             >
-              Ξ{availableBalanceETH.toFixed(4)}
+              BNB {availableBalanceETH.toFixed(4)}
             </span>
           </div>
         </div>
@@ -1048,23 +1052,23 @@ export function PerpetualOrderPanelV2({
                       {pos.isLong ? "LONG" : "SHORT"} {leverage}x
                     </span>
                     <span className="text-okx-text-secondary">
-                      Ξ{sizeETH.toFixed(4)}
+                      BNB {sizeETH.toFixed(4)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-okx-text-tertiary">
-                      Entry: {formatTokenPrice(entryPrice)} ETH
+                      Entry: {formatTokenPrice(entryPrice)} BNB
                     </span>
                     <span className="text-okx-text-secondary">
-                      Value: Ξ{sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)}
+                      Value: BNB {sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-okx-text-tertiary">
-                      Margin: Ξ{collateralETH.toFixed(4)}
+                      Margin: BNB {collateralETH.toFixed(4)}
                     </span>
                     <span className={pnlETH >= 0 ? "text-okx-up" : "text-okx-down"}>
-                      PnL: {pnlETH >= 0 ? "+" : ""}Ξ{pnlETH.toFixed(4)}
+                      PnL: {pnlETH >= 0 ? "+" : ""}BNB {pnlETH.toFixed(4)}
                     </span>
                   </div>
                   <div className="flex gap-2">

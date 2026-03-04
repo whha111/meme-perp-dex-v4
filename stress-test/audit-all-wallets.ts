@@ -12,7 +12,7 @@
  *  - Deployer balance
  */
 import { createPublicClient, http, formatEther, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { readFileSync } from "fs";
 import {
   CONTRACTS,
@@ -24,7 +24,7 @@ import {
 } from "./config.js";
 
 const client = createPublicClient({
-  chain: baseSepolia,
+  chain: bscTestnet,
   transport: http(RPC.http),
 });
 

@@ -6,7 +6,7 @@
  * Reuses patterns from marketMaker.ts and buySpot.ts.
  */
 import { parseEther, formatEther, erc20Abi, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { getRpcPool } from "../utils/rpc-pool.js";
 import { type StressWallet, pickRandom, randInt } from "../utils/wallet-manager.js";
@@ -148,7 +148,7 @@ export class SpotEngine {
 
     const hash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: CONTRACTS.tokenFactory,
         abi: TOKEN_FACTORY_ABI,
         functionName: "buy",
@@ -223,7 +223,7 @@ export class SpotEngine {
     // Approve (must wait for receipt before selling)
     const approveHash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: token,
         abi: erc20Abi,
         functionName: "approve",
@@ -236,7 +236,7 @@ export class SpotEngine {
     // Sell
     const hash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: CONTRACTS.tokenFactory,
         abi: TOKEN_FACTORY_ABI,
         functionName: "sell",
@@ -275,7 +275,7 @@ export class SpotEngine {
     try {
       const hash = await pool.call(() =>
         walletClient.writeContract({
-          chain: baseSepolia,
+          chain: bscTestnet,
           address: CONTRACTS.tokenFactory,
           abi: TOKEN_FACTORY_ABI,
           functionName: "createToken",

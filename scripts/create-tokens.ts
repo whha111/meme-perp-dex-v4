@@ -7,9 +7,9 @@ import {
   type Address, type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 
-const RPC_URL = "https://base-sepolia.g.alchemy.com/v2/Dr8sMe-1MYIF7jBYuZZj8PMOPAAeJ16d";
+const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const TOKEN_FACTORY = (process.env.TOKEN_FACTORY_ADDRESS || "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8") as Address;
 const DEPLOYER_KEY = (process.env.PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY) as Hex;
 
@@ -48,9 +48,9 @@ const TF_ABI = [
 ] as const;
 
 const transport = http(RPC_URL, { timeout: 30_000 });
-const pub = createPublicClient({ chain: baseSepolia, transport });
+const pub = createPublicClient({ chain: bscTestnet, transport });
 const account = privateKeyToAccount(DEPLOYER_KEY);
-const wallet = createWalletClient({ account, chain: baseSepolia, transport });
+const wallet = createWalletClient({ account, chain: bscTestnet, transport });
 
 const TOKENS_TO_CREATE = [
   { name: "Dogecoin", symbol: "DOGE", uri: "ipfs://doge-metadata" },

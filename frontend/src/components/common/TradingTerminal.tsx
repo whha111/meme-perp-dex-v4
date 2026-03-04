@@ -38,24 +38,24 @@ function formatUsdCompact(usd: number): string {
   return usd.toFixed(6);
 }
 
-// 格式化 ETH 本位价格，使用下标表示法 (e.g., 0.0₅62087 ETH)
-function formatSmallPriceETH(priceEth: number): string {
-  if (priceEth <= 0) return "0 ETH";
-  if (priceEth >= 0.01) return priceEth.toFixed(4) + " ETH";
-  if (priceEth >= 0.0001) return priceEth.toFixed(6) + " ETH";
+// 格式化 BNB 本位价格，使用下标表示法 (e.g., 0.0₅62087 BNB)
+function formatSmallPriceBNB(priceBnb: number): string {
+  if (priceBnb <= 0) return "0 BNB";
+  if (priceBnb >= 0.01) return priceBnb.toFixed(4) + " BNB";
+  if (priceBnb >= 0.0001) return priceBnb.toFixed(6) + " BNB";
 
   // 对于非常小的价格，使用下标表示法
-  const priceStr = priceEth.toFixed(18);
+  const priceStr = priceBnb.toFixed(18);
   const match = priceStr.match(/^0\.(0*)([1-9]\d*)/);
   if (match) {
     const zeroCount = match[1].length;
     const significantDigits = match[2].slice(0, 5); // 保留5位有效数字
     const subscripts = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
     const subscriptNum = zeroCount.toString().split('').map(d => subscripts[parseInt(d)]).join('');
-    return `0.0${subscriptNum}${significantDigits} ETH`;
+    return `0.0${subscriptNum}${significantDigits} BNB`;
   }
 
-  return priceEth.toFixed(8) + " ETH";
+  return priceBnb.toFixed(8) + " BNB";
 }
 
 // 测试代币常用的占位域名，跳过 fetch 避免 CORS 报错
@@ -64,11 +64,11 @@ const BLOCKED_METADATA_DOMAINS = ['example.com', 'example.org', 'example.net'];
 // 模块级缓存 — 组件 remount 后不丢失，避免重复请求已失败的 URI
 const failedMetadataURIs = new Set<string>();
 
-// 格式化 ETH 金额为显示值
-function formatETHValue(ethAmount: number): string {
-  if (ethAmount <= 0) return "0 ETH";
-  if (ethAmount >= 1) return ethAmount.toFixed(4) + " ETH";
-  return ethAmount.toFixed(5) + " ETH";
+// 格式化 BNB 金额为显示值
+function formatBNBValue(bnbAmount: number): string {
+  if (bnbAmount <= 0) return "0 BNB";
+  if (bnbAmount >= 1) return bnbAmount.toFixed(4) + " BNB";
+  return bnbAmount.toFixed(5) + " BNB";
 }
 
 // 动态导入图表组件以避免 SSR 问题并减小初始包体积
@@ -108,8 +108,8 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
   const tokenInfo = useTokenInfo(pureTokenAddress || symbol);
   const displaySymbol = getTokenDisplayName(pureTokenAddress || symbol, tokenInfo);
 
-  // 获取实时 ETH 价格
-  const { price: ethPriceUsd } = useETHPrice();
+  // 获取实时 BNB 价格
+  const { price: bnbPriceUsd } = useETHPrice();
   const poolData = usePoolState(isValidTokenAddress ? pureTokenAddress : undefined);
 
   // 获取链上交易记录
@@ -270,30 +270,30 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
   //   }
   // }, [instId, addRecentInstrument]);
 
-  // [DEBUG] 使用 ref 来存储 displaySymbol 和 ethPriceUsd，避免 callback 重建
+  // [DEBUG] 使用 ref 来存储 displaySymbol 和 bnbPriceUsd，避免 callback 重建
   const displaySymbolRef = React.useRef(displaySymbol);
-  const ethPriceUsdRef = React.useRef(ethPriceUsd);
+  const bnbPriceUsdRef = React.useRef(bnbPriceUsd);
 
   React.useEffect(() => {
     displaySymbolRef.current = displaySymbol;
-    ethPriceUsdRef.current = ethPriceUsd;
-  }, [displaySymbol, ethPriceUsd]);
+    bnbPriceUsdRef.current = bnbPriceUsd;
+  }, [displaySymbol, bnbPriceUsd]);
 
   // 实时交易流处理（带去重逻辑）- 使用 ref 避免重建
   const handleRealtimeTrade = useCallback((trade: TradeEvent) => {
     const currentDisplaySymbol = displaySymbolRef.current;
 
-    const priceEth = parseFloat(trade.newPrice) / 1e18;
-    const ethAmount = parseFloat(trade.ethAmount) / 1e18;
+    const priceBnb = parseFloat(trade.newPrice) / 1e18;
+    const bnbAmount = parseFloat(trade.ethAmount) / 1e18;
 
     const newTrade: Trade = {
       timestamp: trade.timestamp * 1000,
       type: trade.tradeType.toLowerCase() as "buy" | "sell",
-      totalValue: formatETHValue(ethAmount),
-      price: formatSmallPriceETH(priceEth),
+      totalValue: formatBNBValue(bnbAmount),
+      price: formatSmallPriceBNB(priceBnb),
       // AUDIT-FIX FC-C02: 与历史交易格式一致 — 先 /1e18 得到实际 token 数, 再 /1e6 + "M" 后缀
       quantity: (trade.tradeType === "BUY" ? "+" : "-") + (parseFloat(trade.tokenAmount) / 1e18 / 1e6).toFixed(2) + "M " + currentDisplaySymbol,
-      quantitySol: (trade.tradeType === "BUY" ? "-" : "+") + ethAmount.toFixed(5) + " ETH",
+      quantitySol: (trade.tradeType === "BUY" ? "-" : "+") + bnbAmount.toFixed(5) + " BNB",
       address: trade.traderAddress.slice(0, 6) + "..." + trade.traderAddress.slice(-4),
       txHash: trade.txHash,
       isNew: true,
@@ -338,17 +338,17 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
       return response.transactions.map((tx) => {
         const isBuy = tx.transaction_type === "BUY";
         const trader = isBuy ? tx.buyer_wallet : tx.seller_wallet;
-        const priceEth = parseFloat(tx.price) / 1e18;
+        const priceBnb = parseFloat(tx.price) / 1e18;
         const tokenAmount = parseFloat(tx.token_amount) / 1e18;
-        const ethAmount = priceEth * tokenAmount;
+        const bnbAmount = priceBnb * tokenAmount;
 
         return {
           timestamp: Number(tx.transaction_timestamp) * 1000,
           type: isBuy ? "buy" : "sell",
-          totalValue: formatETHValue(ethAmount),
-          price: formatSmallPriceETH(priceEth),
+          totalValue: formatBNBValue(bnbAmount),
+          price: formatSmallPriceBNB(priceBnb),
           quantity: (isBuy ? "+" : "-") + (tokenAmount / 1e6).toFixed(2) + "M " + displaySymbol,
-          quantitySol: (isBuy ? "-" : "+") + ethAmount.toFixed(5) + " ETH",
+          quantitySol: (isBuy ? "-" : "+") + bnbAmount.toFixed(5) + " BNB",
           address: (trader || "0x0000...0000").slice(0, 6) + "..." + (trader || "0x0000").slice(-4),
           txHash: tx.tx_hash,
         };
@@ -427,7 +427,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
         <div className="bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-2">
           {headerSlot}
           <span className="ml-2 text-[11px] text-okx-text-secondary">
-            ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * ethPriceUsd)}
+            ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * bnbPriceUsd)}
           </span>
         </div>
       ) : (
@@ -436,7 +436,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
            <span className="text-okx-text-primary font-bold">{displaySymbol}</span>
            <span className="mx-1">——</span>
            <span>
-             ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * ethPriceUsd)}
+             ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * bnbPriceUsd)}
            </span>
         </div>
       )}
@@ -514,16 +514,16 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
                          for (const trade of sortedOnChain) {
                            if (trade.transactionHash && !seenTxHashes.has(trade.transactionHash)) {
                              seenTxHashes.add(trade.transactionHash);
-                             const priceEth = trade.price; // TOKEN/ETH 价格
-                             const ethAmount = Number(trade.ethAmount) / 1e18;
+                             const priceBnb = trade.price; // TOKEN/BNB 价格
+                             const bnbAmount = Number(trade.ethAmount) / 1e18;
                              const tokenAmount = Number(trade.tokenAmount) / 1e18;
                              merged.push({
                                timestamp: trade.timestamp * 1000,
                                type: trade.isBuy ? "buy" : "sell",
-                               totalValue: formatETHValue(ethAmount),
-                               price: formatSmallPriceETH(priceEth),
+                               totalValue: formatBNBValue(bnbAmount),
+                               price: formatSmallPriceBNB(priceBnb),
                                quantity: (trade.isBuy ? "+" : "-") + (tokenAmount / 1e6).toFixed(2) + "M " + displaySymbol,
-                               quantitySol: (trade.isBuy ? "-" : "+") + ethAmount.toFixed(5) + " ETH",
+                               quantitySol: (trade.isBuy ? "-" : "+") + bnbAmount.toFixed(5) + " BNB",
                                address: trade.trader.slice(0, 6) + "..." + trade.trader.slice(-4),
                                txHash: trade.transactionHash,
                                isNew: Date.now() - trade.timestamp * 1000 < 30000, // 30秒内的交易标记为新
@@ -570,7 +570,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
                  {activeTab === "profitAddresses" && (
                    <ProfitableAddresses
                      tokenAddress={pureTokenAddress ?? undefined}
-                     ethPriceUsd={ethPriceUsd}
+                     bnbPriceUsd={bnbPriceUsd}
                    />
                  )}
                  {activeTab === "watchedAddresses" && (
@@ -584,14 +584,14 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
                      virtualETHReserve={poolData.virtualETHReserve}
                      virtualTokenReserve={poolData.virtualTokenReserve}
                      currentPrice={currentPrice}
-                     ethPriceUsd={ethPriceUsd}
+                     bnbPriceUsd={bnbPriceUsd}
                    />
                  )}
                  {activeTab === "myPosition" && (
                    <MyHoldings
                      tokenAddress={pureTokenAddress ?? undefined}
                      currentPrice={currentPrice}
-                     ethPriceUsd={ethPriceUsd}
+                     bnbPriceUsd={bnbPriceUsd}
                      displaySymbol={displaySymbol}
                    />
                  )}

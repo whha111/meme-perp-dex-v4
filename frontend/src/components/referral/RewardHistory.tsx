@@ -127,7 +127,7 @@ export function RewardHistory({ address }: RewardHistoryProps) {
                     </div>
                     {reward.feeAmount !== "0.000000" && (
                       <div className="text-xs text-okx-text-tertiary mt-1">
-                        Fee: {reward.feeAmount} ETH
+                        Fee: {reward.feeAmount} BNB
                       </div>
                     )}
                   </>
@@ -138,7 +138,7 @@ export function RewardHistory({ address }: RewardHistoryProps) {
             </div>
             <div className="text-right">
               <div className={`font-bold ${reward.type === "claim" ? "text-purple-500" : "text-okx-up"}`}>
-                +{reward.rewardAmount} ETH
+                +{reward.rewardAmount} BNB
               </div>
               <div className="text-xs text-okx-text-tertiary">{reward.timestamp}</div>
             </div>

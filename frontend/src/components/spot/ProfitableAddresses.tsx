@@ -8,7 +8,7 @@ import { formatUnits } from "viem";
 
 interface ProfitableAddressesProps {
   tokenAddress?: string;
-  ethPriceUsd: number;
+  bnbPriceUsd: number;
   className?: string;
 }
 
@@ -35,7 +35,7 @@ interface HoldersResponse {
 
 export function ProfitableAddresses({
   tokenAddress,
-  ethPriceUsd,
+  bnbPriceUsd,
   className,
 }: ProfitableAddressesProps) {
   const t = useTranslations();
@@ -78,7 +78,7 @@ export function ProfitableAddresses({
     if (!pnlWei) return "$0.00";
     try {
       const ethValue = Number(formatUnits(BigInt(pnlWei), 18));
-      const usdValue = ethValue * ethPriceUsd;
+      const usdValue = ethValue * bnbPriceUsd;
       if (Math.abs(usdValue) >= 1000) return `$${(usdValue / 1000).toFixed(1)}K`;
       return `$${usdValue.toFixed(2)}`;
     } catch {

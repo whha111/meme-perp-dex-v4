@@ -12,11 +12,11 @@ import "../src/common/PriceFeed.sol";
  * Usage:
  *   cd contracts
  *   forge script script/DeployFreshTokenFactory.s.sol \
- *     --rpc-url https://base-sepolia-rpc.publicnode.com --broadcast --slow -vvv
+ *     --rpc-url $BSC_TESTNET_RPC_URL --broadcast --slow -vvv
  */
 contract DeployFreshTokenFactory is Script {
-    // Base Sepolia Uniswap V2 Router
-    address constant UNISWAP_ROUTER = 0x8cFe327CEc66d1C090Dd72bd0FF11d690C33a2Eb;
+    // BSC Testnet PancakeSwap V2 Router
+    address constant UNISWAP_ROUTER = 0xD99D1c33F9fC3444f8101754aBC46c52416550D1;
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");

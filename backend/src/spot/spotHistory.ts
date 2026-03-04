@@ -577,17 +577,17 @@ export async function backfillHistoricalTrades(
   ethPriceUsd: number = 2500
 ): Promise<number> {
   const { createPublicClient, http, parseAbiItem } = await import("viem");
-  const { baseSepolia } = await import("viem/chains");
+  const { bscTestnet } = await import("viem/chains");
 
-  // Always use publicnode.com for backfill - Alchemy free tier only allows 10 blocks!
-  const RPC_URL = "https://base-sepolia-rpc.publicnode.com";
+  // BSC Testnet RPC for backfill
+  const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
   // 使用部署的 TokenFactory 地址
   const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8") as Address;
 
   logger.info("SpotHistory", `Using TokenFactory: ${TOKEN_FACTORY_ADDRESS}`);
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
 

@@ -280,7 +280,7 @@ export function validateAndExtractWalletFromTXT(
  */
 export function validateChainId(
   chainId: number, 
-  allowedChains: number[] = [84532, 8453] // 默认允许 Base Sepolia 和 Base Mainnet
+  allowedChains: number[] = [97, 56] // 默认允许 BSC Testnet 和 BSC Mainnet
 ): boolean {
   return allowedChains.includes(chainId);
 }

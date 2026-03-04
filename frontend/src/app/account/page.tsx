@@ -20,7 +20,7 @@ export default function AccountPage() {
     balance,
   } = usePerpetualV2();
 
-  // Calculate balances from V2 hook (ETH, 18 decimals)
+  // Calculate balances from V2 hook (BNB, 18 decimals)
   const availableBalance = balance?.available || 0n;
   const lockedMargin = balance?.locked || 0n;
   const vaultBalance = availableBalance + lockedMargin;
@@ -46,14 +46,14 @@ export default function AccountPage() {
     );
   }
 
-  // Format ETH balance (18 decimals) for Settlement contract
+  // Format BNB balance (18 decimals) for Settlement contract
   const formatBalance = (balance: bigint | string | null | undefined) => {
     if (!balance) return "0.0000";
     const value = typeof balance === "string" ? BigInt(balance) : balance;
     return parseFloat(formatUnits(value, 18)).toFixed(4);
   };
 
-  // Format ETH balance (18 decimals) for wallet
+  // Format BNB balance (18 decimals) for wallet
   const formatEthBalance = (balance: bigint | null | undefined) => {
     if (!balance) return "0.0000";
     return parseFloat(formatUnits(balance, 18)).toFixed(4);
@@ -85,19 +85,19 @@ export default function AccountPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
                 <p className="text-okx-text-tertiary text-sm mb-1">钱包余额</p>
-                <p className="text-xl font-bold">{formatEthBalance(walletBalance?.value)} ETH</p>
+                <p className="text-xl font-bold">{formatEthBalance(walletBalance?.value)} BNB</p>
               </div>
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
                 <p className="text-okx-text-tertiary text-sm mb-1">合约账户</p>
-                <p className="text-xl font-bold">Ξ{formatBalance(vaultBalance)}</p>
+                <p className="text-xl font-bold">BNB {formatBalance(vaultBalance)}</p>
               </div>
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
                 <p className="text-okx-text-tertiary text-sm mb-1">可用余额</p>
-                <p className="text-xl font-bold text-okx-up">Ξ{formatBalance(availableBalance)}</p>
+                <p className="text-xl font-bold text-okx-up">BNB {formatBalance(availableBalance)}</p>
               </div>
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
                 <p className="text-okx-text-tertiary text-sm mb-1">已锁定保证金</p>
-                <p className="text-xl font-bold">Ξ{formatBalance(lockedMargin)}</p>
+                <p className="text-xl font-bold">BNB {formatBalance(lockedMargin)}</p>
               </div>
             </div>
 
@@ -128,11 +128,11 @@ export default function AccountPage() {
                               {pos.isLong ? "多" : "空"}
                             </td>
                             <td className="text-right py-3">{formatBalance(pos.size)}</td>
-                            <td className="text-right py-3">Ξ{formatBalance(pos.collateral)}</td>
+                            <td className="text-right py-3">BNB {formatBalance(pos.collateral)}</td>
                             <td className="text-right py-3">{parseFloat(pos.leverage)}x</td>
-                            <td className="text-right py-3">{formatBalance(pos.entryPrice)} ETH</td>
+                            <td className="text-right py-3">{formatBalance(pos.entryPrice)} BNB</td>
                             <td className={`text-right py-3 ${positionPnL >= 0n ? "text-okx-up" : "text-okx-down"}`}>
-                              {positionPnL >= 0n ? "+" : ""}Ξ{formatBalance(positionPnL)}
+                              {positionPnL >= 0n ? "+" : ""}BNB {formatBalance(positionPnL)}
                             </td>
                           </tr>
                         );
@@ -141,7 +141,7 @@ export default function AccountPage() {
                       <tr className="border-t border-okx-border-primary font-bold">
                         <td colSpan={6} className="text-right py-3">总盈亏:</td>
                         <td className={`text-right py-3 ${totalPnL >= 0n ? "text-okx-up" : "text-okx-down"}`}>
-                          {totalPnL >= 0n ? "+" : ""}Ξ{formatBalance(totalPnL)}
+                          {totalPnL >= 0n ? "+" : ""}BNB {formatBalance(totalPnL)}
                         </td>
                       </tr>
                     </tbody>

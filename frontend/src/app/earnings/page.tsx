@@ -86,7 +86,7 @@ function Leaderboard({
                     <div className="text-xs font-bold text-okx-up">
                       {parseFloat(entry.earnings).toFixed(4)}
                     </div>
-                    <div className="text-[10px] text-okx-text-tertiary">ETH</div>
+                    <div className="text-[10px] text-okx-text-tertiary">BNB</div>
                   </div>
                 </div>
               );
@@ -241,14 +241,14 @@ export default function EarningsPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
                   <div className="text-okx-text-secondary text-[10px] mb-1">{t("creatorEarningsLabel")}</div>
-                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.creatorEarnings).toFixed(4)} ETH</div>
+                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.creatorEarnings).toFixed(4)} BNB</div>
                   <div className="text-[10px] text-okx-text-tertiary mt-1">
                     {t("createdTokensCount", { count: earnings.createdTokens.length })}
                   </div>
                 </div>
                 <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
                   <div className="text-okx-text-secondary text-[10px] mb-1">{t("referralEarningsLabel")}</div>
-                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.referrerEarnings).toFixed(4)} ETH</div>
+                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.referrerEarnings).toFixed(4)} BNB</div>
                   {earnings.referrer && (
                     <div className="text-[10px] text-okx-text-tertiary mt-1">
                       {t("yourReferrer")}: {formatAddress(earnings.referrer)}
@@ -257,9 +257,9 @@ export default function EarningsPage() {
                 </div>
                 <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
                   <div className="text-okx-text-secondary text-[10px] mb-1">{t("perpEarningsLabel")}</div>
-                  <div className="text-lg font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(4)} ETH</div>
+                  <div className="text-lg font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(4)} BNB</div>
                   <div className="text-[10px] text-okx-text-tertiary mt-1">
-                    {t("perpTotalEarnings")}: {parseFloat(perpEarnings.totalEarnings).toFixed(4)} ETH
+                    {t("perpTotalEarnings")}: {parseFloat(perpEarnings.totalEarnings).toFixed(4)} BNB
                   </div>
                 </div>
               </div>
@@ -511,19 +511,19 @@ export default function EarningsPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpPendingEarnings")}</div>
-                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(6)} BNB</div>
                           </div>
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpWithdrawnEarnings")}</div>
-                            <div className="text-sm font-bold">{parseFloat(perpEarnings.withdrawnEarnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold">{parseFloat(perpEarnings.withdrawnEarnings).toFixed(6)} BNB</div>
                           </div>
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpLevel1Earnings")}</div>
-                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level1Earnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level1Earnings).toFixed(6)} BNB</div>
                           </div>
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpLevel2Earnings")}</div>
-                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level2Earnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level2Earnings).toFixed(6)} BNB</div>
                           </div>
                         </div>
                       )}

@@ -11,7 +11,7 @@
  * Each scenario uses PriceFeed.updateTokenPrice (requires deployer key).
  */
 import { type Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { getRpcPool } from "../utils/rpc-pool.js";
 import { CONTRACTS, PRICE_FEED_ABI, TOKEN_FACTORY_ABI } from "../config.js";
@@ -237,7 +237,7 @@ export class MarketScenarios {
 
     const hash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: CONTRACTS.priceFeed,
         abi: PRICE_FEED_ABI,
         functionName: "updateTokenPrice",

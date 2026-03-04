@@ -7,7 +7,7 @@
  * Only on-chain: deposit to Settlement, nonce reads.
  */
 import { parseEther, formatEther, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { getRpcPool } from "../utils/rpc-pool.js";
 import { type StressWallet, pickRandom, randInt, randBigInt } from "../utils/wallet-manager.js";
@@ -490,7 +490,7 @@ export class PerpEngine {
       pool.httpClient.getBalance({ address: wallet.address })
     );
 
-    const gasBuffer = parseEther("0.0003"); // ~0.0003 ETH for 3 txns gas (Base Sepolia gas is cheap)
+    const gasBuffer = parseEther("0.0003"); // ~0.0003 ETH for 3 txns gas (BSC Testnet gas is cheap)
     if (ethBalance < depositAmount + gasBuffer) {
       if (this.stats.totalRounds <= 2) {
         console.log(`[Perp] W${wallet.index} skip deposit: ethBalance=${formatEther(ethBalance)} < need=${formatEther(depositAmount + gasBuffer)}`);
@@ -501,7 +501,7 @@ export class PerpEngine {
     // Step 1: Wrap ETH → WETH
     const wrapHash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: WETH_ADDRESS,
         abi: WETH_ABI,
         functionName: "deposit",
@@ -515,7 +515,7 @@ export class PerpEngine {
     // Step 2: Approve WETH for SettlementV2
     const approveHash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: WETH_ADDRESS,
         abi: WETH_ABI,
         functionName: "approve",
@@ -528,7 +528,7 @@ export class PerpEngine {
     // Step 3: Deposit WETH into SettlementV2
     const depositHash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: CONTRACTS.settlementV2,
         abi: SETTLEMENT_V2_ABI,
         functionName: "deposit",
@@ -567,7 +567,7 @@ export class PerpEngine {
    */
   private async bulkDepositAll(): Promise<void> {
     const pool = getRpcPool();
-    const GAS_RESERVE = parseEther("0.0005"); // Keep 0.0005 ETH for gas (Base Sepolia gas is very cheap)
+    const GAS_RESERVE = parseEther("0.0005"); // Keep 0.0005 ETH for gas (BSC Testnet gas is cheap)
     const CONCURRENT_DEPOSITS = 10; // Process 10 wallets in parallel per batch
 
     let deposited = 0;
@@ -709,7 +709,7 @@ export class PerpEngine {
     // Step 1: Wrap ETH → WETH
     const wrapHash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: WETH_ADDRESS,
         abi: WETH_ABI,
         functionName: "deposit",
@@ -723,7 +723,7 @@ export class PerpEngine {
     // Step 2: Approve WETH for SettlementV2
     const approveHash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: WETH_ADDRESS,
         abi: WETH_ABI,
         functionName: "approve",
@@ -736,7 +736,7 @@ export class PerpEngine {
     // Step 3: Deposit WETH into SettlementV2
     const depositHash = await pool.call(() =>
       walletClient.writeContract({
-        chain: baseSepolia,
+        chain: bscTestnet,
         address: CONTRACTS.settlementV2,
         abi: SETTLEMENT_V2_ABI,
         functionName: "deposit",
@@ -994,7 +994,7 @@ export class PerpEngine {
 
       const txHash = await pool.call(() =>
         walletClient.writeContract({
-          chain: baseSepolia,
+          chain: bscTestnet,
           address: CONTRACTS.settlementV2,
           abi: SETTLEMENT_V2_ABI,
           functionName: "withdraw",

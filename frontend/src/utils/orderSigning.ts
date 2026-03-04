@@ -76,7 +76,7 @@ export async function signOrder(
     throw new Error("Wallet not connected");
   }
 
-  const chainId = walletClient.chain?.id || 84532;
+  const chainId = walletClient.chain?.id || 97;
   const domain = getEIP712Domain(settlementAddress, chainId);
 
   const message = {
@@ -481,7 +481,9 @@ export async function requestClosePair(
  * H-08: 用于签名平仓请求，防伪造
  */
 export function getClosePairMessage(pairId: string, trader: Address): string {
-  return `Close pair ${pairId} for ${trader}`;
+  // BUGFIX: Backend uses trader.toLowerCase() in expected message (server.ts L8049),
+  // so frontend must also lowercase to produce matching message for signature verification
+  return `Close pair ${pairId} for ${trader.toLowerCase()}`;
 }
 
 // ============================================================

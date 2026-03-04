@@ -27,13 +27,13 @@ export function ReferralStats({ totalInvites, activeInvites, totalEarned, pendin
     },
     {
       label: t("totalEarned"),
-      value: `${totalEarned} ETH`,
+      value: `${totalEarned} BNB`,
       icon: "💰",
       valueClass: "text-okx-up",
     },
     {
       label: t("pendingReward"),
-      value: `${pendingReward} ETH`,
+      value: `${pendingReward} BNB`,
       icon: "⏳",
       valueClass: "text-okx-accent",
       action: parseFloat(pendingReward) > 0 ? t("claim") : undefined,

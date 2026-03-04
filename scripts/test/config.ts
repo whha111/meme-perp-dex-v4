@@ -2,7 +2,7 @@
  * 测试配置文件
  */
 import { type Address, type Hex } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 
 // AUDIT-FIX DP-C01: Read key from env
 const DEPLOYER_KEY = (process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY) as Hex;
@@ -10,14 +10,14 @@ if (!DEPLOYER_KEY) { console.error("Set DEPLOYER_PRIVATE_KEY env var"); process.
 
 export const CONFIG = {
   // RPC
-  RPC_URL: "https://base-sepolia.g.alchemy.com/v2/Dr8sMe-1MYIF7jBYuZZj8PMOPAAeJ16d",
-  CHAIN: baseSepolia,
+  RPC_URL: "https://data-seed-prebsc-1-s1.binance.org:8545/",
+  CHAIN: bscTestnet,
 
   // 合约地址 (V5 - 5分钟资金费)
   SETTLEMENT: "0xB06C32C7536EC5EAD101fEe2AD4005a5eedcB258" as Address,
   CONTRACT_REGISTRY: "0x8f6277275c4e11A42b3928B55e5653bB694D5A61" as Address,
   USDT: "0x2251A4dD878a0AF6d18B5F0CAE7FDF9fe85D8324" as Address,
-  WETH: "0x4200000000000000000000000000000000000006" as Address,  // Base Sepolia WETH
+  WETH: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address,  // BSC Testnet WBNB
   TOKEN_FACTORY: "0xE0ddf67E89f5773c960Bc2329109815E8c66BAAe" as Address,
   PRICE_FEED: "0x70dAC8f7338fFF15CAB9cE01e896e56a6C2FcF0A" as Address,
 
@@ -36,7 +36,7 @@ export const CONFIG = {
   EIP712_DOMAIN: {
     name: "MemePerp",
     version: "1",
-    chainId: 84532,
+    chainId: 97,
     verifyingContract: "0xB06C32C7536EC5EAD101fEe2AD4005a5eedcB258" as Address,
   },
 

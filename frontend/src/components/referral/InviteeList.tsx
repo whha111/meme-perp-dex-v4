@@ -128,8 +128,8 @@ export function InviteeList({ address }: InviteeListProps) {
             <tr key={idx} className="border-b border-okx-border-primary hover:bg-okx-bg-hover">
               <td className="py-3 px-4 font-mono">{invitee.address}</td>
               <td className="py-3 px-4 text-okx-text-secondary">{invitee.registeredAt}</td>
-              <td className="py-3 px-4 text-right">{invitee.totalVolume} ETH</td>
-              <td className="py-3 px-4 text-right text-okx-up">{invitee.rewardsGenerated} ETH</td>
+              <td className="py-3 px-4 text-right">{invitee.totalVolume} BNB</td>
+              <td className="py-3 px-4 text-right text-okx-up">{invitee.rewardsGenerated} BNB</td>
               <td className="py-3 px-4 text-center">
                 <span
                   className={`inline-flex px-2 py-1 rounded-full text-xs ${

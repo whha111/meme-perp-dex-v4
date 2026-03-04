@@ -8,7 +8,7 @@ import { tradeEventEmitter } from "@/lib/tradeEvents";
 const TOKEN_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}` | undefined;
 
 // Chain ID
-const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "84532", 10);
+const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "97", 10);
 
 // TokenFactory ABI for view functions
 // ⚠️ ABI 必须与部署的 TokenFactory 合约完全一致
@@ -269,15 +269,15 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
 /**
  * Calculate price in USD from ETH price
  */
-export function calculatePriceUsd(priceWei: bigint, ethPriceUsd: number): number {
+export function calculatePriceUsd(priceWei: bigint, bnbPriceUsd: number): number {
   const priceEth = Number(priceWei) / 1e18;
-  return priceEth * ethPriceUsd;
+  return priceEth * bnbPriceUsd;
 }
 
 /**
  * Calculate market cap in USD
  */
-export function calculateMarketCapUsd(marketCapWei: bigint, ethPriceUsd: number): number {
+export function calculateMarketCapUsd(marketCapWei: bigint, bnbPriceUsd: number): number {
   const marketCapEth = Number(marketCapWei) / 1e18;
-  return marketCapEth * ethPriceUsd;
+  return marketCapEth * bnbPriceUsd;
 }

@@ -21,7 +21,7 @@ import {
   type PublicClient,
   type WalletClient,
 } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { readFileSync } from "fs";
 import {
@@ -176,7 +176,7 @@ async function phase1SellAll(wallets: SimpleWallet[]) {
           // Approve
           await pool.call(() =>
             walletClient.writeContract({
-              chain: baseSepolia,
+              chain: bscTestnet,
               address: token,
               abi: erc20Abi,
               functionName: "approve",
@@ -193,7 +193,7 @@ async function phase1SellAll(wallets: SimpleWallet[]) {
 
           const hash = await pool.call(() =>
             walletClient.writeContract({
-              chain: baseSepolia,
+              chain: bscTestnet,
               address: CONTRACTS.tokenFactory,
               abi: TOKEN_FACTORY_ABI,
               functionName: "sell",
@@ -283,7 +283,7 @@ async function phase2Distribute(wallets: SimpleWallet[], spotCount: number, perp
         deployerClient.sendTransaction({
           to: wallet.address,
           value: toSend,
-          chain: baseSepolia,
+          chain: bscTestnet,
           account: deployerAccount,
         })
       );
@@ -328,7 +328,7 @@ async function phase3CreateTokens(count: number): Promise<Address[]> {
       // minTokensOut = 0 for no slippage protection during bootstrap
       const hash = await pool.call(() =>
         deployerClient.writeContract({
-          chain: baseSepolia,
+          chain: bscTestnet,
           address: CONTRACTS.tokenFactory,
           abi: TOKEN_FACTORY_ABI,
           functionName: "createToken",
@@ -455,7 +455,7 @@ async function phase4MarketMake(tokens: Address[], wallets: SimpleWallet[]) {
           try {
             const hash = await pool.call(() =>
               deployerClient.writeContract({
-                chain: baseSepolia,
+                chain: bscTestnet,
                 address: CONTRACTS.tokenFactory,
                 abi: TOKEN_FACTORY_ABI,
                 functionName: "buy",
@@ -482,7 +482,7 @@ async function phase4MarketMake(tokens: Address[], wallets: SimpleWallet[]) {
       try {
         const hash = await pool.call(() =>
           walletClient.writeContract({
-            chain: baseSepolia,
+            chain: bscTestnet,
             address: CONTRACTS.tokenFactory,
             abi: TOKEN_FACTORY_ABI,
             functionName: "buy",

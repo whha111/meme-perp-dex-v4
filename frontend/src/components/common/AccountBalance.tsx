@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * AccountBalance - 账户余额管理组件 (ETH 本位)
+ * AccountBalance - 账户余额管理组件 (BNB 本位)
  *
  * 资金流向 (链上真实托管):
- * 1. 充值: 主钱包 → 派生钱包 (ETH) → WETH.deposit() → SettlementV2.deposit()
+ * 1. 充值: 主钱包 → 派生钱包 (BNB) → WETH.deposit() → SettlementV2.deposit()
  * 2. 提款: SettlementV2.withdraw(Merkle proof) → 解包 WETH → 转回主钱包
  * 3. 引擎自动监听 SettlementV2 事件，实时更新余额
  */
@@ -24,8 +24,8 @@ import { CONTRACTS } from "@/lib/contracts";
 
 /** Deposit step labels for 3-step on-chain flow */
 const DEPOSIT_STEPS: Record<number, string> = {
-  1: "Step 1/3: 转账 ETH 到交易钱包...",
-  2: "Step 2/3: 包装 WETH...",
+  1: "Step 1/3: 转账 BNB 到交易钱包...",
+  2: "Step 2/3: 包装 WBNB...",
   3: "Step 3/3: 存入合约...",
 };
 
@@ -56,7 +56,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
     mainWalletAddress: mainWallet || undefined,
   });
 
-  // Global balance (Settlement + native ETH + WETH)
+  // Global balance (Settlement + native BNB + WBNB)
   const {
     totalBalance,
     walletOnlyBalance,
@@ -75,12 +75,12 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
   const [stepError, setStepError] = useState<string | null>(null);
   const depositStepRef = useRef(0); // For accurate logging in async closures
 
-  // Main wallet ETH balance
+  // Main wallet BNB balance
   const { data: mainWalletBalance, refetch: refetchMainBalance } = useBalance({
     address: mainWallet,
   });
 
-  // Send ETH to trading wallet (wagmi)
+  // Send BNB to trading wallet (wagmi)
   const { sendTransactionAsync, isPending: isSendPending } =
     useSendTransaction();
 
@@ -94,16 +94,16 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
 
   // ═══════════════════════════════════════════════════════════
   // 3-step on-chain deposit:
-  //   1. Main wallet → Trading wallet (native ETH)
-  //   2. Trading wallet: ETH → WETH (WETH.deposit)
-  //   3. Trading wallet: approve WETH + SettlementV2.deposit
+  //   1. Main wallet → Trading wallet (native BNB)
+  //   2. Trading wallet: BNB → WBNB (WBNB.deposit)
+  //   3. Trading wallet: approve WBNB + SettlementV2.deposit
   // ═══════════════════════════════════════════════════════════
   const handleDeposit = useCallback(async () => {
     if (!tradingWallet || amountWei === 0n || !publicClient) return;
     setStepError(null);
 
     try {
-      // Step 1: Transfer ETH from main wallet to trading wallet
+      // Step 1: Transfer BNB from main wallet to trading wallet
       setDepositStep(1);
       depositStepRef.current = 1;
       const txHash = await sendTransactionAsync({
@@ -112,13 +112,13 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
       });
       await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-      // Step 2: Wrap ETH → WETH on trading wallet
+      // Step 2: Wrap BNB → WBNB on trading wallet
       setDepositStep(2);
       depositStepRef.current = 2;
       const wrapHash = await wrapAndDeposit(amount);
       await publicClient.waitForTransactionReceipt({ hash: wrapHash });
 
-      // Step 3: Approve WETH + deposit to SettlementV2
+      // Step 3: Approve WBNB + deposit to SettlementV2
       setDepositStep(3);
       depositStepRef.current = 3;
       await settlementDeposit(CONTRACTS.WETH, amount);
@@ -193,7 +193,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
     }
   };
 
-  // Format ETH balance
+  // Format BNB balance
   const fmtETH = (val: bigint | undefined) => {
     if (!val) return "0.0000";
     const num = Number(formatEther(val));
@@ -207,7 +207,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
   // Current step label for button text
   const depositButtonText = depositStep > 0
     ? DEPOSIT_STEPS[depositStep] ?? "处理中..."
-    : "充值 ETH 到交易账户";
+    : "充值 BNB 到交易账户";
   const withdrawButtonText = withdrawStep > 0
     ? WITHDRAW_STEPS[withdrawStep] ?? "处理中..."
     : "提现到主钱包";
@@ -227,18 +227,18 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
       {/* 交易账户余额 */}
       <div className="p-4 text-center border-b border-gray-800">
         <div className="text-3xl font-bold text-white">
-          Ξ{formattedWethBalance}
+          BNB {formattedWethBalance}
         </div>
         <div className="text-gray-500 text-sm mb-2">交易账户总余额</div>
         {/* 余额明细 */}
         <div className="flex justify-center gap-4 text-xs">
           <div>
             <span className="text-gray-500">合约托管: </span>
-            <span className="text-gray-300">Ξ{fmtETH(settlementBalance)}</span>
+            <span className="text-gray-300">BNB {fmtETH(settlementBalance)}</span>
           </div>
           <div>
             <span className="text-gray-500">钱包: </span>
-            <span className="text-gray-300">Ξ{fmtETH(walletOnlyBalance)}</span>
+            <span className="text-gray-300">BNB {fmtETH(walletOnlyBalance)}</span>
           </div>
         </div>
       </div>
@@ -301,7 +301,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
             {activeTab === "deposit" ? "钱包余额" : "交易账户余额"}
           </span>
           <span className="text-white">
-            Ξ{activeTab === "deposit"
+            BNB {activeTab === "deposit"
               ? fmtETH(mainWalletBalance?.value)
               : formattedWethBalance}
           </span>
@@ -318,12 +318,18 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
             className="w-full bg-[#1e222d] text-white text-lg px-4 py-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           />
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-            <span className="text-gray-400 text-sm">ETH</span>
+            <span className="text-gray-400 text-sm">BNB</span>
             <button
               onClick={() => {
                 if (activeTab === "deposit") {
-                  mainWalletBalance &&
-                    setAmount(formatEther(mainWalletBalance.value));
+                  // AUDIT-FIX FE-C01: 预留 Gas 费用，避免用户存入全部余额后无法执行交易
+                  if (mainWalletBalance) {
+                    const GAS_RESERVE = 5000000000000000n; // 0.005 BNB
+                    const maxDeposit = mainWalletBalance.value > GAS_RESERVE
+                      ? mainWalletBalance.value - GAS_RESERVE
+                      : 0n;
+                    setAmount(formatEther(maxDeposit));
+                  }
                 } else {
                   totalBalance && setAmount(formatEther(totalBalance));
                 }
@@ -336,7 +342,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
           </div>
         </div>
 
-        {/* 快捷金额 (ETH) */}
+        {/* 快捷金额 (BNB) */}
         <div className="flex gap-2">
           {["0.01", "0.05", "0.1", "0.5"].map((v) => (
             <button
@@ -345,7 +351,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
               disabled={isProcessing}
               className="flex-1 py-2 bg-[#1e222d] text-gray-400 text-sm rounded hover:text-white disabled:opacity-50"
             >
-              Ξ{v}
+              BNB {v}
             </button>
           ))}
         </div>
@@ -404,7 +410,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
         {/* 充值提示 */}
         {activeTab === "deposit" && !isProcessing && (
           <div className="text-xs text-gray-500 text-center">
-            ETH 将通过 SettlementV2 合约链上托管，安全可验证
+            BNB 将通过 SettlementV2 合约链上托管，安全可验证
           </div>
         )}
 

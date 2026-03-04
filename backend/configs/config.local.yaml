@@ -26,20 +26,20 @@ redis:
   pool_size: 10
 
 blockchain:
-  # Base Sepolia Testnet — P0-1: Use public RPC, API key via env only
-  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://base-sepolia-rpc.publicnode.com}"
-  chain_id: 84532  # Base Sepolia
+  # BSC Testnet — P0-1: Use public RPC, API key via env only
+  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545/}"
+  chain_id: 97  # BSC Testnet
 
-  # Contract addresses (Redeployed 2026-02-28)
+  # Contract addresses (Deployed 2026-03-03)
   # AUDIT-FIX M-18: All contract addresses belong here, NOT under matching_engine
-  position_address: "0x7611a924622B5f6bc4c2ECAAdB6DE078E741AcF6"
+  position_address: "0x04C515CcFac80BFFF27E0c5A9113e515171057b6"
   router_address: "0xF15197BA411b578dafC7936C241bE9DD725c22BE"
-  vault_address: "0xcc4Fa8Df0686824F92d392Cb650057EA7D2EF46E"
+  vault_address: "0xACE7014F60eF9c367E7fA5Dd80601A9945E6F4d1"
   amm_address: "0x2c23046DC1595754528a10b8340F2AD8fdE05112"
-  liquidation_address: "0x53a5A82C95F3816179F9268002b1a2e4B5455CF4"
-  funding_rate_address: "0xD6DD3947F8d80A031b69eBd825Be2384E787dC46"
+  liquidation_address: "0x322AeeD67C12c10684B134e1727866425dc75F1c"
+  funding_rate_address: "0x0a513bf3DE079Bf2439A5884583712bD014487aa"
   lending_pool_address: "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4"
-  price_feed_address: "0x8A57904F9b9392dAB4163a6c372Df1c4Cdd1eb36"
+  price_feed_address: "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48"
 
   # P0-1: Private key MUST come from env — set MEMEPERP_BLOCKCHAIN_PRIVATE_KEY in .env.local
   private_key: "${MEMEPERP_BLOCKCHAIN_PRIVATE_KEY}"

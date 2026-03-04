@@ -1,8 +1,8 @@
 import { createWalletClient, createPublicClient, http, parseEther, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 
-const RPC_URL = "https://base-sepolia-rpc.publicnode.com";
+const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const ENGINE_URL = "http://localhost:8081";
 const SETTLEMENT = "0x35ce4ed5e5d2515Ea05a2f49A70170Fa78e13F7c" as Address;
 const TOKEN = "0x01eA557E2B17f65604568791Edda8dE1Ae702BE8" as Address;
@@ -12,13 +12,13 @@ const TEST_KEY2 = "0x" + "b".repeat(63) + "2" as Hex;
 const account1 = privateKeyToAccount(TEST_KEY1);
 const account2 = privateKeyToAccount(TEST_KEY2);
 
-const pub = createPublicClient({ chain: baseSepolia, transport: http(RPC_URL) });
+const pub = createPublicClient({ chain: bscTestnet, transport: http(RPC_URL) });
 
 // Correct EIP-712 domain matching the engine
 const domain = {
   name: "MemePerp",
   version: "1",
-  chainId: 84532,
+  chainId: 97,
   verifyingContract: SETTLEMENT,
 };
 
@@ -109,9 +109,10 @@ async function main() {
   
   if (bal1 < parseEther("0.005")) {
     console.log("Funding wallets...");
-    const MATCHER_KEY = "0xe842b617657055de85d504a3cd268bfd42e35edfdce2be79b1968cf861d0292a" as Hex;
+    const MATCHER_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
+    if (!MATCHER_KEY) throw new Error("Set MATCHER_PRIVATE_KEY env var");
     const matcher = privateKeyToAccount(MATCHER_KEY);
-    const client = createWalletClient({ account: matcher, chain: baseSepolia, transport: http(RPC_URL) });
+    const client = createWalletClient({ account: matcher, chain: bscTestnet, transport: http(RPC_URL) });
     
     for (const addr of [account1.address, account2.address]) {
       const hash = await client.sendTransaction({ to: addr, value: parseEther("0.02") });
@@ -137,7 +138,7 @@ async function main() {
     
     if (bal[0] < 5000n) { // Less than 0.005 in 6-decimal
       console.log(`Depositing 0.01 ETH for ${acct.address.slice(0,10)}...`);
-      const client = createWalletClient({ account: acct, chain: baseSepolia, transport: http(RPC_URL) });
+      const client = createWalletClient({ account: acct, chain: bscTestnet, transport: http(RPC_URL) });
       const hash = await client.writeContract({
         address: SETTLEMENT,
         abi: settleAbi,
