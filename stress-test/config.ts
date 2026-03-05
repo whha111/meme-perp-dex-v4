@@ -29,22 +29,21 @@ export const CHAIN = {
   name: "BSC Testnet",
 } as const;
 
-// ── Contract Addresses (BSC Testnet - Redeployed 2026-03-01) ──
+// ── Contract Addresses (BSC Testnet - Fresh deploy 2026-03-06) ──
 // Settlement must match matching engine's EIP-712 verifyingContract
 export const CONTRACTS = {
-  settlement: "0x63df8d6acF3f99Ae59Bee6184A5EB6beA8663eb7" as Address,       // Settlement V1 (EIP-712 verifyingContract)
-  settlementV2: "0x7fF9d60aE49F14bB604FeF1961910D7931067873" as Address,     // SettlementV2 (dYdX-style Merkle)
-  tokenFactory: "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb" as Address,      // Spot trading (TokenFactory)
-  perpTokenFactory: "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb" as Address,  // Same as tokenFactory (unified)
-  priceFeed: "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48" as Address,
-  perpVault: "0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75" as Address,
-  // Legacy V1 contracts — not deployed on current BSC Testnet, kept for monitor compat
-  positionManager: "0x0000000000000000000000000000000000000000" as Address,
-  liquidation: "0x0000000000000000000000000000000000000000" as Address,
-  insuranceFund: "0x0000000000000000000000000000000000000000" as Address,
-  fundingRate: "0x0000000000000000000000000000000000000000" as Address,
-  vault: "0x0000000000000000000000000000000000000000" as Address,
-  lendingPool: "0x0000000000000000000000000000000000000000" as Address,
+  settlement: "0x234F468d196ea7B8F8dD4c560315F5aE207C2674" as Address,       // Settlement V1 (EIP-712 verifyingContract)
+  settlementV2: "0xF58A8a551F9c587CEF3B4e21F01e1bF5059bECE9" as Address,     // SettlementV2 (dYdX-style Merkle)
+  tokenFactory: "0x01819AFe97713eFf4e81cD93C2f66588816Ef8ee" as Address,      // Spot trading (TokenFactory)
+  perpTokenFactory: "0x01819AFe97713eFf4e81cD93C2f66588816Ef8ee" as Address,  // Same as tokenFactory (unified)
+  priceFeed: "0xBb62829e52EB1DC73b359ba326Ee84f8a06859ad" as Address,
+  perpVault: "0xc4CEC9636AD8D553cCFCf4AbAb5a0fC808c122C2" as Address,
+  positionManager: "0xEf4fb08D3B475e753A7B0678A503ffD451C539c0" as Address,
+  liquidation: "0x7a998aBCB01FBEBcFaE3023B8BDBfe25aE16a96f" as Address,
+  insuranceFund: "0x2f75Ff4Ce4e833fcA872ef9bFd5637fC7929dF62" as Address,
+  fundingRate: "0x695b8E1fC4A67e65035652Bde1C44936B3237Eb4" as Address,
+  vault: "0xF297fAd9A5851DBF8aa82f14ce01a13BBA019640" as Address,
+  lendingPool: "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4" as Address,
 } as const;
 
 // ── Matching Engine ────────────────────────────────────────────

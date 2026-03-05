@@ -34,15 +34,15 @@ const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const ENGINE_URL = "http://localhost:8081";
 const WS_URL = "ws://localhost:8081/ws";
 
-// Contract addresses (BSC Testnet)
+// Contract addresses (BSC Testnet — fresh deploy 2026-03-06)
 const CONTRACTS = {
-  TOKEN_FACTORY: "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb" as Address,
-  SETTLEMENT_V2: "0x7fF9d60aE49F14bB604FeF1961910D7931067873" as Address,
-  PERP_VAULT: "0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75" as Address,
-  PRICE_FEED: "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48" as Address,
-  SETTLEMENT_V1: "0x63df8d6acF3f99Ae59Bee6184A5EB6beA8663eb7" as Address,
+  TOKEN_FACTORY: "0x01819AFe97713eFf4e81cD93C2f66588816Ef8ee" as Address,
+  SETTLEMENT_V2: "0xF58A8a551F9c587CEF3B4e21F01e1bF5059bECE9" as Address,
+  PERP_VAULT: "0xc4CEC9636AD8D553cCFCf4AbAb5a0fC808c122C2" as Address,
+  PRICE_FEED: "0xBb62829e52EB1DC73b359ba326Ee84f8a06859ad" as Address,
+  SETTLEMENT_V1: "0x234F468d196ea7B8F8dD4c560315F5aE207C2674" as Address,
   WBNB: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address,
-  DOGE: "0x2Bb1323d2179cA702b1D7731EcE531bb9971A86E" as Address,
+  DOGE: "0x9E4590dC61A334111E43D624b7eDC4400e2D1AC2" as Address,
 };
 
 // Test wallet (deployer)
