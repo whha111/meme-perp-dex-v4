@@ -3,6 +3,7 @@
     "back": "返回",
     "loading": "加载中...",
     "redirecting": "正在重定向...",
+    "connectWallet": "连接钱包",
     "connectWalletFirst": "请先连接钱包",
     "syncingWallet": "正在同步钱包状态...",
     "disconnect": "断开连接",

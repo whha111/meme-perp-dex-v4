@@ -27,7 +27,7 @@ import db, {
   type SettlementLog,
   type MarketStats,
 } from "./database";
-import { connectRedis as connectNewRedis, disconnectRedis, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, NonceRepo, SettlementLogRepo as RedisSettlementLogRepo, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
+import { connectRedis as connectNewRedis, disconnectRedis, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, NonceRepo, InsuranceFundRepo, SettlementLogRepo as RedisSettlementLogRepo, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
 // P1-5: PostgreSQL 订单镜像 (Write-Through Cache)
 import { connectPostgres, disconnectPostgres, isPostgresConnected, OrderMirrorRepo, type PgOrderMirror } from "./database/postgres";
 // P2-4: 仓位大小限制常量
@@ -2199,11 +2199,15 @@ function contributeToInsuranceFund(amount: bigint, token?: Address): void {
     fund.totalContributions += amount;
     fund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Token ${token.slice(0, 10)} contribution: +$${Number(amount) / 1e18}, balance: $${Number(fund.balance) / 1e18}`);
+    // 持久化到 Redis (fire-and-forget)
+    InsuranceFundRepo.saveToken(token, fund).catch(() => {});
   } else {
     insuranceFund.balance += amount;
     insuranceFund.totalContributions += amount;
     insuranceFund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Global contribution: +$${Number(amount) / 1e18}, balance: $${Number(insuranceFund.balance) / 1e18}`);
+    // 持久化到 Redis (fire-and-forget)
+    InsuranceFundRepo.saveGlobal(insuranceFund).catch(() => {});
   }
 }
 
@@ -2221,6 +2225,8 @@ function payFromInsuranceFund(amount: bigint, token?: Address): bigint {
     fund.totalPayouts += actualPayout;
     fund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Token ${token.slice(0, 10)} payout: -$${Number(actualPayout) / 1e18}, balance: $${Number(fund.balance) / 1e18}`);
+    // 持久化到 Redis (fire-and-forget)
+    InsuranceFundRepo.saveToken(token, fund).catch(() => {});
     return actualPayout;
   } else {
     const actualPayout = amount > insuranceFund.balance ? insuranceFund.balance : amount;
@@ -2228,6 +2234,8 @@ function payFromInsuranceFund(amount: bigint, token?: Address): bigint {
     insuranceFund.totalPayouts += actualPayout;
     insuranceFund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Global payout: -$${Number(actualPayout) / 1e18}, balance: $${Number(insuranceFund.balance) / 1e18}`);
+    // 持久化到 Redis (fire-and-forget)
+    InsuranceFundRepo.saveGlobal(insuranceFund).catch(() => {});
     return actualPayout;
   }
 }
@@ -7843,28 +7851,36 @@ async function handleGetUserBalance(trader: string): Promise<Response> {
     }
   }
 
-  // 读取原生 ETH 余额
-  let nativeEthBalance = 0n;
-  try {
-    nativeEthBalance = await publicClient.getBalance({ address: normalizedTrader });
-  } catch (e) {
-    console.warn(`[Balance] Failed to fetch native ETH balance for ${normalizedTrader}:`, e);
-  }
+  // ========================================
+  // 1.5 先检查平台活跃度 (用于决定是否查询钱包余额)
+  // ========================================
+  const positions = userPositions.get(normalizedTrader) || [];
+  const userOrders = engine.getUserOrders(normalizedTrader);
+  const isKnownTrader = chainAvailable > 0n || positions.length > 0 || userOrders.length > 0;
 
-  // 读取 WETH 余额
+  // 仅对已知平台用户查询钱包余额 (防止隐私泄漏 + 减少 RPC 调用)
+  let nativeEthBalance = 0n;
   let wethBalance = 0n;
-  try {
-    const WETH_ADDRESS = process.env.WETH_ADDRESS as Address;
-    if (WETH_ADDRESS) {
-      wethBalance = await publicClient.readContract({
-        address: WETH_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: "balanceOf",
-        args: [normalizedTrader],
-      }) as bigint;
+  if (isKnownTrader) {
+    try {
+      nativeEthBalance = await publicClient.getBalance({ address: normalizedTrader });
+    } catch (e) {
+      console.warn(`[Balance] Failed to fetch native ETH balance for ${normalizedTrader}:`, e);
     }
-  } catch (e) {
-    console.warn(`[Balance] Failed to fetch wallet WETH balance for ${normalizedTrader}:`, e);
+
+    try {
+      const WETH_ADDRESS = process.env.WETH_ADDRESS as Address;
+      if (WETH_ADDRESS) {
+        wethBalance = await publicClient.readContract({
+          address: WETH_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "balanceOf",
+          args: [normalizedTrader],
+        }) as bigint;
+      }
+    } catch (e) {
+      console.warn(`[Balance] Failed to fetch wallet WETH balance for ${normalizedTrader}:`, e);
+    }
   }
 
   // 钱包 ETH 余额 = 原生 ETH + WETH
@@ -7874,7 +7890,6 @@ async function handleGetUserBalance(trader: string): Promise<Response> {
   // 2. 计算挂单锁定金额 (内存中的 orderMarginInfos)
   // ========================================
   let pendingOrdersLocked = 0n;
-  const userOrders = engine.getUserOrders(normalizedTrader);
   for (const order of userOrders) {
     if (order.status === "PENDING" || order.status === "PARTIALLY_FILLED") {
       const marginInfo = orderMarginInfos.get(order.id);
@@ -7890,7 +7905,6 @@ async function handleGetUserBalance(trader: string): Promise<Response> {
   // ========================================
   // 2.5 Mode 2: 从后端内存计算仓位保证金
   // ========================================
-  const positions = userPositions.get(normalizedTrader) || [];
   let positionMargin = 0n;
   for (const pos of positions) {
     positionMargin += BigInt(pos.collateral || "0");
@@ -10703,10 +10717,10 @@ async function handleRequest(req: Request): Promise<Response> {
     const tokens = instId ? [instId.split("-")[0] as Address] : Array.from(engine.getOrderBooks().keys());
     const markPrices = tokens.map(token => {
       const ob = engine.getOrderBook(token);
-      const depth = ob.getDepth(1);
+      const currentPrice = ob.getCurrentPrice();
       return {
         instId: `${token}-ETH`,
-        markPx: depth.lastPrice.toString(),
+        markPx: currentPrice.toString(),
         ts: Date.now(),
       };
     });
@@ -12635,6 +12649,30 @@ async function startServer(): Promise<void> {
       console.log(`[Server] Restored ${savedAdjustments.size} Mode 2 PnL adjustments from Redis`);
     } catch (e) {
       console.error("[Server] Failed to restore Mode 2 adjustments:", e);
+    }
+
+    // 从 Redis 恢复保险基金 (防重启后归零)
+    try {
+      const savedGlobal = await InsuranceFundRepo.getGlobal();
+      if (savedGlobal) {
+        insuranceFund.balance = savedGlobal.balance;
+        insuranceFund.totalContributions = savedGlobal.totalContributions;
+        insuranceFund.totalPayouts = savedGlobal.totalPayouts;
+        insuranceFund.lastUpdated = savedGlobal.lastUpdated;
+      }
+      const savedTokenFunds = await InsuranceFundRepo.getAllTokens();
+      for (const [token, fund] of savedTokenFunds) {
+        tokenInsuranceFunds.set(token.toLowerCase() as Address, {
+          balance: fund.balance,
+          totalContributions: fund.totalContributions,
+          totalPayouts: fund.totalPayouts,
+          lastUpdated: fund.lastUpdated,
+        });
+      }
+      const globalBal = Number(insuranceFund.balance) / 1e18;
+      console.log(`[Server] Restored insurance fund from Redis: global=$${globalBal.toFixed(4)}, ${savedTokenFunds.size} token funds`);
+    } catch (e) {
+      console.error("[Server] Failed to restore insurance fund:", e);
     }
   } else {
     console.warn("[Server] Redis connection failed, using in-memory storage only");

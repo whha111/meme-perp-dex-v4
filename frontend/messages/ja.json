@@ -21,7 +21,8 @@
     "addressUnknown": "アドレス不明",
     "contractCopied": "コントラクトアドレスをコピーしました",
     "done": "完了",
-    "currentSetting": "現在の設定"
+    "currentSetting": "現在の設定",
+    "connectWallet": "ウォレットを接続"
   },
   "nav": {
     "market": "マーケット",
@@ -201,10 +202,8 @@
     "profitableAddresses": "利益アドレス",
     "realizedPnl": "実現損益",
     "unrealizedPnl": "未実現損益",
-    "about": "概要",
     "description": "説明",
-    "socialLinks": "ソーシャルリンク",
-    "noDescription": "このトークンの説明はありません。"
+    "socialLinks": "ソーシャルリンク"
   },
   "chart": {
     "1min": "1分",
@@ -771,7 +770,7 @@
     "markPrice": "マーク価格",
     "liqPrice": "清算価格",
     "margin": "証拠金",
-    "size": "ポジションサイズ",
+    "size": "サイズ",
     "pnl": "損益",
     "roe": "収益率",
     "closePosition": "ポジション決済",
@@ -828,7 +827,6 @@
     "all": "全て",
     "noPositionsFound": "ポジションなし",
     "liquidatable": "清算可能",
-    "size": "サイズ",
     "entry": "エントリー",
     "marginRatio": "証拠金率",
     "highRisk": "高リスク",
@@ -853,14 +851,11 @@
     "totalIn": "総流入",
     "totalOut": "総流出",
     "usage": "使用率",
-    "long": "ロング",
-    "short": "ショート",
     "critical": "危機",
     "high": "高",
     "medium": "中",
     "low": "低",
     "mmr": "維持証拠金率",
-    "liqPrice": "清算価格",
     "adlRisk": "ADLリスク",
     "risk": "リスク",
     "connectingToServer": "リスクサーバーに接続中...",

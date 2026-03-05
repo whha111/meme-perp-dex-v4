@@ -277,6 +277,11 @@ export const Keys = {
   // Auth nonce keys (防重放攻击，必须持久化)
   userNonce: (user: Address) => `nonce:${user.toLowerCase()}`,
   allUserNonces: () => "nonces:all",
+
+  // Insurance fund keys (保险基金，必须持久化)
+  insuranceFundGlobal: () => "insurance_fund:global",
+  insuranceFundToken: (token: Address) => `insurance_fund:token:${token.toLowerCase()}`,
+  allInsuranceFundTokens: () => "insurance_fund:tokens:all",
 };
 
 // ============================================================
@@ -1392,6 +1397,103 @@ export const Mode2AdjustmentRepo = {
 };
 
 // ============================================================
+// Insurance Fund Repository (保险基金持久化 — 防重启归零)
+// ============================================================
+
+interface InsuranceFundData {
+  balance: string;
+  totalContributions: string;
+  totalPayouts: string;
+  lastUpdated: string;
+}
+
+export const InsuranceFundRepo = {
+  /**
+   * 保存全局保险基金到 Redis
+   */
+  async saveGlobal(fund: { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      await client.hset(Keys.insuranceFundGlobal(), {
+        balance: fund.balance.toString(),
+        totalContributions: fund.totalContributions.toString(),
+        totalPayouts: fund.totalPayouts.toString(),
+        lastUpdated: fund.lastUpdated.toString(),
+      });
+    } catch (e) {
+      logger.error("Redis", `Failed to save global insurance fund: ${e}`);
+    }
+  },
+
+  /**
+   * 读取全局保险基金
+   */
+  async getGlobal(): Promise<{ balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number } | null> {
+    if (!isRedisConnected()) return null;
+    try {
+      const client = getRedisClient();
+      const data = await client.hgetall(Keys.insuranceFundGlobal()) as InsuranceFundData;
+      if (!data || !data.balance) return null;
+      return {
+        balance: BigInt(data.balance),
+        totalContributions: BigInt(data.totalContributions),
+        totalPayouts: BigInt(data.totalPayouts),
+        lastUpdated: parseInt(data.lastUpdated) || Date.now(),
+      };
+    } catch (e) {
+      logger.error("Redis", `Failed to load global insurance fund: ${e}`);
+      return null;
+    }
+  },
+
+  /**
+   * 保存代币保险基金到 Redis
+   */
+  async saveToken(token: Address, fund: { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      await client.hset(Keys.insuranceFundToken(token), {
+        balance: fund.balance.toString(),
+        totalContributions: fund.totalContributions.toString(),
+        totalPayouts: fund.totalPayouts.toString(),
+        lastUpdated: fund.lastUpdated.toString(),
+      });
+      await client.sadd(Keys.allInsuranceFundTokens(), token.toLowerCase());
+    } catch (e) {
+      logger.error("Redis", `Failed to save token insurance fund for ${token}: ${e}`);
+    }
+  },
+
+  /**
+   * 读取所有代币保险基金 (启动时恢复)
+   */
+  async getAllTokens(): Promise<Map<string, { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }>> {
+    const result = new Map<string, { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }>();
+    if (!isRedisConnected()) return result;
+    try {
+      const client = getRedisClient();
+      const tokens = await client.smembers(Keys.allInsuranceFundTokens());
+      for (const token of tokens) {
+        const data = await client.hgetall(Keys.insuranceFundToken(token as Address)) as InsuranceFundData;
+        if (data && data.balance) {
+          result.set(token.toLowerCase(), {
+            balance: BigInt(data.balance),
+            totalContributions: BigInt(data.totalContributions),
+            totalPayouts: BigInt(data.totalPayouts),
+            lastUpdated: parseInt(data.lastUpdated) || Date.now(),
+          });
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load token insurance funds: ${e}`);
+    }
+    return result;
+  },
+};
+
+// ============================================================
 // Nonce Repository (防重放攻击，持久化到 Redis — AUDIT-FIX ME-C06)
 // ============================================================
 
@@ -1548,6 +1650,7 @@ export default {
   MarketStatsRepo,
   WalletRepo,
   OrderMarginRepo,
+  InsuranceFundRepo,
   NonceRepo,
   // 工具函数
   safeBigInt,
