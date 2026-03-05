@@ -33,7 +33,7 @@ export const CONTRACTS = {
   USDT: (process.env.NEXT_PUBLIC_USDT_ADDRESS || "0x050C988477F818b19a2f44Feee87a147D8f04DfF") as Address,
   USDC: (process.env.NEXT_PUBLIC_USDC_ADDRESS || "0xC9067996aF0b55414EF025002121Bf289D28c32B") as Address,
   USD1: (process.env.NEXT_PUBLIC_USD1_ADDRESS || "0x0A0FbEac39BeF8258795a742A82d170E8a255025") as Address,
-  WETH: (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address, // WBNB on BSC Testnet
+  WETH: (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address, // WBNB on BSC Mainnet
 
   // SettlementV2 (dYdX-style Merkle Withdrawal System - Redeployed 2026-02-28)
   SETTLEMENT_V2: (process.env.NEXT_PUBLIC_SETTLEMENT_V2_ADDRESS || "0x7fF9d60aE49F14bB604FeF1961910D7931067873") as Address,
@@ -55,10 +55,10 @@ export const CONTRACTS = {
  * Network Configuration
  */
 export const NETWORK_CONFIG = {
-  CHAIN_ID: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "97"),
-  CHAIN_NAME: "BSC Testnet",
-  BLOCK_EXPLORER: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || "https://testnet.bscscan.com",
-  RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/",
+  CHAIN_ID: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56"),
+  CHAIN_NAME: "BSC Mainnet",
+  BLOCK_EXPLORER: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || "https://bscscan.com",
+  RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || "https://bsc-dataseed.binance.org/",
 };
 
 /**

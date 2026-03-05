@@ -76,7 +76,7 @@ export async function signOrder(
     throw new Error("Wallet not connected");
   }
 
-  const chainId = walletClient.chain?.id || 97;
+  const chainId = walletClient.chain?.id || 56;
   const domain = getEIP712Domain(settlementAddress, chainId);
 
   const message = {

@@ -10,8 +10,8 @@ import type { Address, Hex } from "viem";
 // ============================================================
 
 export const PORT = parseInt(process.env.PORT || "8081");
-export const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
-export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "97"); // BSC Testnet
+export const RPC_URL = process.env.RPC_URL || "https://bsc-dataseed.binance.org/";
+export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "56"); // BSC Mainnet
 
 // ============================================================
 // 合约地址

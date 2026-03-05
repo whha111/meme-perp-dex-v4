@@ -6,7 +6,7 @@
  */
 
 import { createPublicClient, http, type Address, parseAbiItem, formatUnits } from "viem";
-import { bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { RPC_URL, TOKEN_FACTORY_ADDRESS } from "../config";
 import { getRedisClient } from "../database/redis";
 import { logger } from "../utils/logger";
@@ -16,7 +16,7 @@ import { logger } from "../utils/logger";
 // ============================================================
 
 const publicClient = createPublicClient({
-  chain: bscTestnet,
+  chain: bsc,
   transport: http(RPC_URL),
 });
 

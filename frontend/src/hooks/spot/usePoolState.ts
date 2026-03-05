@@ -8,7 +8,7 @@ import { tradeEventEmitter } from "@/lib/tradeEvents";
 const TOKEN_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}` | undefined;
 
 // Chain ID
-const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "97", 10);
+const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56", 10);
 
 // TokenFactory ABI for view functions
 // ⚠️ ABI 必须与部署的 TokenFactory 合约完全一致

@@ -22,7 +22,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
 import { createWalletClient, createPublicClient, http, keccak256, parseEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { MATCHING_ENGINE_URL, SETTLEMENT_ADDRESS, SETTLEMENT_V2_ADDRESS } from "@/config/api";
 import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI } from "@/lib/contracts";
 import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
@@ -306,7 +306,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       const account = privateKeyToAccount(privateKey);
       return createWalletClient({
         account,
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(),
       });
     } catch (e) {
@@ -317,7 +317,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
 
   // Public client for reading chain state and waiting for tx receipts
   const publicClient = useMemo(() => createPublicClient({
-    chain: bscTestnet,
+    chain: bsc,
     transport: http(),
   }), []);
 
@@ -344,7 +344,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       async (msg: string) => {
         const walletClient = createWalletClient({
           account,
-          chain: bscTestnet,
+          chain: bsc,
           transport: http(),
         });
         return walletClient.signMessage({ account, message: msg });

@@ -15,14 +15,14 @@
 
 import { createWalletClient, createPublicClient, http, fallback, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { SETTLEMENT_V2_ADDRESS as SETTLEMENT_ADDRESS, COLLATERAL_TOKEN_ADDRESS } from "../config";
 
 // ============================================================
 // Configuration
 // ============================================================
 
-const RPC_URL = process.env.BSC_TESTNET_RPC || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+const RPC_URL = process.env.BSC_RPC || "https://bsc-dataseed.binance.org/";
 const RPC_FALLBACK_URLS = (process.env.RPC_FALLBACK_URLS || "").split(",").filter(Boolean);
 const RELAYER_PRIVATE_KEY = process.env.RELAYER_PRIVATE_KEY as Hex;
 
@@ -44,14 +44,14 @@ const rpcTransport = RPC_FALLBACK_URLS.length > 0
 
 // Create clients
 const publicClient = createPublicClient({
-  chain: bscTestnet,
+  chain: bsc,
   transport: rpcTransport,
 });
 
 const walletClient = relayerAccount
   ? createWalletClient({
       account: relayerAccount,
-      chain: bscTestnet,
+      chain: bsc,
       transport: rpcTransport,
     })
   : null;

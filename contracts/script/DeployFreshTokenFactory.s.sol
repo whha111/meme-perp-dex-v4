@@ -15,8 +15,8 @@ import "../src/common/PriceFeed.sol";
  *     --rpc-url $BSC_TESTNET_RPC_URL --broadcast --slow -vvv
  */
 contract DeployFreshTokenFactory is Script {
-    // BSC Testnet PancakeSwap V2 Router
-    address constant UNISWAP_ROUTER = 0xD99D1c33F9fC3444f8101754aBC46c52416550D1;
+    // BSC Mainnet PancakeSwap V2 Router
+    address constant UNISWAP_ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");

@@ -18,8 +18,8 @@ contract DeployTokenFactory is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // BSC Testnet PancakeSwap V2 Router
-        address uniswapRouter = 0xD99D1c33F9fC3444f8101754aBC46c52416550D1;
+        // BSC Mainnet PancakeSwap V2 Router
+        address uniswapRouter = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
         TokenFactory tokenFactory = new TokenFactory(deployer, deployer, uniswapRouter);
         console.log("TokenFactory deployed at:", address(tokenFactory));

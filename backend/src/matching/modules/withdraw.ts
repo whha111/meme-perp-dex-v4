@@ -35,7 +35,7 @@ import { type MerkleProof } from "./merkle";
 const EIP712_DOMAIN = {
   name: "SettlementV2",
   version: "1",
-  chainId: 97, // BSC Testnet
+  chainId: 56, // BSC Mainnet
   verifyingContract: "0x0000000000000000000000000000000000000000" as Address, // Will be set on init
 };
 

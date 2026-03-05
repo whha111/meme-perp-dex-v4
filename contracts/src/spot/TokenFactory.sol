@@ -148,8 +148,8 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     // Liquidation 地址（毕业后启用清算奖励）
     address public liquidation;
 
-    // WBNB 地址 (BSC Testnet)
-    address public constant WETH = 0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd;
+    // WBNB 地址 (BSC Mainnet)
+    address public constant WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
 
     // P0-2: 毕业后的 Uniswap V2 Pair 地址 (token => pair)
     mapping(address => address) public uniswapPairs;

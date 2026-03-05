@@ -28,7 +28,7 @@ export const WS_URL = MATCHING_ENGINE_URL.replace(/^http/, "ws") + "/ws";
 export const API_BASE_URL = MATCHING_ENGINE_URL;
 
 // 链配置
-export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 97);
+export const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 56);
 
 // Settlement 合约地址
 export const SETTLEMENT_ADDRESS = process.env.NEXT_PUBLIC_SETTLEMENT_ADDRESS as `0x${string}` | undefined;

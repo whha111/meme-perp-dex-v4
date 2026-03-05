@@ -19,8 +19,8 @@ import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
 import { useToast } from "@/components/shared/Toast";
 import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI } from "@/lib/contracts";
 
-// BNB 本位: 使用 WETH 或原生 ETH (BSC Testnet)
-const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
+// BNB 本位: 使用 WBNB (BSC Mainnet)
+const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
 export default function WalletPage() {
   const t = useTranslations("walletManagement");

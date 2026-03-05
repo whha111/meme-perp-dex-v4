@@ -28,8 +28,8 @@ import { MATCHING_ENGINE_URL } from "@/config/api";
 // Constants (BNB 本位)
 // ============================================================
 
-// BSC Testnet WBNB address
-const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
+// BSC Mainnet WBNB address
+const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
 const ERC20_BALANCE_ABI = [
   {

@@ -20,7 +20,7 @@ import {
   keccak256,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 
 // ============================================================
 // Types
@@ -415,7 +415,7 @@ export class MatchingEngine {
    */
   configurePriceSource(rpcUrl: string, tokenFactoryAddress: Address, priceFeedAddress?: Address): void {
     this.priceClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(rpcUrl),
     });
     this.tokenFactoryAddress = tokenFactoryAddress;
@@ -1574,14 +1574,14 @@ export class SettlementSubmitter {
 
   constructor(rpcUrl: string, matcherPrivateKey: Hex, settlementAddress: Address) {
     this.client = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(rpcUrl),
     });
 
     const account = privateKeyToAccount(matcherPrivateKey);
     this.walletClient = createWalletClient({
       account,
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(rpcUrl),
     });
 

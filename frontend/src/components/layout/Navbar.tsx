@@ -130,7 +130,7 @@ export function Navbar() {
               {chain && (
                 <>
                   {(() => {
-                    const targetChainId = parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID || '97');
+                    const targetChainId = parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID || '56');
                     if (chain.id !== targetChainId) {
                       return (
                         <button

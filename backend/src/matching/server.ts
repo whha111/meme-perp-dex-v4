@@ -10,7 +10,7 @@ import "dotenv/config";
 import { enableStructuredConsole } from "./utils/logger";
 enableStructuredConsole(); // In production: all console.* outputs become JSON
 import { type Address, type Hex, verifyTypedData, verifyMessage, createPublicClient, http, webSocket, parseEther, formatUnits } from "viem";
-import { bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { WebSocketServer, WebSocket } from "ws";
 import { MatchingEngine, OrderType, OrderStatus, TimeInForce, OrderSource, registerPriceChangeCallback, type Order, type Match, type Trade, type Kline, type TokenStats } from "./engine";
 // ❌ Mode 2: SettlementSubmitter 已从导入中移除
@@ -74,7 +74,7 @@ import {
 // ============================================================
 
 const PORT = parseInt(process.env.PORT || "8081");
-const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+const RPC_URL = process.env.RPC_URL || "https://bsc-dataseed.binance.org/";
 const WSS_URL = process.env.WSS_URL || "wss://bsc-testnet-rpc.publicnode.com";
 const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
 const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
@@ -148,8 +148,8 @@ const TOKEN_POOL_CACHE = new Map<string, CachedPoolState>();
 // 当代币从 bonding curve 毕业到 Uniswap V2 后，价格源需要切换
 // token address (lowercase) => { pairAddress, isWethToken0 }
 
-const WETH_ADDRESS = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address; // WBNB on BSC Testnet
-const UNISWAP_V2_FACTORY_ADDRESS = "0x6725F303b657a9451d8BA641348b6761A6CC7a17" as Address; // PancakeSwap V2 Factory on BSC Testnet
+const WETH_ADDRESS = "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c" as Address; // WBNB on BSC Mainnet
+const UNISWAP_V2_FACTORY_ADDRESS = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73" as Address; // PancakeSwap V2 Factory on BSC Mainnet
 
 interface GraduatedTokenInfo {
   pairAddress: Address;    // Uniswap V2 Pair 地址
@@ -184,7 +184,7 @@ function evictOldest<K, V>(map: Map<K, V>, maxSize: number): void {
 const EIP712_DOMAIN = {
   name: "MemePerp",
   version: "1",
-  chainId: 97, // BSC Testnet
+  chainId: 56, // BSC Mainnet
   verifyingContract: SETTLEMENT_ADDRESS,
 };
 
@@ -1348,7 +1348,7 @@ async function executeADL(
         const adlAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
         const adlWalletClient = createWalletClient({
           account: adlAccount,
-          chain: bscTestnet,
+          chain: bsc,
           transport: http(RPC_URL),
         });
 
@@ -4143,7 +4143,7 @@ async function syncUserBalanceFromChain(trader: Address): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -4424,7 +4424,7 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
   // - 如果 native ETH 不多，value + gas 容易超出余额
   // - WETH 是 ERC20，approve+deposit 只需要 gas (native ETH)，value 从 WETH 余额出
   //
-  const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
+  const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
   console.log(`[Deposit] ${trader.slice(0, 10)} 需要存入 Ξ${Number(shortfall) / 1e18} 到 Settlement (native=Ξ${Number(balance.nativeEthBalance) / 1e18}, weth=Ξ${Number(balance.wethBalance) / 1e18})`);
 
@@ -4448,12 +4448,12 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
     const account = privateKeyToAccount(signingKey);
     const walletClient = createWalletClient({
       account,
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
     const publicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -4731,7 +4731,7 @@ async function syncSupportedTokens(): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -4776,7 +4776,7 @@ async function syncTokenInfoCache(): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -4816,7 +4816,7 @@ async function syncFullTokenData(): Promise<void> {
 
   try {
     const publicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -4950,7 +4950,7 @@ function startSwapEventWatching(
 
   try {
     const wsClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: webSocket(WSS_URL),
     });
 
@@ -5120,7 +5120,7 @@ async function detectGraduatedTokens(): Promise<void> {
   if (SUPPORTED_TOKENS.length === 0) return;
 
   const publicClient = createPublicClient({
-    chain: bscTestnet,
+    chain: bsc,
     transport: http(RPC_URL),
   });
 
@@ -5235,7 +5235,7 @@ async function startEventWatching(): Promise<void> {
   console.log("[Events] Using WebSocket endpoint:", WSS_URL);
 
   const publicClient = createPublicClient({
-    chain: bscTestnet,
+    chain: bsc,
     transport: webSocket(WSS_URL),
   });
 
@@ -5305,7 +5305,7 @@ async function startEventWatching(): Promise<void> {
 
     // 创建独立的 WebSocket client (SettlementV2 合约地址不同于 V1)
     const v2PublicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: webSocket(WSS_URL),
     });
 
@@ -5659,13 +5659,13 @@ const TRADE_POLL_INTERVAL_MS = 15_000; // 15 秒轮询一次
 
 async function startTradeEventPoller(): Promise<void> {
   const { createPublicClient, http, parseAbiItem } = await import("viem");
-  const { bscTestnet } = await import("viem/chains");
+  const { bsc: bscChain } = await import("viem/chains");
 
-  // 使用 publicnode.com 的 HTTP RPC（无 getLogs 区块范围限制）
-  const POLL_RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
+  // BSC Mainnet RPC
+  const POLL_RPC_URL = "https://bsc-dataseed.binance.org/";
 
   const pollClient = createPublicClient({
-    chain: bscTestnet,
+    chain: bsc,
     transport: http(POLL_RPC_URL),
   });
 
@@ -6913,7 +6913,7 @@ async function handleGetNonce(trader: string): Promise<Response> {
   if (SETTLEMENT_ADDRESS) {
     try {
       const publicClient = createPublicClient({
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(RPC_URL),
       });
       const chainNonce = await publicClient.readContract({
@@ -7832,7 +7832,7 @@ async function handleGetUserBalance(trader: string): Promise<Response> {
   let walletEthBalance = 0n;
 
   const publicClient = createPublicClient({
-    chain: bscTestnet,
+    chain: bsc,
     transport: http(RPC_URL),
   });
 
@@ -10899,11 +10899,11 @@ async function handleRequest(req: Request): Promise<Response> {
       const account = privateKeyToAccount(signingKey);
       const walletClient = createWalletClient({
         account,
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(RPC_URL),
       });
       const pubClient = createPublicClient({
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(RPC_URL),
       });
 
@@ -11417,7 +11417,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
     try {
       const publicClient = createPublicClient({
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(RPC_URL),
       });
       const currentBlock = toBlock || await publicClient.getBlockNumber();
@@ -12757,7 +12757,7 @@ async function startServer(): Promise<void> {
     const v2UpdaterAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
     const v2WalletClient = createWalletClient({
       account: v2UpdaterAccount,
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -12788,13 +12788,13 @@ async function startServer(): Promise<void> {
     initializeWithdrawModule({
       signerPrivateKey: MATCHER_PRIVATE_KEY,
       contractAddress: SETTLEMENT_V2_ADDRESS,
-      chainId: 97, // BSC Testnet
+      chainId: 56, // BSC Mainnet
     });
     console.log("[Server] Mode 2: Withdraw module initialized (Merkle + EIP-712)");
 
     // 从链上同步提款 nonce（防止引擎重启后 nonce 重放攻击）
     const v2ReadClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
     const knownUsers = Array.from(userBalances.keys()) as Address[];
@@ -12823,7 +12823,7 @@ async function startServer(): Promise<void> {
     initializeWithdrawModule({
       signerPrivateKey: MATCHER_PRIVATE_KEY,
       contractAddress: SETTLEMENT_ADDRESS,
-      chainId: 97, // BSC Testnet
+      chainId: 56, // BSC Mainnet
     });
 
     startSnapshotJob({
@@ -12845,7 +12845,7 @@ async function startServer(): Promise<void> {
   // ============================================================
   {
     const lendingPublicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -12854,7 +12854,7 @@ async function startServer(): Promise<void> {
       const matcherAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
       lendingWalletClient = createWalletClient({
         account: matcherAccount,
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(RPC_URL),
       });
     }
@@ -12872,7 +12872,7 @@ async function startServer(): Promise<void> {
   // ============================================================
   if (PERP_VAULT_ADDRESS_LOCAL) {
     const vaultPublicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(RPC_URL),
     });
 
@@ -12881,7 +12881,7 @@ async function startServer(): Promise<void> {
       const matcherAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
       vaultWalletClient = createWalletClient({
         account: matcherAccount,
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(RPC_URL),
       });
     }
@@ -12941,9 +12941,9 @@ async function startServer(): Promise<void> {
     const { updateKlineWithCurrentPrice } = await import("../spot/spotHistory");
 
     // 使用备用 RPC 避免限流 (publicnode 比 sepolia.base.org 限制更宽松)
-    const SYNC_RPC = process.env.SPOT_SYNC_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+    const SYNC_RPC = process.env.SPOT_SYNC_RPC_URL || "https://bsc-dataseed.binance.org/";
     const publicClient = createPublicClient({
-      chain: bscTestnet,
+      chain: bsc,
       transport: http(SYNC_RPC),
     });
 
@@ -13315,10 +13315,10 @@ async function startServer(): Promise<void> {
   (async () => {
     try {
       const { createPublicClient, http } = await import("viem");
-      const { bscTestnet } = await import("viem/chains");
+      const { bsc: bscChain } = await import("viem/chains");
       const backfillClient = createPublicClient({
-        chain: bscTestnet,
-        transport: http("https://data-seed-prebsc-1-s1.binance.org:8545/"),
+        chain: bsc,
+        transport: http("https://bsc-dataseed.binance.org/"),
       });
       const currentBlock = await backfillClient.getBlockNumber();
       const backfillFrom = currentBlock > 50000n ? currentBlock - 50000n : 0n;

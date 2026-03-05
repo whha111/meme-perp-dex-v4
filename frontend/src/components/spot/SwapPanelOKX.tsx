@@ -356,7 +356,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
           </p>
           {isGraduated && (
             <a
-              href={`https://pancakeswap.finance/swap?chain=bscTestnet&inputCurrency=BNB&outputCurrency=${tokenAddress}`}
+              href={`https://pancakeswap.finance/swap?chain=bsc&inputCurrency=BNB&outputCurrency=${tokenAddress}`}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-2 inline-block bg-[#1FC7D4] text-okx-text-primary px-3 py-1.5 rounded-lg text-[12px] font-bold hover:opacity-90"

@@ -23,11 +23,11 @@ redis:
   pool_size: 10
 
 blockchain:
-  # BSC Testnet — P0-1: RPC URL must come from env in production
-  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545/}"
-  chain_id: 97
+  # BSC Mainnet — P0-1: RPC URL must come from env in production
+  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}"
+  chain_id: 56
 
-  # Contract Addresses (BSC Testnet)
+  # Contract Addresses (BSC Mainnet — update after deployment)
   router_address: "${MEMEPERP_ROUTER_ADDRESS:-0xF15197BA411b578dafC7936C241bE9DD725c22BE}"
   vault_address: "${MEMEPERP_VAULT_ADDRESS:-0xACE7014F60eF9c367E7fA5Dd80601A9945E6F4d1}"
   amm_address: "${MEMEPERP_AMM_ADDRESS:-0x2c23046DC1595754528a10b8340F2AD8fdE05112}"

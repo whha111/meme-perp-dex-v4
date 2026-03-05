@@ -26,9 +26,9 @@ redis:
   pool_size: 10
 
 blockchain:
-  # BSC Testnet — P0-1: Use public RPC, API key via env only
-  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545/}"
-  chain_id: 97  # BSC Testnet
+  # BSC Mainnet — P0-1: Use public RPC, API key via env only
+  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}"
+  chain_id: 56  # BSC Mainnet
 
   # Contract addresses (Deployed 2026-03-03)
   # AUDIT-FIX M-18: All contract addresses belong here, NOT under matching_engine

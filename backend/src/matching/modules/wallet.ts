@@ -11,7 +11,7 @@
 import { Wallet } from "ethers";
 import { createWalletClient, http, keccak256, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { v4 as uuidv4 } from "uuid";
 import { RPC_URL } from "../config";
 import { encryptPrivateKey, decryptPrivateKey, generateSessionId, hashPassword, verifyPassword } from "../utils/crypto";
@@ -382,7 +382,7 @@ export async function createWalletClientFromSession(sessionId: string) {
   const account = privateKeyToAccount(privateKey);
   return createWalletClient({
     account,
-    chain: bscTestnet,
+    chain: bsc,
     transport: http(RPC_URL),
   });
 }

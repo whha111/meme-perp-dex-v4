@@ -17,7 +17,7 @@
  */
 
 import { createPublicClient, http, type Address } from "viem";
-import { bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { RPC_URL, SETTLEMENT_ADDRESS } from "../config";
 import { BalanceRepo } from "../database/redis";
 import { logger } from "../utils/logger";
@@ -28,7 +28,7 @@ import type { UserBalance } from "../types";
 // ============================================================
 
 const publicClient = createPublicClient({
-  chain: bscTestnet,
+  chain: bsc,
   transport: http(RPC_URL),
 });
 
@@ -58,7 +58,7 @@ const SETTLEMENT_ABI = [
 ] as const;
 
 // WBNB 地址 (BSC Testnet)
-const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
+const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
 // ============================================================
 // Balance Functions
