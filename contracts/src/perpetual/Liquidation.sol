@@ -222,7 +222,8 @@ contract Liquidation is Ownable, ReentrancyGuard {
         }
     }
 
-    function liquidateSingle(address user, address liquidator) external {
+    // M-15 FIX: 添加 nonReentrant 防重入保护
+    function liquidateSingle(address user, address liquidator) external nonReentrant {
         require(msg.sender == address(this), "Internal only");
 
         IPositionManager.Position memory pos = positionManager.getPosition(user);
@@ -276,6 +277,9 @@ contract Liquidation is Ownable, ReentrancyGuard {
 
         positionManager.forceCloseToken(user, token);
 
+        // M-16 DOC: 清算奖励双路径设计（GMX 标准，有意行为）：
+        //   - 盈利清算 (remainingValue > 0): 奖励从被清算者利润/担保品中扣，通过 Vault.distributeLiquidation
+        //   - 破产清算 (remainingValue <= 0): 奖励从本合约保险金 address(this).balance 支付
         // 内盘(bonding curve) = 0% 奖励，全额进保险基金
         // 转 DEX 后 = 7.5% 奖励给外部清算人
         uint256 effectiveRewardRate = liquidatorRewardEnabled[token] ? liquidatorRewardRate : 0;
@@ -348,7 +352,8 @@ contract Liquidation is Ownable, ReentrancyGuard {
     /**
      * @notice 内部函数：清算单个代币仓位
      */
-    function liquidateSingleToken(address user, address token, address liquidator) external {
+    // M-15 FIX: 添加 nonReentrant 防重入保护
+    function liquidateSingleToken(address user, address token, address liquidator) external nonReentrant {
         require(msg.sender == address(this), "Internal only");
 
         IPositionManager.PositionEx memory pos = positionManager.getPositionByToken(user, token);
@@ -574,11 +579,12 @@ contract Liquidation is Ownable, ReentrancyGuard {
      * @param targetSide true=减少多头, false=减少空头
      * @param targetAmount 目标减少金额
      */
+    // M-17 FIX: 添加 onlyOwner 访问控制 — 仅 Owner/Keeper 可触发 ADL
     function executeADLWithSortedUsers(
         address[] calldata sortedUsers,
         bool targetSide,
         uint256 targetAmount
-    ) external nonReentrant {
+    ) external onlyOwner nonReentrant {
         require(sortedUsers.length > 0, "Empty user list");
 
         uint256 markPrice = priceFeed.getMarkPrice();

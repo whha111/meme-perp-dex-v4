@@ -18,13 +18,14 @@ cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 |------|------|------|--------|---------|
 | **V1 架构审计** | 2026-03-01 | 资金流、链上/链下一致性 | 48 (35 fixed) | `docs/ISSUES_AUDIT_REPORT.md` |
 | **V2 代码审查** | 2026-03-03 | 逐行代码 bug、安全漏洞 | 75 (8 fixed) | `docs/CODE_REVIEW_V2.md` |
-| **V3 全量审计** | 2026-03-04 | 全层全量 + 修复验证 | 56 remain / 25+ fixed | `docs/AUDIT_V3_FULL.md` |
+| **V3 全量审计** | 2026-03-04 | 全层全量 + 修复验证 | 12 open, 9 partial, 35 fixed | `docs/AUDIT_V3_FULL.md` |
 
 **当前关键状态 (BSC Testnet, Chain 97)**:
 - ✅ 链上资金托管已连通（PerpVault LP, SettlementV2 存取款）
 - ✅ 合约部署到 BSC Testnet (97)，E2E 测试 36/36 通过
-- ✅ V1/V2 审计中 25+ 问题已确认修复
-- ❌ V3 发现 1 个 CRITICAL + 10 个 HIGH 待修复（详见 AUDIT_V3_FULL.md）
+- ✅ V1/V2/V3 审计中 **35 个完全修复 + 9 个部分修复**
+- ✅ **V3 全部 CRITICAL + HIGH 已清零** (0/0) — 372 contract tests pass
+- ⚠️ 12 个 OPEN + 9 个 PARTIAL (全部 MEDIUM/LOW)（详见 AUDIT_V3_FULL.md）
 
 ## 项目概述
 
@@ -62,13 +63,16 @@ cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 - ✅ Auth nonce TOCTOU — withLock() 保护
 - ✅ Nonce Redis 持久化 — write-through cache
 
-**V3 审计仍存在的关键问题 (2026-03-04):**
-- ❌ `/api/v2/withdraw/request` 无鉴权+不扣余额 (CRITICAL)
-- ❌ `subscribe_risk` WS 无鉴权，泄露任意用户仓位
-- ❌ `broadcastMarginUpdate` 泄露到所有 WS 客户端
-- ❌ 前端允许 100x 杠杆，引擎限制 10x
-- ❌ TokenFactory `_distributeTradingFee` 无推荐人时多扣 10%
-- 详见 `docs/AUDIT_V3_FULL.md` — 完整 56 个问题
+**V3 审计 CRITICAL/HIGH 全部已修复 (2026-03-07):**
+- ✅ `/api/v2/withdraw/request` 无鉴权+不扣余额 (CR-01) — 2026-03-04 修复
+- ✅ `subscribe_risk` WS 无鉴权 (H-01) — 2026-03-04 修复
+- ✅ `broadcastMarginUpdate` 泄露到所有客户端 (H-02) — 2026-03-04 修复
+- ✅ 前端允许 100x 杠杆 (H-06) — 2026-03-04 修复
+- ✅ TokenFactory `_distributeTradingFee` 无推荐人时多扣 10% (H-08) — 2026-03-07 修复
+- ✅ Liquidation.sol phantom insuranceFund (H-09) — 2026-03-07 修复
+- ✅ 双保险基金无对账 (H-10) — 2026-03-07 修复
+- **0 CRITICAL, 0 HIGH 剩余** — 372 contract tests pass
+- 详见 `docs/AUDIT_V3_FULL.md` — 12 open + 9 partial (全部 MEDIUM/LOW)
 
 ## 行业标准 (必须遵循)
 

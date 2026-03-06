@@ -15,6 +15,7 @@
 
 import { type Address, type Hex } from "viem";
 import { merkleTreeManager, type UserEquity, type SnapshotState, type MerkleProof } from "./merkle";
+import { getPendingWithdrawalAmount } from "./withdraw";
 
 // Import from server.ts (will be provided via injection)
 type BalanceGetter = (trader: Address) => {
@@ -117,6 +118,11 @@ function calculateUserEquity(trader: Address): bigint {
     const upnl = BigInt(pos.unrealizedPnL || "0");
     equity += upnl;
   }
+
+  // M-08 FIX: 扣减待处理提款金额 — 防止用户用已请求提款的金额再次提款
+  // 如果用户已请求提款 X ETH，其 Merkle equity 应减去 X
+  const pendingWithdrawal = getPendingWithdrawalAmount(trader);
+  equity -= pendingWithdrawal;
 
   return equity;
 }

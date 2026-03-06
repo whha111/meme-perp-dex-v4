@@ -158,6 +158,10 @@ export interface RelayerStatus {
 const MIN_RELAYER_BALANCE = BigInt(1e16); // 0.01 ETH minimum for gas
 const MAX_APPROVAL = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); // type(uint256).max
 
+// M-11 FIX: 充值去重 — 防止同一笔 deposit 被重放
+const processedDeposits = new Set<string>();
+const MAX_PROCESSED_CACHE = 10000; // 防止内存无限增长
+
 // ============================================================
 // Relayer Service Functions
 // ============================================================
@@ -309,6 +313,20 @@ export async function relayDeposit(request: DepositRequest): Promise<RelayResult
 
   try {
     const amount = BigInt(request.amount);
+
+    // M-11 FIX: 充值去重 — 使用 user+amount 组合作为去重键
+    const deduKey = `${request.user.toLowerCase()}-${request.amount}`;
+    if (processedDeposits.has(deduKey)) {
+      console.warn(`[Relay] Duplicate deposit rejected: ${deduKey}`);
+      return { success: false, error: "Duplicate deposit" };
+    }
+    // 添加到已处理集合 (防止重放)
+    processedDeposits.add(deduKey);
+    // 防止内存泄漏：超过限制时清理最老的条目
+    if (processedDeposits.size > MAX_PROCESSED_CACHE) {
+      const firstKey = processedDeposits.values().next().value;
+      if (firstKey) processedDeposits.delete(firstKey);
+    }
 
     // Check relayer has enough ETH for gas
     const ethBalance = await publicClient.getBalance({

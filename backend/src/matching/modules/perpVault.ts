@@ -798,9 +798,13 @@ export async function executeBatchSettlement(): Promise<void> {
       }
     }
 
-    // Remove executed items (in reverse order to preserve indices)
-    for (const idx of executed.sort((a, b) => b - a)) {
-      if (idx >= 0) pendingSettlements.splice(idx, 1);
+    // L-15 FIX: 使用 Set<number> 追踪已执行项的索引，从后往前删除
+    // 旧代码用 indexOf(item) 依赖引用相等，sorted 是 spread 副本导致 indexOf 总是 -1
+    const executedIndices = new Set(executed.filter(idx => idx >= 0));
+    for (let i = pendingSettlements.length - 1; i >= 0; i--) {
+      if (executedIndices.has(i)) {
+        pendingSettlements.splice(i, 1);
+      }
     }
 
     batchesExecuted++;

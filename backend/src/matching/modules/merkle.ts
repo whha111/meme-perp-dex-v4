@@ -164,6 +164,10 @@ export class MerkleTreeManager {
   private snapshotHistory: Map<number, SnapshotState> = new Map();
   private snapshotCounter = 0;
 
+  // M-09 FIX: Merkle tree 缓存 — 避免每次 getProof 都重建整棵树
+  private cachedTree: Hex[][] | null = null;
+  private cachedTreeSnapshotId: number | null = null;
+
   /**
    * Create a new snapshot from user equities
    */
@@ -176,9 +180,10 @@ export class MerkleTreeManager {
     const root = getMerkleRoot(tree);
 
     // Create snapshot
+    // L-04 FIX: 使用 Unix 秒而非毫秒 — 与链上 block.timestamp 保持一致
     const snapshot: SnapshotState = {
       snapshotId: ++this.snapshotCounter,
-      timestamp: Date.now(),
+      timestamp: Math.floor(Date.now() / 1000),
       root,
       leaves,
       equities,
@@ -226,9 +231,12 @@ export class MerkleTreeManager {
       return null;
     }
 
-    // Build tree and generate proof
-    const tree = buildMerkleTree(this.currentSnapshot.leaves);
-    const proof = generateProof(tree, leafIndex);
+    // M-09 FIX: 使用缓存的 Merkle tree，避免每次 getProof 都 O(n) 重建
+    if (this.cachedTreeSnapshotId !== this.currentSnapshot.snapshotId || !this.cachedTree) {
+      this.cachedTree = buildMerkleTree(this.currentSnapshot.leaves);
+      this.cachedTreeSnapshotId = this.currentSnapshot.snapshotId;
+    }
+    const proof = generateProof(this.cachedTree, leafIndex);
 
     return {
       user: equity.user,

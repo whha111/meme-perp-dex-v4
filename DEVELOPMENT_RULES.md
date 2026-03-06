@@ -12,7 +12,7 @@
 |------|------|------|--------|------|
 | V1 架构审计 | 2026-03-01 | 48 | 35 | `docs/ISSUES_AUDIT_REPORT.md` |
 | V2 代码审查 | 2026-03-03 | 75 | 8 | `docs/CODE_REVIEW_V2.md` |
-| V3 全量审计 | 2026-03-04 | 56 remain | 25+ confirmed | `docs/AUDIT_V3_FULL.md` |
+| V3 全量审计 | 2026-03-04 | 12 open / 9 partial / 35 fixed | `docs/AUDIT_V3_FULL.md` |
 
 ### V1 核心问题 (已修复)
 - ✅ 虚假存取款 API 已加 `ALLOW_FAKE_DEPOSIT` 守卫
@@ -20,12 +20,15 @@
 - ✅ PerpVault 有 LP 种子流动性，ConfigureSettlement.s.sol 已执行
 - ✅ Keeper 从撮合引擎 HTTP API 获取仓位数据
 
-### V3 仍存在的关键问题
-- ❌ `/api/v2/withdraw/request` 无鉴权+不扣余额 (CRITICAL — CR-01)
-- ❌ 多个 WS 广播泄露数据给所有客户端 (HIGH — H-01/H-02)
-- ❌ 前端允许 100x 杠杆，引擎限制 10x (HIGH — H-06)
-- ❌ TokenFactory `_distributeTradingFee` 无推荐人时多扣 10% (HIGH — H-08)
-- 完整清单: `docs/AUDIT_V3_FULL.md`
+### V3 关键问题状态 (ALL CRITICAL/HIGH RESOLVED ✅)
+- ✅ `/api/v2/withdraw/request` 无鉴权+不扣余额 (CRITICAL — CR-01) — 已修复 2026-03-04
+- ✅ 多个 WS 广播泄露数据给所有客户端 (HIGH — H-01/H-02) — 已修复 2026-03-04
+- ✅ 前端允许 100x 杠杆，引擎限制 10x (HIGH — H-06) — 已修复 2026-03-04
+- ✅ TokenFactory `_distributeTradingFee` 无推荐人时多扣 10% (HIGH — H-08) — 已修复 2026-03-07
+- ✅ Liquidation.sol phantom insuranceFund (HIGH — H-09) — 已修复 2026-03-07
+- ✅ 双保险基金无对账 (HIGH — H-10) — 已修复 2026-03-07
+- **0 CRITICAL, 0 HIGH 剩余 — 372 contract tests pass**
+- 完整清单: `docs/AUDIT_V3_FULL.md` (12 open + 9 partial，全部 MEDIUM/LOW)
 
 ---
 

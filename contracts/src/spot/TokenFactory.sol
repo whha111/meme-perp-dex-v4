@@ -199,6 +199,8 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     event GraduationFailed(address indexed token, uint8 attempt, string reason);
     event GraduationRetried(address indexed token, uint8 attempt);
     event GraduationRolledBack(address indexed token, uint256 ethReturned);
+    // L-10: receive() event for tracking unexpected ETH deposits
+    event ETHReceived(address indexed sender, uint256 amount);
     // 永续合约自动开启事件
     event PerpEnabled(address indexed token, uint256 ethReserve, uint256 price);
     event GraduationFeeCollected(address indexed token, uint256 fee, address feeReceiver);
@@ -595,14 +597,16 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         // LP Token 发送到死地址 (销毁)
         address DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
-        // 允许 1% 滑点
+        // 允许 1% 滑点 (token + ETH 双向保护)
         uint256 minTokenAmount = tokenAmount * 99 / 100;
+        // M-14 FIX: ETH 侧也添加滑点保护，防止 MEV 三明治攻击
+        uint256 minETHAmount = liquidityETH * 99 / 100;
 
         try IUniswapV2Router02(uniswapV2Router).addLiquidityETH{value: liquidityETH}(
             tokenAddress,
             tokenAmount,
             minTokenAmount,
-            0,
+            minETHAmount,
             DEAD_ADDRESS,
             block.timestamp + 300
         ) returns (uint256, uint256, uint256) {
@@ -737,11 +741,10 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         if (!state.graduationFailed) revert GraduationNotFailed();
         if (state.isGraduated) revert PoolAlreadyGraduated();
 
-        // 重置毕业失败状态
+        // M-13 FIX: 仅重置 graduationFailed flag，不膨胀 realTokenReserve
+        // 原来 += GRADUATION_THRESHOLD / 10 会导致会计偏差：
+        // 凭空增加 token reserve 使 bonding curve 价格失真
         state.graduationFailed = false;
-        // 增加代币储备以防止立即触发毕业
-        // 注意：这是一个紧急措施，可能导致价格波动
-        state.realTokenReserve += GRADUATION_THRESHOLD / 10; // 增加一些缓冲
 
         // 解锁铸造（如果之前被旧版本锁定了）
         try IMemeTokenV2(tokenAddress).unlockMinting() {} catch {}
@@ -874,5 +877,8 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         return allTokens.length;
     }
 
-    receive() external payable {}
+    // L-10 FIX: 添加事件追踪意外 ETH 存入
+    receive() external payable {
+        emit ETHReceived(msg.sender, msg.value);
+    }
 }

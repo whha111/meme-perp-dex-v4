@@ -41,6 +41,9 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
     // H-016: 待领取的盈利（保险基金不足时记录）
     mapping(address => uint256) public pendingProfits;
 
+    // M-19 FIX: 失败的保险基金转账记录（待重试）
+    mapping(address => uint256) public pendingInsuranceTransfers;
+
     // P1-3: 活跃仓位提款延迟
     uint256 public withdrawalDelay; // 提款延迟时间（秒），默认 0 = 无延迟
     struct WithdrawRequest {
@@ -83,6 +86,9 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
     event WithdrawExecuted(address indexed user, uint256 amount);
     event WithdrawCancelled(address indexed user, uint256 amount);
     event WithdrawalDelaySet(uint256 delay);
+    // M-19 FIX: 保险基金转账重试事件
+    event InsuranceTransferRetried(address indexed user, uint256 amount, bool success);
+    event InsuranceTransferQueued(address indexed user, uint256 amount);
 
     // ============================================================
     // Errors
@@ -99,6 +105,7 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
     error WithdrawNotReady();
     error NoPendingWithdraw();
     error WithdrawDelayTooLong();
+    error PendingWithdrawExists();
 
     // ============================================================
     // Modifiers
@@ -209,7 +216,9 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
         if (balances[msg.sender] < amount) revert InsufficientBalance();
 
         // P1-3: 有活跃仓位且设置了延迟 → 走 pending 流程
+        // L-12 FIX: 防止覆盖已有的 pending 提款请求
         if (withdrawalDelay > 0 && lockedBalances[msg.sender] > 0) {
+            if (pendingWithdrawals[msg.sender].amount > 0) revert PendingWithdrawExists();
             pendingWithdrawals[msg.sender] = WithdrawRequest({
                 amount: amount,
                 unlockTime: block.timestamp + withdrawalDelay
@@ -480,10 +489,14 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
             if (address(this).balance >= actualCollateral) {
                 (bool collateralSuccess,) = insuranceFund.call{value: actualCollateral}("");
                 if (!collateralSuccess) {
-                    emit InsuranceTransferFailed(user, actualCollateral);
+                    // M-19 FIX: 记录失败转账供重试，而非静默丢失
+                    pendingInsuranceTransfers[user] += actualCollateral;
+                    emit InsuranceTransferQueued(user, actualCollateral);
                 }
             } else {
-                emit InsuranceTransferFailed(user, actualCollateral);
+                // M-19 FIX: ETH 不足也记录待转金额
+                pendingInsuranceTransfers[user] += actualCollateral;
+                emit InsuranceTransferQueued(user, actualCollateral);
             }
         }
 
@@ -609,10 +622,33 @@ contract Vault is Ownable, ReentrancyGuard, Pausable {
     }
 
     // ============================================================
+    // M-19 FIX: 保险基金转账重试
+    // ============================================================
+
+    /// @notice 重试失败的保险基金转账
+    /// @param user 原始用户地址
+    function retryInsuranceTransfer(address user) external onlyOwner nonReentrant {
+        uint256 amount = pendingInsuranceTransfers[user];
+        require(amount > 0, "No pending transfer");
+        require(insuranceFund != address(0), "No insurance fund");
+        require(address(this).balance >= amount, "Insufficient balance");
+
+        delete pendingInsuranceTransfers[user];
+
+        (bool success,) = insuranceFund.call{value: amount}("");
+        if (!success) {
+            // 仍然失败，重新记录
+            pendingInsuranceTransfers[user] = amount;
+        }
+        emit InsuranceTransferRetried(user, amount, success);
+    }
+
+    // ============================================================
     // Receive Function
     // ============================================================
 
-    receive() external payable {
+    // M-18 FIX: 添加 whenNotPaused — 暂停期间不允许通过 receive() 存款
+    receive() external payable whenNotPaused {
         balances[msg.sender] += msg.value;
         emit Deposit(msg.sender, msg.value, block.timestamp);
     }

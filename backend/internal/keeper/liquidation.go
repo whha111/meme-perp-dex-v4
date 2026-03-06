@@ -44,7 +44,8 @@ type LiquidationKeeper struct {
 	// Metrics — AUDIT-FIX GO-C04: 使用 atomic 防止 ticker goroutine 和 HTTP handler 间的数据竞争
 	liquidationsExecuted atomic.Uint64
 	liquidationsFailed   atomic.Uint64
-	lastCheckTime        time.Time
+	// L-06 FIX: lastCheckTime 改用 atomic.Value 防止 ticker goroutine 和 GetMetrics() 间的数据竞争
+	lastCheckTime        atomic.Value // stores time.Time
 	engineQuerySuccesses atomic.Uint64
 	engineQueryFailures  atomic.Uint64
 }
@@ -246,7 +247,7 @@ func (k *LiquidationKeeper) getPositionsFromEngine() ([]model.Position, error) {
 }
 
 func (k *LiquidationKeeper) checkPositions(ctx context.Context) {
-	k.lastCheckTime = time.Now()
+	k.lastCheckTime.Store(time.Now())
 
 	// Mode 2: Try matching engine first (positions live in engine memory/Redis)
 	var positions []model.Position
@@ -558,10 +559,15 @@ func (k *LiquidationKeeper) liquidateInDB(pos *model.Position, markPrice model.D
 
 // GetMetrics returns keeper metrics
 func (k *LiquidationKeeper) GetMetrics() map[string]interface{} {
+	// L-06 FIX: 从 atomic.Value 中安全读取 lastCheckTime
+	var lastCheck time.Time
+	if v := k.lastCheckTime.Load(); v != nil {
+		lastCheck = v.(time.Time)
+	}
 	return map[string]interface{}{
 		"liquidations_executed":    k.liquidationsExecuted.Load(),
 		"liquidations_failed":      k.liquidationsFailed.Load(),
-		"last_check_time":          k.lastCheckTime,
+		"last_check_time":          lastCheck,
 		"blockchain_enabled":       k.ethClient != nil,
 		"engine_enabled":           k.matchingEngineURL != "",
 		"engine_query_successes":   k.engineQuerySuccesses.Load(),

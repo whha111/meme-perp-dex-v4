@@ -426,6 +426,21 @@ export async function requestWithdrawal(
 }
 
 /**
+ * M-08 FIX: Get total pending withdrawal amount for a user
+ * Used by snapshot.ts to deduct pending withdrawals from equity
+ */
+export function getPendingWithdrawalAmount(user: Address): bigint {
+  const normalizedUser = user.toLowerCase();
+  let total = 0n;
+  for (const auth of state.pendingWithdrawals.values()) {
+    if (auth.user.toLowerCase() === normalizedUser) {
+      total += BigInt(auth.amount);
+    }
+  }
+  return total;
+}
+
+/**
  * Get module status
  */
 export function getWithdrawModuleStatus(): {

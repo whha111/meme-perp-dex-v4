@@ -699,15 +699,45 @@ contract PerpVaultTest is Test {
         assertEq(vault.maxOIPerToken(tokenA), 50 ether);
     }
 
-    function test_admin_emergencyRescue() public {
+    function test_admin_emergencyRescue_timelock() public {
         vm.prank(lp1);
         vault.deposit{value: 10 ether}();
 
+        // Step 1: Request rescue (starts 48h timelock)
+        vm.prank(owner);
+        vault.requestEmergencyRescue(owner, 5 ether);
+
+        // Step 2: Cannot execute before timelock expires
+        vm.prank(owner);
+        vm.expectRevert(PerpVault.RescueTimelockActive.selector);
+        vault.executeEmergencyRescue();
+
+        // Step 3: Warp past timelock (48 hours)
+        vm.warp(block.timestamp + 48 hours + 1);
+
+        // Step 4: Execute rescue after timelock
         uint256 ownerBalanceBefore = owner.balance;
         vm.prank(owner);
-        vault.emergencyRescue(owner, 5 ether);
+        vault.executeEmergencyRescue();
 
         assertEq(owner.balance - ownerBalanceBefore, 5 ether);
+    }
+
+    function test_admin_emergencyRescue_cancel() public {
+        vm.prank(lp1);
+        vault.deposit{value: 10 ether}();
+
+        // Request then cancel
+        vm.prank(owner);
+        vault.requestEmergencyRescue(owner, 5 ether);
+        vm.prank(owner);
+        vault.cancelEmergencyRescue();
+
+        // Cannot execute cancelled rescue
+        vm.warp(block.timestamp + 48 hours + 1);
+        vm.prank(owner);
+        vm.expectRevert(PerpVault.NoPendingRescue.selector);
+        vault.executeEmergencyRescue();
     }
 
     function test_admin_pause_unpause() public {

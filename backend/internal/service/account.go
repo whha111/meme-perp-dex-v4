@@ -11,6 +11,10 @@ import (
 	"github.com/memeperp/backend/internal/repository"
 )
 
+// L-07 FIX: 可配置抵押币种（之前硬编码 "ETH"）
+// 未来可从 config 读取，根据链设置不同默认值 (BSC=BNB, ETH=ETH)
+const CollateralCurrency = "ETH"
+
 type AccountService struct {
 	db           *gorm.DB // AUDIT-FIX GO-C05: store DB reference for bill repo
 	userRepo     *repository.UserRepository
@@ -169,8 +173,8 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		return errors.New(errors.CodePositionNotFound)
 	}
 
-	// Platform uses BNB on BSC
-	balance, err := s.balanceRepo.GetByUserAndCcy(userID, "ETH")
+	// L-07 FIX: 使用可配置抵押币种常量
+	balance, err := s.balanceRepo.GetByUserAndCcy(userID, CollateralCurrency)
 	if err != nil {
 		return errors.New(errors.CodeInsufficientBalance)
 	}
@@ -182,7 +186,7 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		}
 
 		// Deduct from available balance
-		if err := s.balanceRepo.FreezeBalance(userID, "ETH", amount); err != nil {
+		if err := s.balanceRepo.FreezeBalance(userID, CollateralCurrency, amount); err != nil {
 			return err
 		}
 
@@ -199,7 +203,7 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		pos.Margin = pos.Margin.Sub(amount)
 
 		// Return to available balance
-		if err := s.balanceRepo.UnfreezeBalance(userID, "ETH", amount); err != nil {
+		if err := s.balanceRepo.UnfreezeBalance(userID, CollateralCurrency, amount); err != nil {
 			return err
 		}
 	} else {

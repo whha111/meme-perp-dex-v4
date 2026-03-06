@@ -6,6 +6,14 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./IPerpVault.sol";
 
+/// @notice WETH interface for M-21 fallback transfers
+interface IWETH {
+    function deposit() external payable;
+    function withdraw(uint256) external;
+    function transfer(address to, uint256 value) external returns (bool);
+    function balanceOf(address) external view returns (uint256);
+}
+
 /**
  * @title PerpVault
  * @notice GMX/HLP-style LP pool as counterparty for all perpetual trades
@@ -124,6 +132,9 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     /// @notice Vault contract address (for sending trader profits)
     address public vault;
 
+    /// @notice WETH contract address (for M-21 fallback when ETH transfer fails)
+    address public weth;
+
     // ============================================================
     // Events
     // ============================================================
@@ -151,6 +162,13 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     // H2: Deposit cap / pause
     event MaxPoolValueSet(uint256 maxValue);
     event DepositsPausedSet(bool paused);
+    // M-21: WETH fallback
+    event WETHSet(address indexed weth);
+    event WETHFallbackUsed(address indexed trader, uint256 amount);
+    // M-23: Emergency rescue timelock
+    event RescueRequested(address indexed to, uint256 amount, uint256 executeAfter);
+    event RescueExecuted(address indexed to, uint256 amount);
+    event RescueCancelled();
 
     // ============================================================
     // Errors
@@ -171,6 +189,23 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     error DepositsPausedError();
     error ExceedsMaxPoolValue();
     error CooldownTooLong();
+    error WETHNotSet();
+    error NoPendingRescue();
+    error RescueTimelockActive();
+
+    // ── M-23: Emergency rescue timelock ──
+
+    struct RescueRequest {
+        address to;
+        uint256 amount;
+        uint256 executeAfter;
+    }
+
+    /// @notice Pending emergency rescue request (48h timelock)
+    RescueRequest public pendingRescue;
+
+    /// @notice Rescue timelock duration
+    uint256 public constant RESCUE_TIMELOCK = 48 hours;
 
     // ============================================================
     // Modifiers
@@ -228,6 +263,13 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     function setDepositsPaused(bool _paused) external onlyOwner {
         depositsPaused = _paused;
         emit DepositsPausedSet(_paused);
+    }
+
+    /// @notice M-21: Set WETH address for fallback transfers
+    function setWETH(address _weth) external onlyOwner {
+        if (_weth == address(0)) revert ZeroAddress();
+        weth = _weth;
+        emit WETHSet(_weth);
     }
 
     /// @notice 设置最大利用率（OI 不能超过池子价值的此比例）
@@ -461,7 +503,12 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
      * @notice Settle trader profit — pool pays from its ETH
      * @param trader Trader address (for event logging)
      * @param profitETH Amount of ETH profit to pay
-     * @dev Sends ETH to the Vault contract, which credits the trader's balance.
+     * @dev M-24 ARCHITECTURE NOTE (By Design):
+     *      Profits are sent DIRECTLY to trader, bypassing Vault accounting.
+     *      This is intentional per SC-C03 audit fix — Vault.receive() would credit
+     *      PerpVault's account instead of trader's, permanently trapping funds.
+     *      Off-chain systems should monitor TraderProfitSettled / TraderProfitSettledPartial
+     *      events to synchronize Vault-side accounting if needed.
      *      C2: If pool balance insufficient, pays what's available (ADL partial settlement).
      */
     function settleTraderProfit(address trader, uint256 profitETH) external onlyAuthorized nonReentrant {
@@ -482,7 +529,14 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
         // Vault.receive() 会将 msg.value 记入 msg.sender (PerpVault) 而非 trader
         // 导致利润永久卡在 PerpVault 的 Vault 账户中，trader 无法取出
         (bool success,) = trader.call{value: actualPay}("");
-        if (!success) revert TransferFailed();
+        if (!success) {
+            // M-21 FIX: WETH fallback — 当 ETH 转账失败时（如 trader 是无 receive 的合约），
+            // 将 ETH 包装为 WETH (ERC-20) 再转账，保证 trader 一定能收到资金
+            if (weth == address(0)) revert WETHNotSet();
+            IWETH(weth).deposit{value: actualPay}();
+            require(IWETH(weth).transfer(trader, actualPay), "WETH transfer failed");
+            emit WETHFallbackUsed(trader, actualPay);
+        }
 
         if (actualPay < profitETH) {
             emit TraderProfitSettledPartial(trader, profitETH, actualPay);
@@ -583,12 +637,14 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
             uint256 decreased = longOI[token] > sizeETH ? sizeETH : longOI[token];
             longOI[token] -= decreased;
             totalOIAccumulator = totalOIAccumulator > decreased ? totalOIAccumulator - decreased : 0;
-            emit OIDecreased(token, true, sizeETH, longOI[token]);
+            // M-22 FIX: emit 实际减少量 decreased 而非请求值 sizeETH
+            emit OIDecreased(token, true, decreased, longOI[token]);
         } else {
             uint256 decreased = shortOI[token] > sizeETH ? sizeETH : shortOI[token];
             shortOI[token] -= decreased;
             totalOIAccumulator = totalOIAccumulator > decreased ? totalOIAccumulator - decreased : 0;
-            emit OIDecreased(token, false, sizeETH, shortOI[token]);
+            // M-22 FIX: emit 实际减少量 decreased 而非请求值 sizeETH
+            emit OIDecreased(token, false, decreased, shortOI[token]);
         }
     }
 
@@ -774,13 +830,45 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     // ============================================================
 
     /**
-     * @notice Emergency rescue ETH (owner only)
+     * @notice M-23 FIX: Request emergency rescue with 48h timelock
+     * @dev Timelock gives LPs time to notice and exit before funds move.
+     *      Pattern: Compound Timelock, Aave governance delay.
+     * @param to Destination address
+     * @param amount Amount of ETH to rescue
      */
-    function emergencyRescue(address to, uint256 amount) external onlyOwner {
+    function requestEmergencyRescue(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
         if (amount > address(this).balance) revert InsufficientPoolBalance();
-        (bool success,) = to.call{value: amount}("");
+        uint256 executeAfter = block.timestamp + RESCUE_TIMELOCK;
+        pendingRescue = RescueRequest(to, amount, executeAfter);
+        emit RescueRequested(to, amount, executeAfter);
+    }
+
+    /**
+     * @notice Execute pending emergency rescue after timelock expires
+     */
+    function executeEmergencyRescue() external onlyOwner {
+        RescueRequest memory req = pendingRescue;
+        if (req.amount == 0) revert NoPendingRescue();
+        if (block.timestamp < req.executeAfter) revert RescueTimelockActive();
+        if (req.amount > address(this).balance) revert InsufficientPoolBalance();
+
+        // Clear before transfer (CEI pattern)
+        delete pendingRescue;
+
+        (bool success,) = req.to.call{value: req.amount}("");
         if (!success) revert TransferFailed();
+
+        emit RescueExecuted(req.to, req.amount);
+    }
+
+    /**
+     * @notice Cancel pending emergency rescue
+     */
+    function cancelEmergencyRescue() external onlyOwner {
+        if (pendingRescue.amount == 0) revert NoPendingRescue();
+        delete pendingRescue;
+        emit RescueCancelled();
     }
 
     // ============================================================
