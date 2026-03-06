@@ -170,8 +170,8 @@ export default function InvitePage() {
       <Navbar />
 
       <div className="max-w-6xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
+        {/* Hero Header */}
+        <div className="mb-8 bg-gradient-to-b from-meme-lime/5 to-transparent rounded-2xl p-8">
           <h1 className="text-3xl font-bold mb-2">{t("title")}</h1>
           <p className="text-okx-text-secondary">{t("subtitle")}</p>
         </div>
@@ -184,14 +184,14 @@ export default function InvitePage() {
         )}
 
         {!isConnected ? (
-          <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-12 text-center">
+          <div className="meme-card p-12 text-center">
             <div className="text-6xl mb-4">🎁</div>
             <h2 className="text-xl font-bold mb-2">{t("connectWalletTitle")}</h2>
             <p className="text-okx-text-secondary mb-4">{t("connectWalletDesc")}</p>
           </div>
         ) : loading ? (
           <div className="flex justify-center items-center py-20">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-okx-accent"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-meme-lime"></div>
           </div>
         ) : (
           <>

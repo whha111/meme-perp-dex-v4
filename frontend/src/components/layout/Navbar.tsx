@@ -50,46 +50,27 @@ export function Navbar() {
         {/* 左侧: Logo + 导航链接 */}
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 text-okx-text-primary font-bold text-xl">
-            <span className="text-2xl">💊</span>
-            FOMO
+            <span className="text-meme-lime text-lg">✦</span>
+            <span className="tracking-tight">MEMEPERP</span>
           </Link>
           <div className="flex items-center gap-6 text-[14px] text-okx-text-secondary">
-            <Link href="/" className="text-okx-text-primary cursor-pointer hidden lg:inline">
-              {t('market')}
-            </Link>
-            <Link
-              href="/exchange"
-              prefetch={false}
-              className="hover:text-okx-text-primary cursor-pointer hidden lg:inline"
-            >
+            <Link href="/exchange" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
               {t('exchange')}
             </Link>
-            <Link
-              href="/perp"
-              prefetch={false}
-              className="hover:text-okx-text-primary cursor-pointer hidden lg:inline"
-            >
+            <Link href="/perp" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
               {t('perpetual')}
             </Link>
-            <Link
-              href="/create"
-              className="hover:text-okx-text-primary cursor-pointer text-okx-up font-bold"
-            >
+            <Link href="/create" className="text-meme-lime cursor-pointer font-bold hidden lg:inline transition-colors hover:opacity-80">
               {t('createToken')}
             </Link>
-            <Link
-              href="/earnings"
-              prefetch={false}
-              className="hover:text-okx-text-primary cursor-pointer hidden lg:inline"
-            >
-              {t('earnings')}
+            <Link href="/leaderboard" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
+              {t('leaderboard') || '排行榜'}
             </Link>
-            <Link
-              href="/lend"
-              prefetch={false}
-              className="hover:text-okx-text-primary cursor-pointer hidden lg:inline"
-            >
-              {t('lending')}
+            <Link href="/deposit" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
+              {t('deposit') || '充值'}
+            </Link>
+            <Link href="/invite" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
+              {t('invite') || '邀请'}
             </Link>
           </div>
         </div>
@@ -113,14 +94,14 @@ export function Navbar() {
 
           {/* 钱包按钮 */}
           {!mounted ? (
-            <div className="bg-okx-up text-black px-4 py-1.5 rounded-full text-[13px] font-bold opacity-50">
+            <div className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-[13px] font-bold opacity-50">
               {tWallet('connect')}
             </div>
           ) : !isConnected || !address ? (
             <button
               onClick={openConnectModal}
               data-testid="connect-wallet-btn"
-              className="bg-okx-up text-black px-4 py-1.5 rounded-full text-[13px] font-bold hover:opacity-90 transition-opacity"
+              className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-[13px] font-bold hover:opacity-90 transition-opacity"
             >
               {tWallet('connect')}
             </button>

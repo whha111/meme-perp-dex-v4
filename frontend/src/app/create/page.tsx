@@ -174,16 +174,16 @@ export default function CreateTokenPage() {
 
       {/* 背景装饰 */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-okx-up/10 rounded-full blur-[128px]"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-okx-up/5 rounded-full blur-[128px]"></div>
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-meme-lime/5 rounded-full blur-[128px]"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-meme-lime/3 rounded-full blur-[128px]"></div>
       </div>
 
       <div className="relative max-w-lg mx-auto px-4 py-8">
         {/* 标题区域 */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 bg-okx-up/10 border border-okx-up/30 rounded-full px-4 py-1.5 mb-4">
+          <div className="inline-flex items-center gap-2 bg-meme-lime/10 border border-meme-lime/30 rounded-full px-4 py-1.5 mb-4">
             <span className="text-2xl">🚀</span>
-            <span className="text-okx-up text-sm font-medium">{t("launchOnBase")}</span>
+            <span className="text-meme-lime text-sm font-medium">{t("launchOnBase")}</span>
           </div>
           <h1 className="text-4xl font-black mb-3 bg-gradient-to-r from-okx-text-primary via-okx-up to-okx-accent bg-clip-text text-transparent">
             {t("title")}

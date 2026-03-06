@@ -12,8 +12,8 @@ import { useTradingDataStore, type WssOnChainToken } from "@/lib/stores/tradingD
 import { useUnifiedWebSocket } from "@/hooks/common/useUnifiedWebSocket";
 import { type Address } from "viem";
 
-// 榜单分类类型
-type RankingCategory = "hot" | "new" | "gainers" | "losers" | "marketCap" | "volume";
+// 市场分类
+type MarketCategory = "all" | "hot" | "new" | "meme" | "layer2" | "favorites";
 
 // IPFS URL 转 HTTP 网关 URL
 function ipfsToHttp(uri: string): string {
@@ -24,84 +24,64 @@ function ipfsToHttp(uri: string): string {
   if (uri.startsWith("https://") || uri.startsWith("http://")) {
     return uri;
   }
-  // 有效的 IPFS hash (CIDv0: Qm..., CIDv1: bafy...)
   if (uri.startsWith("Qm") && uri.length === 46) {
     return `https://gateway.pinata.cloud/ipfs/${uri}`;
   }
   if (uri.startsWith("bafy")) {
     return `https://gateway.pinata.cloud/ipfs/${uri}`;
   }
-  // 未知格式，不尝试作为 URL 使用
   return "";
 }
 
 // 解析 metadataURI 获取 logo URL
-// metadataURI 格式可能是：
-// 1. ipfs://<hash> - 直接是图片的 IPFS 链接
-// 2. data:application/json;base64,... - base64 编码的 JSON，包含 image 字段
-// 3. https://... - 直接的 HTTP URL
 function parseMetadataURI(uri: string): string | undefined {
   if (!uri) return undefined;
-
-  // 如果是 data URI (base64 JSON)，解析出 image 字段
-  if (uri.startsWith('data:application/json;base64,')) {
+  if (uri.startsWith("data:application/json;base64,")) {
     try {
-      const base64Data = uri.replace('data:application/json;base64,', '');
+      const base64Data = uri.replace("data:application/json;base64,", "");
       const jsonStr = atob(base64Data);
       const metadata = JSON.parse(jsonStr);
-      // 优先使用 image 字段，其次是 logo
       const imageUrl = metadata.image || metadata.logo;
-      if (imageUrl) {
-        return ipfsToHttp(imageUrl);
-      }
+      if (imageUrl) return ipfsToHttp(imageUrl);
     } catch (e) {
-      console.warn('Failed to parse metadataURI:', e);
+      console.warn("Failed to parse metadataURI:", e);
     }
     return undefined;
   }
-
-  // 如果是 IPFS 链接，直接转换（可能是图片本身）
-  if (uri.startsWith('ipfs://')) {
-    return ipfsToHttp(uri);
-  }
-
-  // 如果是直接的 HTTP URL，返回它
-  if (uri.startsWith('http')) {
-    return uri;
-  }
-
-  // IPFS hash
-  if (uri.startsWith('Qm') || uri.startsWith('bafy')) {
-    return ipfsToHttp(uri);
-  }
-
+  if (uri.startsWith("ipfs://")) return ipfsToHttp(uri);
+  if (uri.startsWith("http")) return uri;
+  if (uri.startsWith("Qm") || uri.startsWith("bafy")) return ipfsToHttp(uri);
   return undefined;
 }
 
 // 格式化数值显示
 function formatValue(value: number, prefix: string = "$"): string {
-  if (value >= 1000000) {
-    return prefix + (value / 1000000).toFixed(2) + "M";
-  } else if (value >= 1000) {
-    return prefix + (value / 1000).toFixed(2) + "K";
-  } else if (value > 0) {
-    return prefix + value.toFixed(2);
-  }
+  if (value >= 1_000_000) return prefix + (value / 1_000_000).toFixed(2) + "M";
+  if (value >= 1_000) return prefix + (value / 1_000).toFixed(2) + "K";
+  if (value > 0) return prefix + value.toFixed(2);
   return prefix + "0";
 }
 
-// 榜单分类配置
-const RANKING_CATEGORIES: { key: RankingCategory; labelKey: string }[] = [
-  { key: "hot", labelKey: "hot" },
-  { key: "new", labelKey: "new" },
-  { key: "gainers", labelKey: "gainers" },
-  { key: "losers", labelKey: "losers" },
-  { key: "marketCap", labelKey: "marketCap" },
-  { key: "volume", labelKey: "volume" },
+// 格式化代币价格
+function formatPrice(priceWei: string, ethPrice: number): string {
+  const priceEth = parseFloat(priceWei) || 0;
+  const priceUsd = priceEth * ethPrice;
+  if (priceUsd >= 1) return "$" + priceUsd.toFixed(4);
+  if (priceUsd >= 0.001) return "$" + priceUsd.toFixed(6);
+  return "$" + priceUsd.toFixed(8);
+}
+
+// 分类配置
+const CATEGORIES: { key: MarketCategory; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "hot", label: "热门" },
+  { key: "new", label: "新上线" },
+  { key: "meme", label: "Meme" },
+  { key: "layer2", label: "Layer2" },
+  { key: "favorites", label: "自选" },
 ];
 
 function PerpContent() {
-  // 调试：追踪渲染次数 (仅 console 警告，不 throw)
   trackRender("PerpContent");
 
   const searchParams = useSearchParams();
@@ -110,46 +90,37 @@ function PerpContent() {
   const t = useTranslations();
   const tPerp = useTranslations("perp");
 
-  // 获取实时 ETH 价格
   const { price: ethPrice } = useETHPrice();
   const ETH_PRICE_USD = ethPrice || 2000;
 
-  // WSS 连接 — get_all_tokens + subscribe_all_market_stats 已在 onopen 中自动请求
   const { isConnected: wsConnected } = useUnifiedWebSocket({ enabled: true });
 
-  // 从 WSS 获取代币列表 (替代 useOnChainTokenList 的 400+ RPC 调用)
-  const allTokens = useTradingDataStore(state => state.allTokens);
-  const allTokensLoaded = useTradingDataStore(state => state.allTokensLoaded);
+  const allTokens = useTradingDataStore((state) => state.allTokens);
+  const allTokensLoaded = useTradingDataStore((state) => state.allTokensLoaded);
+  const tokenStatsMap = useTradingDataStore((state) => state.tokenStats);
 
-  // 代币列表按创建时间排序
   const tokens = useMemo(() => {
     return [...allTokens].sort((a, b) => b.createdAt - a.createdAt);
   }, [allTokens]);
 
   const isLoading = !allTokensLoaded;
-
-  // 从 URL 参数获取交易对符号
   const urlSymbol = searchParams.get("symbol");
+
+  const [activeCategory, setActiveCategory] = useState<MarketCategory>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // 从 tradingDataStore 读取 WSS 推送的实时市场数据
-  const tokenStatsMap = useTradingDataStore(state => state.tokenStats);
-
-  // 为每个代币计算交易统计数据（合并链上 + WSS 数据）
+  // 为每个代币计算交易统计数据
   const tokensWithStats = useMemo(() => {
     return tokens.map((token) => {
       const marketCapFloat = parseFloat(token.marketCap) || 0;
       const marketCapUsd = marketCapFloat * ETH_PRICE_USD;
-
-      // 从 WSS 推送的 tokenStats 读取实时数据
       const stats = tokenStatsMap.get(token.address.toLowerCase() as Address);
       const priceChange24h = parseFloat(stats?.priceChangePercent24h || "0");
       const volume24h = parseFloat(stats?.volume24h || "0");
-
-      // 热度分数：市值权重 + 交易量权重 + 毕业加成
       const hotScore = marketCapUsd * 0.5 + volume24h * 0.3 + (token.isGraduated ? 1000 : 0);
 
       return {
@@ -162,58 +133,72 @@ function PerpContent() {
     });
   }, [tokens, tokenStatsMap, ETH_PRICE_USD]);
 
-  // 根据分类获取排序后的代币
-  const getTokensByCategory = (category: RankingCategory) => {
-    if (!tokensWithStats.length) return [];
+  // 按分类和搜索过滤
+  const filteredTokens = useMemo(() => {
+    let result = [...tokensWithStats];
 
-    switch (category) {
-      case "hot":
-        return [...tokensWithStats].sort((a, b) => b.hotScore - a.hotScore).slice(0, 10);
-      case "new":
-        return [...tokensWithStats].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
-      case "gainers":
-        return [...tokensWithStats].sort((a, b) => b.priceChange24h - a.priceChange24h).slice(0, 10);
-      case "losers":
-        return [...tokensWithStats].sort((a, b) => a.priceChange24h - b.priceChange24h).slice(0, 10);
-      case "marketCap":
-        return [...tokensWithStats].sort((a, b) => b.marketCapUsd - a.marketCapUsd).slice(0, 10);
-      case "volume":
-        return [...tokensWithStats].sort((a, b) => b.volume24h - a.volume24h).slice(0, 10);
-      default:
-        return tokensWithStats.slice(0, 10);
+    // 搜索过滤
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (t) =>
+          t.symbol.toLowerCase().includes(q) ||
+          t.name.toLowerCase().includes(q) ||
+          t.address.toLowerCase().includes(q)
+      );
     }
-  };
+
+    // 分类排序
+    switch (activeCategory) {
+      case "hot":
+        result.sort((a, b) => b.hotScore - a.hotScore);
+        break;
+      case "new":
+        result.sort((a, b) => b.createdAt - a.createdAt);
+        break;
+      default:
+        result.sort((a, b) => b.marketCapUsd - a.marketCapUsd);
+    }
+
+    return result;
+  }, [tokensWithStats, activeCategory, searchQuery]);
+
+  // 统计数据
+  const totalVolume24h = tokensWithStats.reduce((sum, t) => sum + t.volume24h, 0);
+  const totalMarketCap = tokensWithStats.reduce((sum, t) => sum + t.marketCapUsd, 0);
+  const activeTokens = tokensWithStats.filter((t) => t.isActive !== false).length;
 
   if (!mounted || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-64px)]">
-        <div className="w-8 h-8 border-4 border-okx-up border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-perp-yellow border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   // 如果指定了 symbol，显示永续合约交易终端
-  // symbol 可以是代币地址 (0x...) 或代币符号
   if (urlSymbol) {
     const isTokenAddress = urlSymbol.startsWith("0x") && urlSymbol.length === 42;
     return (
-      <TradingErrorBoundary module="PerpetualTradingTerminal">
-        <PerpetualTradingTerminal
-          symbol={urlSymbol}
-          tokenAddress={isTokenAddress ? (urlSymbol as `0x${string}`) : undefined}
-        />
-      </TradingErrorBoundary>
+      <div className="perp-theme">
+        <TradingErrorBoundary module="PerpetualTradingTerminal">
+          <PerpetualTradingTerminal
+            symbol={urlSymbol}
+            tokenAddress={isTokenAddress ? (urlSymbol as `0x${string}`) : undefined}
+          />
+        </TradingErrorBoundary>
+      </div>
     );
   }
 
-  // 如果没有代币，提示用户创建
+  // 无代币状态
   if (tokens.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] gap-4">
         <p className="text-okx-text-secondary text-lg">{t("market.noTokens")}</p>
         <button
           onClick={() => router.push("/create")}
-          className="bg-okx-up text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
+          className="bg-perp-yellow text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
         >
           {t("nav.createToken")}
         </button>
@@ -221,97 +206,195 @@ function PerpContent() {
     );
   }
 
-  // 显示6列榜单
   return (
-    <div className="max-w-[1600px] mx-auto px-4 py-4">
-      {/* 6列榜单并排 */}
-      <div className="grid grid-cols-6 gap-3">
-        {RANKING_CATEGORIES.map((category) => {
-          const categoryTokens = getTokensByCategory(category.key);
-          const showChange = category.key === "gainers" || category.key === "losers";
+    <div className="perp-theme min-h-[calc(100vh-64px)] bg-[#0B0E11]">
+      {/* Hero Section */}
+      <div className="border-b border-[#1E2329] px-12 py-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">USDT 永续合约</h1>
+            <p className="text-sm text-[#848E9C] mt-1">高流动性 Meme 代币合约交易 · 最高 10x 杠杆</p>
+          </div>
 
-          return (
-            <div key={category.key}>
-              {/* 榜单标题 */}
-              <div className="py-2 px-3 bg-okx-bg-hover border border-okx-border-primary rounded-lg mb-2">
-                <span className="text-[14px] font-bold text-okx-text-primary">
-                  {tPerp(`ranking.${category.labelKey}`)}
-                </span>
-              </div>
+          {/* Search */}
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="搜索交易对..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-[280px] h-10 bg-[#1E2329] border border-[#2B3139] rounded-lg px-4 text-sm text-white placeholder:text-[#474D57] focus:outline-none focus:border-[#F0B90B]"
+            />
+            <svg
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#474D57]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+        </div>
 
-              {/* 代币列表 */}
-              <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg divide-y divide-okx-border-primary">
-                {categoryTokens.map((token, index) => {
-                  // OnChainToken 来自合约，始终在链上; isActive 判断池子状态
-                  const isOnChain = token.isActive !== false;
-                  const canTrade = isOnChain && token.perpEnabled;
-                  const statusTitle = !isOnChain
-                    ? tPerp("notOnChain")
-                    : !token.perpEnabled
-                    ? tPerp("perpNotEnabled")
-                    : tPerp("perpEnabled");
+        {/* Stats Cards */}
+        <div className="grid grid-cols-4 gap-4">
+          {[
+            { label: "24h 总交易量", value: formatValue(totalVolume24h), color: "text-white" },
+            { label: "24h 总持仓量", value: formatValue(totalMarketCap), color: "text-white" },
+            { label: "活跃交易对", value: `${activeTokens} 对`, color: "text-white" },
+            { label: "保险基金", value: "2.00 ETH", color: "text-[#0ECB81]" },
+          ].map((stat, idx) => (
+            <div key={idx} className="bg-[#1E2329] rounded-lg p-4">
+              <div className="text-xs text-[#848E9C] mb-1">{stat.label}</div>
+              <div className={`text-lg font-bold font-mono ${stat.color}`}>{stat.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-                  return (
-                    <div
-                      key={token.address}
-                      onClick={() => isOnChain ? router.push(`/perp?symbol=${token.address}`) : null}
-                      className={`flex items-center gap-2 py-2.5 px-3 hover:bg-okx-bg-hover ${isOnChain ? 'cursor-pointer' : 'cursor-not-allowed'} ${!canTrade ? 'opacity-60' : ''}`}
-                      title={statusTitle}
-                    >
-                      {/* 排名 */}
-                      <span className={`w-5 text-[12px] font-bold text-center ${index < 3 ? 'text-okx-up' : 'text-okx-text-tertiary'}`}>
-                        {index + 1}
-                      </span>
+      {/* Table Section */}
+      <div className="px-12 pt-4">
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1.5 pb-3">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              onClick={() => setActiveCategory(cat.key)}
+              className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${
+                activeCategory === cat.key
+                  ? "bg-[#F0B90B] text-[#0B0E11] font-bold"
+                  : "text-[#848E9C] hover:text-white hover:bg-[#1E2329]"
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
 
-                      {/* 图标 */}
-                      <div className="w-6 h-6 rounded overflow-hidden flex-shrink-0 relative bg-okx-bg-secondary">
-                        <img
-                          src={parseMetadataURI(token.metadataURI) || `https://api.dicebear.com/7.x/identicon/svg?seed=${token.address}`}
-                          alt={token.symbol}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            // 如果加载失败，回退到 dicebear
-                            (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${token.address}`;
-                          }}
-                        />
-                        {/* 状态指示：绿色=可交易，黄色=链上但未启用，灰色=不在链上 */}
-                        <div
-                          className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-okx-bg-card ${
-                            canTrade ? 'bg-green-500' : isOnChain ? 'bg-yellow-500' : 'bg-gray-500'
-                          }`}
-                          title={statusTitle}
-                        />
-                      </div>
+        {/* Table Header */}
+        <div className="flex items-center bg-[#1E2329] rounded-t-md px-4 py-3 text-xs font-semibold text-[#848E9C]">
+          <div className="w-[200px]">交易对</div>
+          <div className="w-[130px] text-right">最新价格</div>
+          <div className="w-[100px] text-right">24h 涨跌</div>
+          <div className="w-[140px] text-right">24h 成交量</div>
+          <div className="w-[140px] text-right">持仓量</div>
+          <div className="w-[100px] text-right">资金费率</div>
+          <div className="w-[120px] text-center">7日趋势</div>
+          <div className="flex-1 text-right">操作</div>
+        </div>
 
-                      {/* 名称 */}
-                      <span className="flex-1 text-[13px] text-okx-text-primary font-medium truncate">
-                        {token.symbol}
-                        {!isOnChain && <span className="ml-1 text-[10px] text-gray-500">(Off-chain)</span>}
-                      </span>
+        {/* Table Rows */}
+        <div>
+          {filteredTokens.map((token) => {
+            const isOnChain = token.isActive !== false;
+            const priceStr = formatPrice(token.currentPrice || "0", ETH_PRICE_USD);
+            const changeClass = token.priceChange24h >= 0 ? "text-[#0ECB81]" : "text-[#F6465D]";
+            const changeSign = token.priceChange24h >= 0 ? "+" : "";
+            const isNew = Date.now() / 1000 - token.createdAt < 86400 * 3; // 3 days
 
-                      {/* 涨跌幅或市值 */}
-                      {showChange ? (
-                        <span className={`text-[12px] font-medium ${token.priceChange24h >= 0 ? 'text-okx-up' : 'text-okx-down'}`}>
-                          {token.priceChange24h >= 0 ? '+' : ''}{token.priceChange24h.toFixed(2)}%
-                        </span>
-                      ) : (
-                        <span className="text-[12px] text-okx-text-secondary">
-                          {formatValue(token.marketCapUsd)}
+            return (
+              <div
+                key={token.address}
+                onClick={() => isOnChain && router.push(`/perp?symbol=${token.address}`)}
+                className={`flex items-center px-4 py-3.5 border-b border-[#1E2329] transition-colors ${
+                  isOnChain ? "hover:bg-[#1E2329]/50 cursor-pointer" : "opacity-50 cursor-not-allowed"
+                }`}
+              >
+                {/* Pair Name */}
+                <div className="w-[200px] flex items-center gap-3">
+                  <span className="text-[#474D57] cursor-pointer hover:text-[#F0B90B] text-sm">☆</span>
+                  <div className="w-7 h-7 rounded-full overflow-hidden bg-[#2B3139] flex-shrink-0">
+                    <img
+                      src={parseMetadataURI(token.metadataURI) || `https://api.dicebear.com/7.x/identicon/svg?seed=${token.address}`}
+                      alt={token.symbol}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/identicon/svg?seed=${token.address}`;
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">{token.symbol}/USDT</span>
+                      {isNew && (
+                        <span className="text-[10px] bg-[#F0B90B]/20 text-[#F0B90B] px-1.5 py-0.5 rounded font-bold">
+                          NEW
                         </span>
                       )}
                     </div>
-                  );
-                })}
-
-                {categoryTokens.length === 0 && (
-                  <div className="py-6 text-center text-[12px] text-okx-text-tertiary">
-                    {t("market.noTokens")}
+                    <div className="text-[11px] text-[#474D57]">永续</div>
                   </div>
-                )}
+                </div>
+
+                {/* Price */}
+                <div className="w-[130px] text-right">
+                  <span className="text-sm font-mono font-medium text-white">{priceStr}</span>
+                </div>
+
+                {/* 24h Change */}
+                <div className="w-[100px] text-right">
+                  <span className={`text-sm font-mono font-medium px-2 py-1 rounded ${changeClass} ${
+                    token.priceChange24h >= 0 ? "bg-[#0ECB81]/10" : "bg-[#F6465D]/10"
+                  }`}>
+                    {changeSign}{token.priceChange24h.toFixed(2)}%
+                  </span>
+                </div>
+
+                {/* 24h Volume */}
+                <div className="w-[140px] text-right">
+                  <span className="text-sm font-mono text-[#EAECEF]">
+                    {formatValue(token.volume24h)}
+                  </span>
+                </div>
+
+                {/* Open Interest */}
+                <div className="w-[140px] text-right">
+                  <span className="text-sm font-mono text-[#EAECEF]">
+                    {formatValue(token.marketCapUsd)}
+                  </span>
+                </div>
+
+                {/* Funding Rate */}
+                <div className="w-[100px] text-right">
+                  <span className="text-sm font-mono text-[#0ECB81]">+0.01%</span>
+                </div>
+
+                {/* 7d Trend (simple placeholder) */}
+                <div className="w-[120px] flex justify-center">
+                  <svg width="80" height="24" viewBox="0 0 80 24">
+                    <path
+                      d={token.priceChange24h >= 0
+                        ? "M0 20 L10 16 L20 18 L30 12 L40 14 L50 8 L60 10 L70 4 L80 6"
+                        : "M0 4 L10 8 L20 6 L30 12 L40 10 L50 16 L60 14 L70 20 L80 18"}
+                      stroke={token.priceChange24h >= 0 ? "#0ECB81" : "#F6465D"}
+                      strokeWidth="1.5"
+                      fill="none"
+                    />
+                  </svg>
+                </div>
+
+                {/* Trade Button */}
+                <div className="flex-1 text-right">
+                  <button
+                    className="px-4 py-1.5 bg-[#F0B90B] text-[#0B0E11] text-xs font-bold rounded hover:opacity-90 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/perp?symbol=${token.address}`);
+                    }}
+                  >
+                    交易
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        {filteredTokens.length === 0 && (
+          <div className="py-12 text-center text-[#474D57] text-sm">
+            {searchQuery ? "未找到匹配的交易对" : t("market.noTokens")}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -319,17 +402,17 @@ function PerpContent() {
 
 /**
  * 永续合约交易页面
- * - 无 symbol 参数时显示代币列表
+ * - 无 symbol 参数时显示市场列表
  * - 有 symbol 参数时显示永续合约交易终端
  */
 export default function PerpetualTradingPage() {
   return (
-    <main className="min-h-screen bg-okx-bg-primary text-okx-text-primary">
+    <main className="min-h-screen bg-[#0B0E11] text-white">
       <Navbar />
       <Suspense
         fallback={
           <div className="flex items-center justify-center min-h-[calc(100vh-64px)]">
-            <div className="w-8 h-8 border-4 border-okx-up border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-[#F0B90B] border-t-transparent rounded-full animate-spin"></div>
           </div>
         }
       >

@@ -2,36 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 深色主题 (默认) - 参考 TradingView/OKX 专业风格 */
+/* 深色主题 (默认) - MEMEPERP 品牌风格 */
 :root,
 .dark {
-  --background: #0B0B0B;
+  --background: #000000;
   --foreground: #FFFFFF;
 
-  /* OKX 配色变量 - 深色模式 */
-  --okx-bg-primary: #0B0B0B;
-  --okx-bg-secondary: #121212;
-  --okx-bg-card: #181818;
-  --okx-bg-hover: #1E1E1E;
-  --okx-bg-active: #2A2A2A;
+  /* MEMEPERP 配色变量 - 深色模式 */
+  --okx-bg-primary: #000000;
+  --okx-bg-secondary: #0a0a0a;
+  --okx-bg-card: #111111;
+  --okx-bg-hover: #1a1a1a;
+  --okx-bg-active: #222222;
 
   --okx-text-primary: #FFFFFF;
-  --okx-text-secondary: #A0A0A0;
-  --okx-text-tertiary: #707070;
+  --okx-text-secondary: #888888;
+  --okx-text-tertiary: #555555;
 
-  --okx-border-primary: #2A2A2A;
-  --okx-border-secondary: #333333;
-  --okx-border-hover: #444444;
+  --okx-border-primary: #1a1a1a;
+  --okx-border-secondary: #2a2a2a;
+  --okx-border-hover: #3a3a3a;
 
-  /* 涨跌颜色 - 深色模式 */
+  /* 涨跌颜色 - Binance 标准 */
   --okx-up: #0ECB81;
   --okx-down: #F6465D;
-  --okx-accent: #1E80FF;
+  --okx-accent: #BFFF00;
   --okx-warning: #F0B90B;
 
-  --scrollbar-track: #121212;
-  --scrollbar-thumb: #333333;
-  --scrollbar-thumb-hover: #444444;
+  --scrollbar-track: #0a0a0a;
+  --scrollbar-thumb: #2a2a2a;
+  --scrollbar-thumb-hover: #3a3a3a;
 
   /* 卡片阴影 - 深色模式禁用 */
   --card-shadow: none;
@@ -39,18 +39,44 @@
 
   /* 图表专用变量 */
   --chart-grid: rgba(255, 255, 255, 0.06);
-  --chart-separator: #2A2A2A;
-  --chart-button-hover: #2A2A2A;
+  --chart-separator: #1a1a1a;
+  --chart-button-hover: #1a1a1a;
 
   /* 输入框 */
-  --input-bg: #181818;
-  --input-border: #2A2A2A;
-  --input-border-focus: #1E80FF;
+  --input-bg: #111111;
+  --input-border: #1a1a1a;
+  --input-border-focus: #BFFF00;
 
   /* Tab 和导航 */
-  --tab-active-bg: #1E1E1E;
+  --tab-active-bg: #1a1a1a;
   --tab-inactive-bg: transparent;
-  --tab-border: #2A2A2A;
+  --tab-border: #1a1a1a;
+}
+
+/* 合约交易页面专属配色 - Binance Futures 风格 */
+.perp-theme {
+  --okx-bg-primary: #0B0E11;
+  --okx-bg-secondary: #121212;
+  --okx-bg-card: #1E2329;
+  --okx-bg-hover: #2B3139;
+  --okx-bg-active: #363C45;
+
+  --okx-border-primary: #2B3139;
+  --okx-border-secondary: #363C45;
+  --okx-border-hover: #474D57;
+
+  --okx-accent: #F0B90B;
+  --input-border-focus: #F0B90B;
+
+  --chart-grid: rgba(255, 255, 255, 0.04);
+  --chart-separator: #2B3139;
+  --chart-button-hover: #2B3139;
+
+  --input-bg: #1E2329;
+  --input-border: #2B3139;
+
+  --tab-active-bg: #2B3139;
+  --tab-border: #2B3139;
 }
 
 /* Light theme - Professional trading platform style (Binance/TradingView inspired) */
@@ -114,7 +140,7 @@
 
 html {
   /* Prevent white flash during loading */
-  background: #0B0B0B;
+  background: #000000;
 }
 
 body {
@@ -200,7 +226,68 @@ body {
   
   .okx-input:focus {
     outline: none;
-    border-color: #007AFF;
+    border-color: var(--input-border-focus);
+  }
+
+  /* MEMEPERP 专属卡片 */
+  .meme-card {
+    background-color: var(--okx-bg-card);
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 16px;
+    transition: border-color 0.2s;
+  }
+
+  .meme-card:hover {
+    border-color: var(--okx-border-hover);
+  }
+
+  /* 荧光绿输入框 */
+  .meme-input {
+    background-color: var(--input-bg);
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 12px;
+    color: var(--okx-text-primary);
+    transition: all 0.2s;
+  }
+
+  .meme-input:focus {
+    outline: none;
+    border-color: #BFFF00;
+    box-shadow: 0 0 0 1px rgba(191, 255, 0, 0.2);
+  }
+
+  .meme-input::placeholder {
+    color: var(--okx-text-tertiary);
+  }
+
+  /* 荧光绿按钮 */
+  .meme-btn-primary {
+    @apply bg-[#BFFF00] text-black font-bold rounded-xl transition-all duration-200;
+  }
+
+  .meme-btn-primary:hover {
+    @apply opacity-90 shadow-[0_0_20px_rgba(191,255,0,0.3)];
+  }
+
+  /* 状态徽章 */
+  .meme-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium;
+  }
+
+  .meme-badge-success {
+    @apply bg-[#0ECB81]/15 text-[#0ECB81];
+  }
+
+  .meme-badge-danger {
+    @apply bg-[#F6465D]/15 text-[#F6465D];
+  }
+
+  .meme-badge-warning {
+    @apply bg-[#F0B90B]/15 text-[#F0B90B];
+  }
+
+  .meme-badge-lime {
+    @apply bg-[#BFFF00]/15 text-[#BFFF00];
   }
 }
 

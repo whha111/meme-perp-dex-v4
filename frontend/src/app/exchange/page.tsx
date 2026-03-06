@@ -53,7 +53,7 @@ function ExchangeContent() {
         <p className="text-okx-text-secondary text-lg">{t("market.noTokens")}</p>
         <button
           onClick={() => router.push("/create")}
-          className="bg-okx-up text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
+          className="bg-meme-lime text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
         >
           {t("nav.createToken")}
         </button>
