@@ -102,11 +102,11 @@ function PerpContent() {
   // 分类配置 (i18n) — 与设计稿 hjfIJ 一致: 带 emoji 前缀
   const CATEGORIES: { key: MarketCategory; label: string }[] = useMemo(() => [
     { key: "all", label: tPerp("catAll") },
-    { key: "hot", label: `🔥 ${tPerp("catHot")}` },
-    { key: "new", label: `🆕 ${tPerp("catNew")}` },
-    { key: "meme", label: "🐸 Meme" },
-    { key: "layer2", label: "⚡ Layer2" },
-    { key: "favorites", label: `⭐ ${tPerp("catFavorites")}` },
+    { key: "hot", label: tPerp("catHot") },
+    { key: "new", label: tPerp("catNew") },
+    { key: "meme", label: "Meme" },
+    { key: "layer2", label: "Layer2" },
+    { key: "favorites", label: tPerp("catFavorites") },
   ], [tPerp]);
 
   useEffect(() => {
@@ -218,7 +218,7 @@ function PerpContent() {
 
           {/* Search — 设计稿: 🔍 icon left, w-280, h-40, bg #1E2329, border #2B3139, rounded-8 */}
           <div className="flex items-center w-[280px] h-10 bg-okx-bg-card border border-okx-border-primary rounded-lg px-3.5 gap-2">
-            <span className="text-sm text-okx-text-tertiary flex-shrink-0">🔍</span>
+            <svg className="w-4 h-4 text-okx-text-tertiary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
             <input
               type="text"
               placeholder={tPerp("searchPairs")}
@@ -295,7 +295,7 @@ function PerpContent() {
               >
                 {/* Pair Name */}
                 <div className="w-[200px] flex items-center gap-3">
-                  <span className="text-okx-text-tertiary cursor-pointer hover:text-okx-accent text-sm">☆</span>
+                  <svg className="w-4 h-4 text-okx-text-tertiary cursor-pointer hover:text-okx-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
                   <div className="w-7 h-7 rounded-full overflow-hidden bg-okx-bg-hover flex-shrink-0">
                     <img
                       src={parseMetadataURI(token.metadataURI) || `https://api.dicebear.com/7.x/identicon/svg?seed=${token.address}`}

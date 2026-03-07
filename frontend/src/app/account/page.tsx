@@ -60,7 +60,7 @@ export default function AccountPage() {
 
       {!isConnected ? (
         <div className="flex flex-col items-center justify-center py-32">
-          <p className="text-6xl mb-4">🔒</p>
+          <svg className="w-16 h-16 mb-4 text-okx-text-tertiary mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
           <p className="text-[#888888] mb-4">{t("connectWalletHint")}</p>
           <button
             onClick={openConnectModal}

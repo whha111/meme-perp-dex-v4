@@ -88,9 +88,9 @@ export default function LeaderboardPage() {
 
   // Podium medal colors — these are semantic (gold/silver/bronze), kept as-is
   const podiumColors = [
-    { border: "border-yellow-500/30", text: "text-yellow-500", emoji: "🥇", prize: "25 ETH" },
-    { border: "border-gray-400/30", text: "text-gray-400", emoji: "🥈", prize: "12 ETH" },
-    { border: "border-amber-600/30", text: "text-amber-600", emoji: "🥉", prize: "8 ETH" },
+    { border: "border-yellow-500/30", text: "text-yellow-500", rank: "#1", prize: "25 ETH" },
+    { border: "border-gray-400/30", text: "text-gray-400", rank: "#2", prize: "12 ETH" },
+    { border: "border-amber-600/30", text: "text-amber-600", rank: "#3", prize: "8 ETH" },
   ];
 
   return (
@@ -142,14 +142,14 @@ export default function LeaderboardPage() {
           <div
             className={`flex flex-col items-center gap-3 rounded-2xl p-6 w-[280px] bg-okx-bg-card border ${podiumColors[1].border}`}
           >
-            <span className="text-4xl">{podiumColors[1].emoji}</span>
+            <span className={`text-3xl font-black ${podiumColors[1].text}`}>{podiumColors[1].rank}</span>
             <span className="font-mono text-sm">{entries[1]?.address}</span>
             <div className="text-center">
               <div className="text-meme-lime font-mono font-bold text-lg">{entries[1]?.pnl}</div>
               <div className="text-okx-text-secondary text-sm">ROE {entries[1]?.roe}</div>
             </div>
             <span className={`text-sm font-semibold ${podiumColors[1].text}`}>
-              🏆 {t("reward")} {podiumColors[1].prize}
+              {t("reward")} {podiumColors[1].prize}
             </span>
           </div>
 
@@ -157,14 +157,14 @@ export default function LeaderboardPage() {
           <div
             className={`flex flex-col items-center gap-3 rounded-2xl p-8 w-[320px] bg-okx-bg-card border-2 ${podiumColors[0].border}`}
           >
-            <span className="text-5xl">{podiumColors[0].emoji}</span>
+            <span className={`text-4xl font-black ${podiumColors[0].text}`}>{podiumColors[0].rank}</span>
             <span className="font-mono text-sm font-semibold">{entries[0]?.address}</span>
             <div className="text-center">
               <div className="text-meme-lime font-mono font-bold text-xl">{entries[0]?.pnl}</div>
               <div className="text-okx-text-secondary text-sm">ROE {entries[0]?.roe}</div>
             </div>
             <span className={`text-sm font-bold ${podiumColors[0].text}`}>
-              🏆 {t("reward")} {podiumColors[0].prize}
+              {t("reward")} {podiumColors[0].prize}
             </span>
           </div>
 
@@ -172,14 +172,14 @@ export default function LeaderboardPage() {
           <div
             className={`flex flex-col items-center gap-3 rounded-2xl p-6 w-[280px] bg-okx-bg-card border ${podiumColors[2].border}`}
           >
-            <span className="text-4xl">{podiumColors[2].emoji}</span>
+            <span className={`text-3xl font-black ${podiumColors[2].text}`}>{podiumColors[2].rank}</span>
             <span className="font-mono text-sm">{entries[2]?.address}</span>
             <div className="text-center">
               <div className="text-meme-lime font-mono font-bold text-lg">{entries[2]?.pnl}</div>
               <div className="text-okx-text-secondary text-sm">ROE {entries[2]?.roe}</div>
             </div>
             <span className={`text-sm font-semibold ${podiumColors[2].text}`}>
-              🏆 {t("reward")} {podiumColors[2].prize}
+              {t("reward")} {podiumColors[2].prize}
             </span>
           </div>
         </div>

@@ -385,7 +385,7 @@ export default function CreateTokenPage() {
                   {step === "done" && t("createSuccess")}
                 </>
               ) : (
-                <>🚀 {t("createTokenButton")}</>
+                <>{t("createTokenButton")}</>
               )}
             </button>
           )}

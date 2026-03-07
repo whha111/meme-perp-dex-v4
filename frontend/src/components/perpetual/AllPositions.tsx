@@ -201,7 +201,7 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
         <div className="flex gap-1">
           {data.dangerCount > 0 && (
             <span className="px-1.5 py-0.5 bg-red-900/50 text-red-400 rounded text-[10px] font-bold animate-pulse">
-              {data.dangerCount} ⚠
+              {data.dangerCount} <svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
             </span>
           )}
           {data.warningCount > 0 && (
@@ -216,8 +216,8 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
       <div className="flex gap-1 mb-2 flex-shrink-0 overflow-x-auto">
         {[
           { key: "all", label: t("all") },
-          { key: "danger", label: "🔴", color: "text-red-400" },
-          { key: "warning", label: "🟡", color: "text-yellow-400" },
+          { key: "danger", label: "\u25CF", color: "text-red-400" },
+          { key: "warning", label: "\u25CF", color: "text-yellow-400" },
           { key: "long", label: t("longs"), color: "text-green-400" },
           { key: "short", label: t("shorts"), color: "text-red-400" },
         ].map(f => (

@@ -10,6 +10,93 @@ import { locales, localeNames, localeFlags, type Locale, changeLocale, useLocale
 
 type NavKey = "security" | "profile" | "api" | "notifications" | "fees" | "appearance";
 
+// --- SVG Icon Components ---
+const IconShield = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+  </svg>
+);
+const IconUser = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+  </svg>
+);
+const IconKey = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" />
+  </svg>
+);
+const IconBell = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+  </svg>
+);
+const IconCurrency = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+const IconGlobe = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 003 12c0-1.605.42-3.113 1.157-4.418" />
+  </svg>
+);
+const IconLock = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+  </svg>
+);
+const IconPen = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487z" />
+  </svg>
+);
+const IconClipboard = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15a2.25 2.25 0 012.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
+  </svg>
+);
+const IconDesktop = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
+  </svg>
+);
+const IconPhone = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+  </svg>
+);
+const IconLink = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+  </svg>
+);
+const IconMoon = ({ className = "w-6 h-6" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+  </svg>
+);
+const IconSun = ({ className = "w-6 h-6" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+  </svg>
+);
+const IconWallet = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 110-6h5.25A2.25 2.25 0 0121 6v6zm0 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18V6a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 6" />
+  </svg>
+);
+
+// Map nav items to icon components
+const navIcons: Record<NavKey, React.ReactNode> = {
+  security: <IconShield />,
+  profile: <IconUser />,
+  api: <IconKey />,
+  notifications: <IconBell />,
+  fees: <IconCurrency />,
+  appearance: <IconGlobe />,
+};
+
 export default function SettingsPage() {
   const t = useTranslations("settings");
   const tCommon = useTranslations("common");
@@ -23,12 +110,12 @@ export default function SettingsPage() {
   const currentLocale = useLocale();
 
   const navItems = useMemo(() => [
-    { key: "security" as NavKey, icon: "🔒", label: t("navSecurity") },
-    { key: "profile" as NavKey, icon: "👤", label: t("navProfile") },
-    { key: "api" as NavKey, icon: "🔑", label: t("navApi") },
-    { key: "notifications" as NavKey, icon: "🔔", label: t("navNotifications") },
-    { key: "fees" as NavKey, icon: "💰", label: t("navFees") },
-    { key: "appearance" as NavKey, icon: "🌐", label: t("navAppearance") },
+    { key: "security" as NavKey, label: t("navSecurity") },
+    { key: "profile" as NavKey, label: t("navProfile") },
+    { key: "api" as NavKey, label: t("navApi") },
+    { key: "notifications" as NavKey, label: t("navNotifications") },
+    { key: "fees" as NavKey, label: t("navFees") },
+    { key: "appearance" as NavKey, label: t("navAppearance") },
   ], [t]);
 
   const mockApiKeys = useMemo(() => [
@@ -142,7 +229,7 @@ export default function SettingsPage() {
                     : "text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-hover"
                 }`}
               >
-                <span className="text-base">{item.icon}</span>
+                <span className="text-base">{navIcons[item.key]}</span>
                 {item.label}
               </button>
             ))}
@@ -159,7 +246,7 @@ export default function SettingsPage() {
               </p>
             </div>
 
-            {/* ═══════════════ SECURITY TAB ═══════════════ */}
+            {/* SECURITY TAB */}
             {activeNav === "security" && (
               <>
                 {/* Wallet Connection Card */}
@@ -173,7 +260,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-orange-500/15 flex items-center justify-center">
-                        <span className="text-lg">🦊</span>
+                        <IconWallet className="w-5 h-5 text-orange-400" />
                       </div>
                       <div>
                         <div className="text-sm font-medium">MetaMask</div>
@@ -200,7 +287,9 @@ export default function SettingsPage() {
 
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center text-sm">🔐</div>
+                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                        <IconLock className="w-4 h-4 text-okx-text-secondary" />
+                      </div>
                       <div>
                         <div className="text-sm font-medium">{t("tradingPassword")}</div>
                         <div className="text-xs text-okx-text-tertiary">{t("tradingPasswordDesc")}</div>
@@ -219,7 +308,9 @@ export default function SettingsPage() {
 
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center text-sm">✍️</div>
+                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                        <IconPen className="w-4 h-4 text-okx-text-secondary" />
+                      </div>
                       <div>
                         <div className="text-sm font-medium">{t("signatureVerification")}</div>
                         <div className="text-xs text-okx-text-tertiary">{t("signatureVerificationDesc")}</div>
@@ -238,7 +329,9 @@ export default function SettingsPage() {
 
                   <div className="flex items-center justify-between px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center text-sm">📋</div>
+                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                        <IconClipboard className="w-4 h-4 text-okx-text-secondary" />
+                      </div>
                       <div>
                         <div className="text-sm font-medium">{t("withdrawWhitelist")}</div>
                         <div className="text-xs text-okx-text-tertiary">{t("withdrawWhitelistDesc")}</div>
@@ -302,8 +395,8 @@ export default function SettingsPage() {
                   {mockSessions.map((session, idx) => (
                     <div key={idx} className={`flex items-center justify-between px-6 py-3.5 ${idx < mockSessions.length - 1 ? "border-b border-okx-border-primary" : ""}`}>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center text-sm">
-                          {idx === 0 ? "💻" : "📱"}
+                        <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                          {idx === 0 ? <IconDesktop className="w-4 h-4 text-okx-text-secondary" /> : <IconPhone className="w-4 h-4 text-okx-text-secondary" />}
                         </div>
                         <div>
                           <div className="text-sm font-medium">{session.device}</div>
@@ -322,7 +415,7 @@ export default function SettingsPage() {
               </>
             )}
 
-            {/* ═══════════════ PROFILE TAB ═══════════════ */}
+            {/* PROFILE TAB */}
             {activeNav === "profile" && (
               <>
                 <div className="meme-card p-6 space-y-6">
@@ -385,7 +478,7 @@ export default function SettingsPage() {
                   <div>
                     <label className="block text-sm font-medium mb-2">{t("currentChain")}</label>
                     <div className="meme-input px-4 py-2.5 text-sm flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-yellow-500/20 flex items-center justify-center text-xs">🔗</span>
+                      <IconLink className="w-4 h-4 text-yellow-500" />
                       BSC Testnet (Chain 97)
                     </div>
                   </div>
@@ -396,7 +489,7 @@ export default function SettingsPage() {
                   <h3 className="font-bold">{t("referralInfo")}</h3>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 meme-input px-4 py-2.5 text-sm font-mono text-okx-text-tertiary">
-                      {isConnected && address ? `REF-${address.slice(2, 8).toUpperCase()}` : "—"}
+                      {isConnected && address ? `REF-${address.slice(2, 8).toUpperCase()}` : "\u2014"}
                     </div>
                     <button
                       onClick={() => {
@@ -415,7 +508,7 @@ export default function SettingsPage() {
               </>
             )}
 
-            {/* ═══════════════ API TAB ═══════════════ */}
+            {/* API TAB */}
             {activeNav === "api" && (
               <>
                 <div className="meme-card overflow-hidden">
@@ -472,7 +565,7 @@ export default function SettingsPage() {
               </>
             )}
 
-            {/* ═══════════════ NOTIFICATIONS TAB ═══════════════ */}
+            {/* NOTIFICATIONS TAB */}
             {activeNav === "notifications" && (
               <>
                 <div className="meme-card overflow-hidden">
@@ -530,7 +623,7 @@ export default function SettingsPage() {
               </>
             )}
 
-            {/* ═══════════════ FEES TAB ═══════════════ */}
+            {/* FEES TAB */}
             {activeNav === "fees" && (
               <div className="meme-card p-6 space-y-6">
                 <h3 className="font-bold">{t("tradeSettings")}</h3>
@@ -588,7 +681,7 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* ═══════════════ APPEARANCE TAB ═══════════════ */}
+            {/* APPEARANCE TAB */}
             {activeNav === "appearance" && mounted && (
               <>
                 <div className="meme-card p-6 space-y-6">
@@ -604,8 +697,8 @@ export default function SettingsPage() {
                             : "border-okx-border-primary hover:border-okx-border-hover"
                         }`}
                       >
-                        <div className="text-2xl mb-2">
-                          {themeOpt === "dark" ? "🌙" : themeOpt === "light" ? "☀️" : "💻"}
+                        <div className="flex justify-center mb-2 text-okx-text-secondary">
+                          {themeOpt === "dark" ? <IconMoon /> : themeOpt === "light" ? <IconSun /> : <IconDesktop className="w-6 h-6" />}
                         </div>
                         <div className="text-sm font-medium">{t(`theme_${themeOpt}`)}</div>
                       </button>

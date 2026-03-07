@@ -401,7 +401,7 @@ export function MarketOverview() {
                    : 'bg-okx-bg-hover border-okx-border-primary text-okx-text-secondary hover:border-okx-border-secondary'
                }`}
              >
-               <span>⚙</span>
+               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
                <span>{t('filter')}</span>
                {isFilterActive && <span className="w-1.5 h-1.5 bg-okx-up rounded-full"></span>}
              </button>
@@ -458,10 +458,10 @@ export function MarketOverview() {
             onClick={() => setFaqPanelOpen(true)}
             className="flex items-center gap-1 hover:text-okx-text-primary transition-colors"
           >
-            ❓ {tFooter('faq')}
+            <svg className="w-3.5 h-3.5 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg> {tFooter('faq')}
           </button>
           <span className={`flex items-center gap-1 ${wsConnected ? 'text-okx-up' : 'text-okx-warning'}`}>
-            {wsConnected ? `🟢 ${tFooter('liveUpdates')}` : `🟡 ${tFooter('connecting')}`}
+            {wsConnected ? (<><span className="w-2 h-2 bg-okx-up rounded-full inline-block"></span> {tFooter('liveUpdates')}</>) : (<><span className="w-2 h-2 bg-okx-warning rounded-full inline-block"></span> {tFooter('connecting')}</>)}
           </span>
         </div>
       </div>

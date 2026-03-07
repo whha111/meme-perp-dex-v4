@@ -166,7 +166,7 @@ export function SpotListingView({ tokens }: SpotListingViewProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
-            <span className="text-meme-lime text-[20px]">📈</span>
+            <svg className="w-5 h-5 text-meme-lime" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" /></svg>
             <h2 className="text-[20px] font-semibold text-white">{t("trendingTitle")}</h2>
           </div>
           <span className="font-mono text-[12px] font-medium text-meme-lime cursor-pointer hover:underline">
@@ -201,11 +201,11 @@ export function SpotListingView({ tokens }: SpotListingViewProps) {
                   </div>
                   {token.isGraduated ? (
                     <span className="font-mono text-[9px] font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded">
-                      🎓 {t("badgeGraduated")}
+                      {t("badgeGraduated")}
                     </span>
                   ) : (
                     <span className="font-mono text-[9px] font-bold text-meme-lime bg-meme-lime/10 px-2 py-1 rounded">
-                      🔥 {t("badgeHot")}
+                      {t("badgeHot")}
                     </span>
                   )}
                 </div>
