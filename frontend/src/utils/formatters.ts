@@ -137,13 +137,28 @@ export function formatTokenPrice(price: number): string {
   if (price >= 0.01) return price.toFixed(6);
   if (price >= 0.0001) return price.toFixed(8);
 
-  // 极小数使用下标格式: 0.0₈1016
+  // 极小数使用下标格式: 0.0₂₆9890
+  // 用 toExponential 解析，避免 toFixed(18) 对超小数丢失精度
+  const subscripts = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
+  const expStr = price.toExponential(4); // e.g. "9.8900e-27"
+  const expMatch = expStr.match(/^(\d+\.\d+)e([+-]\d+)$/);
+  if (expMatch) {
+    const coeff = expMatch[1].replace(".", ""); // "98900"
+    const exp = parseInt(expMatch[2]); // -27
+    if (exp < 0) {
+      const zeroCount = Math.abs(exp) - 1; // 26 zeros after "0."
+      const significantDigits = coeff.slice(0, 4); // "9890"
+      const subscriptNum = zeroCount.toString().split("").map((d) => subscripts[parseInt(d)]).join("");
+      return `0.0${subscriptNum}${significantDigits}`;
+    }
+  }
+
+  // Fallback for moderate small numbers (1e-4 to 1e-18)
   const priceStr = price.toFixed(18);
   const match = priceStr.match(/^0\.(0*)([1-9]\d*)/);
   if (match) {
     const zeroCount = match[1].length;
     const significantDigits = match[2].slice(0, 4);
-    const subscripts = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
     const subscriptNum = zeroCount.toString().split("").map((d) => subscripts[parseInt(d)]).join("");
     return `0.0${subscriptNum}${significantDigits}`;
   }

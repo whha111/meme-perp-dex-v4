@@ -3,6 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { useTradeHistory, type SpotTradeRecord } from "@/hooks/common/useTradeHistory";
+import { formatTokenPrice } from "@/utils/formatters";
 
 interface TradeHistoryTableProps {
   token?: string;
@@ -27,7 +28,7 @@ export function TradeHistoryTable({ token, maxRows = 10, className = "" }: Trade
   const formatNumber = (value: string, decimals: number = 4) => {
     const num = parseFloat(value);
     if (isNaN(num)) return "0";
-    if (num < 0.0001) return num.toExponential(2);
+    if (num < 0.0001) return formatTokenPrice(num);
     return num.toFixed(decimals);
   };
 

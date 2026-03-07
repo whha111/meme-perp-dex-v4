@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { WssOnChainToken } from "@/lib/stores/tradingDataStore";
+import { formatTokenPrice } from "@/utils/formatters";
 
 type FilterTab = "all" | "active" | "graduated";
 
@@ -95,15 +96,11 @@ export function TokenSelector({
     };
   }, [isOpen]);
 
-  // 格式化价格
+  // 格式化价格 — 使用统一的 formatTokenPrice (支持下标格式)
   const formatPrice = (price: string) => {
     const num = parseFloat(price);
     if (num === 0) return "0";
-    if (num < 0.0000000001) return num.toExponential(2);
-    if (num < 0.000001) return num.toFixed(12);
-    if (num < 0.001) return num.toFixed(8);
-    if (num < 1) return num.toFixed(6);
-    return num.toFixed(4);
+    return formatTokenPrice(num);
   };
 
   // 处理选择

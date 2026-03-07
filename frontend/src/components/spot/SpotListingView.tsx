@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { WssOnChainToken } from "@/lib/stores/tradingDataStore";
+import { formatTokenPrice } from "@/utils/formatters";
 
 // Avatar color palette for deterministic token colors
 const AVATAR_COLORS = [
@@ -24,9 +25,7 @@ function getAvatarColor(address: string): string {
 function formatPrice(weiStr: string): string {
   const eth = Number(weiStr) / 1e18;
   if (eth === 0) return "0 BNB";
-  if (eth < 0.000001) return `${eth.toExponential(2)} BNB`;
-  if (eth < 0.01) return `${eth.toFixed(6)} BNB`;
-  return `${eth.toFixed(4)} BNB`;
+  return `${formatTokenPrice(eth)} BNB`;
 }
 
 function formatVolume(weiStr: string): string {
