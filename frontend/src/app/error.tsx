@@ -49,15 +49,15 @@ export default function Error({
   const t = errorTexts[locale] || errorTexts.zh;
 
   return (
-    <div className="min-h-screen bg-[#0D0D0F] text-white flex items-center justify-center">
+    <div className="min-h-screen bg-okx-bg-primary text-okx-text-primary flex items-center justify-center">
       <div className="max-w-md mx-auto px-4 text-center">
         <h2 className="text-2xl font-bold mb-4">{t.title}</h2>
-        <p className="text-[#8E8E93] mb-6 break-all">
+        <p className="text-okx-text-secondary mb-6 break-all">
           {error.message || 'Unknown error'}
         </p>
         <button
           onClick={reset}
-          className="bg-[#A3E635] text-black px-6 py-3 rounded-lg font-bold hover:opacity-90 transition-opacity"
+          className="bg-meme-lime text-black px-6 py-3 rounded-lg font-bold hover:opacity-90 transition-opacity"
         >
           {t.retry}
         </button>

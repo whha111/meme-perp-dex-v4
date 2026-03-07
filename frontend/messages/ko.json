@@ -22,7 +22,9 @@
     "contractCopied": "컨트랙트 주소가 복사되었습니다",
     "done": "완료",
     "currentSetting": "현재 설정",
-    "connectWallet": "지갑 연결"
+    "connectWallet": "지갑 연결",
+    "offline": "오프라인",
+    "wsConnectionFailed": "WebSocket 연결 실패"
   },
   "nav": {
     "market": "시장",
@@ -34,7 +36,58 @@
     "inviteProgram": "초대 프로그램",
     "wallet": "지갑",
     "searchPlaceholder": "토큰 / 주소 / DApp",
-    "lending": "대출"
+    "lending": "대출",
+    "leaderboard": "리더보드",
+    "deposit": "입금",
+    "invite": "초대"
+  },
+  "home": {
+    "badge": "✦ BSC Testnet 운영 중",
+    "heroTitle": "다음",
+    "heroSubtitle": "Meme 토큰 생성, 거래, 무기한 선물을 하나의 플랫폼에서. 공정한 출시, 온체인 투명성, 최대 10x 레버리지.",
+    "createToken": "토큰 생성 →",
+    "startTrading": "거래 시작",
+    "stats": {
+      "volume24h": "24h 거래량",
+      "marketCap": "총 시가총액",
+      "activeTokens": "활성 토큰",
+      "totalTraders": "누적 트레이더"
+    },
+    "whyTitle": "왜 MEMEPERP인가?",
+    "whySubtitle": "탈중앙화, 투명, 무허가 Meme 토큰 거래 인프라",
+    "features": {
+      "fairLaunch": {
+        "title": "공정한 출시",
+        "desc": "본딩 커브 가격 책정, 프리세일 없음, 내부 배분 없음. 모든 사람이 동일한 출발선."
+      },
+      "perpetual": {
+        "title": "무기한 선물",
+        "desc": "오프체인 매칭 + 온체인 정산, 최대 10x 레버리지로 Meme 토큰 롱/숏."
+      },
+      "security": {
+        "title": "온체인 보안",
+        "desc": "SettlementV2 컨트랙트에서 자금 보관, Merkle proof 출금, 완전히 검증 가능."
+      },
+      "referral": {
+        "title": "추천 리워드",
+        "desc": "친구를 초대하여 거래, 최대 25% 수수료 리베이트. 다단계 추천 시스템."
+      },
+      "matching": {
+        "title": "밀리초 미만 매칭",
+        "desc": "TypeScript 매칭 엔진, 서브밀리초 지연. 지정가 및 시장가 주문 지원."
+      },
+      "competition": {
+        "title": "트레이딩 대회",
+        "desc": "정기적인 트레이딩 대회, TOP 10이 상금 풀을 나눕니다. 트레이딩 실력을 증명하세요."
+      }
+    },
+    "ctaTitle": "준비되셨나요?",
+    "ctaSubtitle": "지갑을 연결하고 Meme 거래 여정을 시작하세요",
+    "ctaButton": "마켓 진입 →",
+    "footer": {
+      "settings": "설정",
+      "invite": "초대"
+    }
   },
   "wallet": {
     "connect": "지갑 연결",
@@ -87,6 +140,42 @@
   "create": {
     "title": "도메인 소유권 확인",
     "titleDeploy": "도메인 토큰 생성",
+    "memeToken": {
+      "title": "Meme 토큰 만들기",
+      "subtitle": "즉시 출시, 장벽 없음, 공정 출시",
+      "launchOnBase": "Base에서 출시",
+      "uploadLogo": "클릭하여 토큰 로고 업로드",
+      "nameLabel": "이름",
+      "namePlaceholder": "Doge Coin",
+      "symbolLabel": "심볼",
+      "symbolPlaceholder": "DOGE",
+      "descriptionLabel": "설명",
+      "descriptionPlaceholder": "Meme 토큰에 대해 알려주세요...",
+      "addSocialLinks": "소셜 링크 추가 (선택)",
+      "websitePlaceholder": "웹사이트",
+      "twitterPlaceholder": "Twitter",
+      "telegramPlaceholder": "Telegram",
+      "discordPlaceholder": "Discord",
+      "initialBuyTitle": "초기 구매 (선택)",
+      "initialBuySubtitle": "초기 홀더가 되세요",
+      "tokenSupply": "공급량",
+      "graduation": "졸업",
+      "feeRate": "수수료",
+      "bondingCurve": "본딩 커브",
+      "serviceFee": "서비스 수수료",
+      "gas": "가스",
+      "buyAmount": "구매",
+      "createTokenButton": "토큰 생성",
+      "viewTransaction": "트랜잭션 보기",
+      "termsAgree": "생성 시 다음에 동의합니다",
+      "termsOfService": "이용약관",
+      "creating": "생성 중...",
+      "submitTx": "트랜잭션 제출 중...",
+      "waitingConfirm": "확인 대기 중...",
+      "createSuccess": "성공!",
+      "tokenCreated": "토큰이 성공적으로 생성되었습니다!",
+      "fillNameAndSymbol": "토큰 이름과 심볼을 입력해 주세요"
+    },
     "step1Title": "1단계: 도메인 소유권 확인",
     "step1Desc": "DNS TXT 레코드로 도메인 소유권을 확인합니다",
     "step2Title": "2단계: 토큰 생성",
@@ -203,7 +292,12 @@
     "realizedPnl": "실현 손익",
     "unrealizedPnl": "미실현 손익",
     "description": "설명",
-    "socialLinks": "소셜 링크"
+    "socialLinks": "소셜 링크",
+    "active": "활성",
+    "paused": "일시정지",
+    "virtualBnb": "가상 BNB",
+    "virtualToken": "가상 토큰",
+    "total": "총"
   },
   "chart": {
     "1min": "1분",
@@ -267,7 +361,11 @@
     "graduationTarget": "졸업 목표",
     "graduatedMigrated": "토큰 졸업, 유동성이 PancakeSwap으로 이전됨",
     "remainToGraduate": "졸업까지 {percent}% 남음!",
-    "approxTokens": "≈ {amount}M 토큰"
+    "approxTokens": "≈ {amount}M 토큰",
+    "bondingCurveProgress": "본딩 커브 진행률",
+    "target": "목표",
+    "graduation": "졸업",
+    "graduatedMessage": "졸업 완료! 토큰이 PancakeSwap에 상장되었습니다"
   },
   "holders": {
     "topHolders": "상위 홀더",
@@ -314,7 +412,11 @@
     "quantity": "수량",
     "pool": "풀",
     "details": "상세",
-    "devSold": "DEV SOLD"
+    "devSold": "DEV SOLD",
+    "waitingForTrades": "새 거래 대기 중...",
+    "pair": "거래 쌍",
+    "direction": "방향",
+    "txHash": "Tx 해시"
   },
   "graduation": {
     "progress": "졸업 진행률",
@@ -356,7 +458,46 @@
     "deadlineHelp": "거래 만료 시간. 너무 짧으면 실패하고, 너무 길면 가격이 크게 변동할 수 있습니다.",
     "historyHelp": "빠른 접근을 위한 최근 방문 도메인.",
     "slippageRange": "슬리피지 허용치는 0-50% 사이여야 합니다",
-    "deadlineRange": "거래 기한은 60-3600초 사이여야 합니다"
+    "deadlineRange": "거래 기한은 60-3600초 사이여야 합니다",
+    "navSecurity": "보안 설정",
+    "navProfile": "프로필",
+    "navApi": "API 관리",
+    "navNotifications": "알림 설정",
+    "navFees": "수수료 등급",
+    "navAppearance": "언어 및 외관",
+    "securitySubtitle": "다중 보안 설정으로 계정을 보호하세요",
+    "walletConnection": "지갑 연결",
+    "connected": "연결됨",
+    "notConnected": "미연결",
+    "disconnect": "연결 해제",
+    "securityVerification": "보안 인증",
+    "securityVerificationDesc": "주요 작업에 다중 인증 활성화",
+    "tradingPassword": "거래 비밀번호",
+    "tradingPasswordDesc": "주문 시 별도 입력하는 비밀번호",
+    "notSet": "미설정",
+    "setup": "설정",
+    "signatureVerification": "서명 인증",
+    "signatureVerificationDesc": "대량 출금 시 지갑 서명 요구",
+    "enabled": "활성화됨",
+    "configure": "설정",
+    "withdrawWhitelist": "출금 화이트리스트",
+    "withdrawWhitelistDesc": "승인된 주소로만 출금 허용",
+    "disabled": "비활성화",
+    "apiKeyManagement": "API 키 관리",
+    "apiKeyManagementDesc": "프로그램 거래용 API 키 관리",
+    "createApiKey": "API 키 생성",
+    "permRead": "읽기",
+    "permTrade": "거래",
+    "permReadOnly": "읽기 전용",
+    "delete": "삭제",
+    "loginActivity": "로그인 활동",
+    "loginActivityDesc": "최근 로그인 세션 및 기기 이력",
+    "logoutOthers": "다른 기기 로그아웃",
+    "current": "현재",
+    "2daysAgo": "2일 전",
+    "currentOnline": "현재 · 온라인",
+    "logout": "로그아웃",
+    "featureInDev": "이 기능은 개발 중입니다. 곧 만나요..."
   },
   "errors": {
     "unknown": "오류",
@@ -918,7 +1059,26 @@
     "marketClose": "시장가 청산",
     "enterLimitPrice": "지정가를 입력해주세요",
     "tpPrice": "익절 가격",
-    "slPrice": "손절 가격"
+    "slPrice": "손절 가격",
+    "marketTitle": "USDT 무기한 선물",
+    "marketSubtitle": "고유동성 Meme 토큰 선물 거래 · 최대 10x 레버리지",
+    "searchPairs": "거래 쌍 검색...",
+    "totalVolume24h": "24h 총 거래량",
+    "totalOI": "24h 총 미결제약정",
+    "activePairs": "활성 거래 쌍",
+    "pairsUnit": "쌍",
+    "pair": "거래 쌍",
+    "latestPrice": "최신 가격",
+    "change24h": "24h 변동",
+    "trend7d": "7일 추세",
+    "action": "작업",
+    "perpetualLabel": "무기한",
+    "trade": "거래",
+    "noMatchingPairs": "일치하는 거래 쌍이 없습니다",
+    "catAll": "전체",
+    "catHot": "인기",
+    "catNew": "신규",
+    "catFavorites": "즐겨찾기"
   },
   "earnings": {
     "title": "수익 센터",
@@ -1078,6 +1238,102 @@
     "active": "활성",
     "graduated": "졸업",
     "noTokensFound": "토큰을 찾을 수 없습니다",
-    "price": "가격"
+    "price": "가격",
+    "bnbReserve": "BNB 준비금"
+  },
+  "imageUpload": {
+    "clickToUpload": "클릭하여 업로드",
+    "uploading": "업로드 중...",
+    "uploadFailed": "업로드 실패",
+    "uploadError": "업로드 오류, 다시 시도해 주세요"
+  },
+  "hooks": {
+    "connectWalletFirst": "먼저 지갑을 연결해 주세요",
+    "walletNotConnected": "지갑이 연결되지 않았습니다",
+    "tokenFactoryNotConfigured": "TokenFactory 컨트랙트 주소가 설정되지 않았습니다. .env에서 NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS를 설정하세요",
+    "txSubmittedWaiting": "트랜잭션 제출됨, 확인 대기 중...",
+    "buyTxSubmitted": "매수 주문 제출됨",
+    "sellTxSubmitted": "매도 주문 제출됨",
+    "fetchMetadataFailed": "메타데이터 가져오기 실패",
+    "tradingPairIdRequired": "거래 쌍 ID는 필수입니다",
+    "walletAuthFailed": "지갑 인증 실패",
+    "saveMetadataFailed": "메타데이터 저장 실패"
+  },
+  "account": {
+    "title": "계정 개요",
+    "connectWalletHint": "계정 정보를 보려면 지갑을 연결하세요",
+    "connectWallet": "지갑 연결",
+    "walletBalance": "지갑 잔액",
+    "contractAccount": "컨트랙트 계정",
+    "availableBalance": "사용 가능 잔액",
+    "lockedMargin": "잠긴 증거금",
+    "currentPositions": "현재 포지션",
+    "pair": "페어",
+    "direction": "방향",
+    "positionSize": "사이즈",
+    "margin": "증거금",
+    "leverage": "레버리지",
+    "entryPrice": "진입 가격",
+    "unrealizedPnl": "미실현 손익",
+    "perpetual": "무기한",
+    "long": "롱",
+    "short": "숏",
+    "totalPnl": "총 손익",
+    "noPositions": "오픈 포지션 없음",
+    "accountInfo": "계정 정보",
+    "walletAddress": "지갑 주소"
+  },
+  "leaderboard": {
+    "title": "트레이딩 대회 리더보드",
+    "seasonBadge": "시즌 3 · 진행 중",
+    "description": "최고의 트레이더들이 상금 풀을 놓고 경쟁합니다. 시즌 종료까지 ",
+    "days": "일 ",
+    "tabPnl": "손익 순위",
+    "tabVolume": "거래량",
+    "tabInvites": "초대 순위",
+    "tabPast": "이전 시즌",
+    "reward": "상금",
+    "rank": "순위",
+    "trader": "트레이더",
+    "pnl": "손익",
+    "trades": "거래 횟수",
+    "you": "나"
+  },
+  "depositPage": {
+    "deposit": "입금",
+    "withdraw": "출금",
+    "depositTitle": "거래 계정에 입금",
+    "withdrawTitle": "거래 계정에서 출금",
+    "depositDesc": "지갑에서 거래 계정으로 자산 이체",
+    "withdrawDesc": "거래 계정에서 지갑으로 자산 인출",
+    "selectAsset": "자산 선택",
+    "depositAmount": "입금 금액",
+    "withdrawAmount": "출금 금액",
+    "balance": "잔액",
+    "connectWalletFirst": "먼저 지갑을 연결하세요",
+    "processingStep": "단계 {step} 처리 중...",
+    "step1Label": "토큰 승인",
+    "step1Desc": "컨트랙트에 토큰 사용 권한 부여",
+    "step2Label": "입금 확인",
+    "step2Desc": "거래 컨트랙트에 토큰 전송",
+    "step3Label": "확인 대기",
+    "step3Desc": "블록체인 확인 대기 중",
+    "txHistory": "거래 내역",
+    "viewAll": "전체 보기",
+    "filterAll": "전체",
+    "confirmed": "완료",
+    "confirming": "확인 중",
+    "failed": "실패",
+    "retry": "재시도",
+    "balanceOverview": "잔액 개요",
+    "availableBalance": "사용 가능 잔액",
+    "usedMargin": "사용 중 증거금",
+    "unrealizedPnl": "미실현 손익",
+    "totalAssets": "총 자산",
+    "2minAgo": "2분 전",
+    "1hourAgo": "1시간 전",
+    "3hoursAgo": "3시간 전",
+    "yesterday": "어제",
+    "2daysAgo": "2일 전"
   }
 }

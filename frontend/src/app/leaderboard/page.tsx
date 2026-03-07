@@ -5,7 +5,6 @@ import { Navbar } from "@/components/layout/Navbar";
 import { useTranslations } from "next-intl";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
-// 竞赛排行榜分类
 type LeaderboardTab = "pnl" | "volume" | "invites" | "past";
 
 interface LeaderboardEntry {
@@ -18,13 +17,12 @@ interface LeaderboardEntry {
   isCurrentUser?: boolean;
 }
 
-// 格式化地址显示
 function formatAddress(addr: string): string {
   if (!addr || addr.length < 10) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-// 模拟数据（真实数据将来自 API）
+// Mock data (real data will come from API)
 const MOCK_LEADERBOARD: LeaderboardEntry[] = [
   { rank: 1, address: "0x2aEf...b32C", pnl: "+12.45 ETH", roe: "+324.5%", trades: 256, reward: "25 ETH" },
   { rank: 2, address: "0xc4B7...3f2A", pnl: "+8.72 ETH", roe: "+241.3%", trades: 189, reward: "12 ETH" },
@@ -38,7 +36,6 @@ const MOCK_LEADERBOARD: LeaderboardEntry[] = [
   { rank: 10, address: "0x8dF3...2c5A", pnl: "+0.52 ETH", roe: "+45.8%", trades: 35, reward: "0.25 ETH" },
 ];
 
-// 当前用户模拟排名
 const MOCK_CURRENT_USER: LeaderboardEntry = {
   rank: 28,
   address: "0xYour...Addr",
@@ -49,7 +46,6 @@ const MOCK_CURRENT_USER: LeaderboardEntry = {
   isCurrentUser: true,
 };
 
-// 倒计时 Hook
 function useCountdown(targetDate: Date) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
 
@@ -74,27 +70,27 @@ function useCountdown(targetDate: Date) {
   return timeLeft;
 }
 
-const TABS: { key: LeaderboardTab; label: string }[] = [
-  { key: "pnl", label: "盈亏排行" },
-  { key: "volume", label: "交易量排行" },
-  { key: "invites", label: "邀请排行" },
-  { key: "past", label: "往期竞赛" },
-];
-
 export default function LeaderboardPage() {
+  const t = useTranslations("leaderboard");
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("pnl");
   const [entries, setEntries] = useState<LeaderboardEntry[]>(MOCK_LEADERBOARD);
   const [currentUser, setCurrentUser] = useState<LeaderboardEntry | null>(MOCK_CURRENT_USER);
 
-  // 3 天后的倒计时
   const targetDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000);
   const countdown = useCountdown(targetDate);
 
-  // TOP 3 颜色
+  const tabs: { key: LeaderboardTab; label: string }[] = [
+    { key: "pnl", label: t("tabPnl") },
+    { key: "volume", label: t("tabVolume") },
+    { key: "invites", label: t("tabInvites") },
+    { key: "past", label: t("tabPast") },
+  ];
+
+  // Podium medal colors — these are semantic (gold/silver/bronze), kept as-is
   const podiumColors = [
-    { border: "#FFD70050", text: "#FFD700", bg: "#FFD70008", emoji: "🥇", prize: "25 ETH" },
-    { border: "#C0C0C030", text: "#C0C0C0", bg: "#C0C0C008", emoji: "🥈", prize: "12 ETH" },
-    { border: "#CD7F3230", text: "#CD7F32", bg: "#CD7F3208", emoji: "🥉", prize: "8 ETH" },
+    { border: "border-yellow-500/30", text: "text-yellow-500", emoji: "🥇", prize: "25 ETH" },
+    { border: "border-gray-400/30", text: "text-gray-400", emoji: "🥈", prize: "12 ETH" },
+    { border: "border-amber-600/30", text: "text-amber-600", emoji: "🥉", prize: "8 ETH" },
   ];
 
   return (
@@ -102,19 +98,19 @@ export default function LeaderboardPage() {
       <Navbar />
 
       {/* Hero Section */}
-      <div className="w-full bg-gradient-to-b from-[#0d1000] to-black py-10 px-8 lg:px-16">
+      <div className="w-full bg-gradient-to-b from-meme-darker to-okx-bg-primary py-10 px-8 lg:px-16">
         <div className="max-w-[1440px] mx-auto">
           <div className="flex items-center gap-4 mb-4">
-            <h1 className="text-3xl font-extrabold">交易竞赛排行榜</h1>
+            <h1 className="text-3xl font-extrabold">{t("title")}</h1>
             <span className="bg-meme-lime text-black text-xs font-bold px-4 py-1.5 rounded-full">
-              第 3 期 · 进行中
+              {t("seasonBadge")}
             </span>
           </div>
 
           <p className="text-okx-text-secondary text-[15px] mb-6">
-            参与交易即可获得排名，TOP 10 瓜分 50 ETH 奖池 · 距离结束:{" "}
-            <span className="text-white font-mono">
-              {countdown.days}天 {String(countdown.hours).padStart(2, "0")}:
+            {t("description")}{" "}
+            <span className="text-okx-text-primary font-mono">
+              {countdown.days}{t("days")} {String(countdown.hours).padStart(2, "0")}:
               {String(countdown.minutes).padStart(2, "0")}:
               {String(countdown.seconds).padStart(2, "0")}
             </span>
@@ -122,14 +118,14 @@ export default function LeaderboardPage() {
 
           {/* Tabs */}
           <div className="flex items-center gap-3">
-            {TABS.map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
                   activeTab === tab.key
                     ? "bg-meme-lime text-black font-bold"
-                    : "border border-okx-border-secondary text-okx-text-secondary hover:text-white hover:border-okx-border-hover"
+                    : "border border-okx-border-secondary text-okx-text-secondary hover:text-okx-text-primary hover:border-okx-border-hover"
                 }`}
               >
                 {tab.label}
@@ -144,11 +140,7 @@ export default function LeaderboardPage() {
         <div className="flex justify-center items-end gap-6">
           {/* 2nd Place */}
           <div
-            className="flex flex-col items-center gap-3 rounded-2xl p-6 w-[280px]"
-            style={{
-              backgroundColor: "#111111",
-              border: `1px solid ${podiumColors[1].border}`,
-            }}
+            className={`flex flex-col items-center gap-3 rounded-2xl p-6 w-[280px] bg-okx-bg-card border ${podiumColors[1].border}`}
           >
             <span className="text-4xl">{podiumColors[1].emoji}</span>
             <span className="font-mono text-sm">{entries[1]?.address}</span>
@@ -156,18 +148,14 @@ export default function LeaderboardPage() {
               <div className="text-meme-lime font-mono font-bold text-lg">{entries[1]?.pnl}</div>
               <div className="text-okx-text-secondary text-sm">ROE {entries[1]?.roe}</div>
             </div>
-            <span className="text-sm font-semibold" style={{ color: podiumColors[1].text }}>
-              🏆 奖励 {podiumColors[1].prize}
+            <span className={`text-sm font-semibold ${podiumColors[1].text}`}>
+              🏆 {t("reward")} {podiumColors[1].prize}
             </span>
           </div>
 
           {/* 1st Place */}
           <div
-            className="flex flex-col items-center gap-3 rounded-2xl p-8 w-[320px]"
-            style={{
-              backgroundColor: "#111111",
-              border: `2px solid ${podiumColors[0].border}`,
-            }}
+            className={`flex flex-col items-center gap-3 rounded-2xl p-8 w-[320px] bg-okx-bg-card border-2 ${podiumColors[0].border}`}
           >
             <span className="text-5xl">{podiumColors[0].emoji}</span>
             <span className="font-mono text-sm font-semibold">{entries[0]?.address}</span>
@@ -175,18 +163,14 @@ export default function LeaderboardPage() {
               <div className="text-meme-lime font-mono font-bold text-xl">{entries[0]?.pnl}</div>
               <div className="text-okx-text-secondary text-sm">ROE {entries[0]?.roe}</div>
             </div>
-            <span className="text-sm font-bold" style={{ color: podiumColors[0].text }}>
-              🏆 奖励 {podiumColors[0].prize}
+            <span className={`text-sm font-bold ${podiumColors[0].text}`}>
+              🏆 {t("reward")} {podiumColors[0].prize}
             </span>
           </div>
 
           {/* 3rd Place */}
           <div
-            className="flex flex-col items-center gap-3 rounded-2xl p-6 w-[280px]"
-            style={{
-              backgroundColor: "#111111",
-              border: `1px solid ${podiumColors[2].border}`,
-            }}
+            className={`flex flex-col items-center gap-3 rounded-2xl p-6 w-[280px] bg-okx-bg-card border ${podiumColors[2].border}`}
           >
             <span className="text-4xl">{podiumColors[2].emoji}</span>
             <span className="font-mono text-sm">{entries[2]?.address}</span>
@@ -194,8 +178,8 @@ export default function LeaderboardPage() {
               <div className="text-meme-lime font-mono font-bold text-lg">{entries[2]?.pnl}</div>
               <div className="text-okx-text-secondary text-sm">ROE {entries[2]?.roe}</div>
             </div>
-            <span className="text-sm font-semibold" style={{ color: podiumColors[2].text }}>
-              🏆 奖励 {podiumColors[2].prize}
+            <span className={`text-sm font-semibold ${podiumColors[2].text}`}>
+              🏆 {t("reward")} {podiumColors[2].prize}
             </span>
           </div>
         </div>
@@ -205,12 +189,12 @@ export default function LeaderboardPage() {
       <div className="max-w-[1440px] mx-auto px-8 lg:px-16 pb-12">
         {/* Table Header */}
         <div className="grid grid-cols-6 bg-meme-darker rounded-lg px-4 py-3 text-xs font-semibold text-okx-text-secondary">
-          <span>排名</span>
-          <span>交易者</span>
-          <span className="text-right">盈亏</span>
+          <span>{t("rank")}</span>
+          <span>{t("trader")}</span>
+          <span className="text-right">{t("pnl")}</span>
           <span className="text-right">ROE%</span>
-          <span className="text-right">交易次数</span>
-          <span className="text-right">奖励</span>
+          <span className="text-right">{t("trades")}</span>
+          <span className="text-right">{t("reward")}</span>
         </div>
 
         {/* Table Rows (4-10) */}
@@ -236,7 +220,7 @@ export default function LeaderboardPage() {
             <span className="font-mono text-sm font-bold text-meme-lime">{currentUser.rank}</span>
             <span className="font-mono text-sm flex items-center gap-2">
               {currentUser.address}
-              <span className="text-[10px] bg-meme-lime/20 text-meme-lime px-2 py-0.5 rounded">你</span>
+              <span className="text-[10px] bg-meme-lime/20 text-meme-lime px-2 py-0.5 rounded">{t("you")}</span>
             </span>
             <span className="font-mono text-sm text-meme-lime font-semibold text-right">{currentUser.pnl}</span>
             <span className="font-mono text-sm text-meme-lime text-right">{currentUser.roe}</span>

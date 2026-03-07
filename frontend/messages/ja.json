@@ -22,7 +22,9 @@
     "contractCopied": "コントラクトアドレスをコピーしました",
     "done": "完了",
     "currentSetting": "現在の設定",
-    "connectWallet": "ウォレットを接続"
+    "connectWallet": "ウォレットを接続",
+    "offline": "オフライン",
+    "wsConnectionFailed": "WebSocket接続に失敗しました"
   },
   "nav": {
     "market": "マーケット",
@@ -34,7 +36,58 @@
     "inviteProgram": "招待プログラム",
     "wallet": "ウォレット",
     "searchPlaceholder": "通貨 / アドレス / DApp",
-    "lending": "レンディング"
+    "lending": "レンディング",
+    "leaderboard": "ランキング",
+    "deposit": "入金",
+    "invite": "招待"
+  },
+  "home": {
+    "badge": "✦ BSC Testnet 稼働中",
+    "heroTitle": "次の",
+    "heroSubtitle": "Meme トークンの作成、取引、無期限契約を一つのプラットフォームで。フェアローンチ、オンチェーン透明性、最大 10x レバレッジ。",
+    "createToken": "トークン作成 →",
+    "startTrading": "取引を始める",
+    "stats": {
+      "volume24h": "24h 取引量",
+      "marketCap": "総時価総額",
+      "activeTokens": "アクティブトークン",
+      "totalTraders": "累計トレーダー"
+    },
+    "whyTitle": "なぜ MEMEPERP？",
+    "whySubtitle": "分散型、透明、パーミッションレスな Meme トークン取引インフラ",
+    "features": {
+      "fairLaunch": {
+        "title": "フェアローンチ",
+        "desc": "ボンディングカーブ価格設定、プレセールなし、内部配分なし。全員が同じスタートライン。"
+      },
+      "perpetual": {
+        "title": "無期限契約",
+        "desc": "オフチェーンマッチング + オンチェーン決済、最大 10x レバレッジでロング/ショート。"
+      },
+      "security": {
+        "title": "オンチェーンセキュリティ",
+        "desc": "SettlementV2 コントラクトで資金保管、Merkle proof 出金、完全に検証可能。"
+      },
+      "referral": {
+        "title": "紹介リワード",
+        "desc": "友人を招待して取引し、最大 25% の手数料リベート。マルチティア紹介システム。"
+      },
+      "matching": {
+        "title": "ミリ秒未満マッチング",
+        "desc": "TypeScript マッチングエンジン、サブミリ秒レイテンシ。指値・成行注文対応。"
+      },
+      "competition": {
+        "title": "トレーディングコンペ",
+        "desc": "定期的なトレーディングコンペ、TOP 10 が賞金プールを分配。取引スキルを証明。"
+      }
+    },
+    "ctaTitle": "準備はできましたか？",
+    "ctaSubtitle": "ウォレットを接続して、Meme トレーディングの旅を始めましょう",
+    "ctaButton": "マーケットへ →",
+    "footer": {
+      "settings": "設定",
+      "invite": "招待"
+    }
   },
   "wallet": {
     "connect": "ウォレット接続",
@@ -87,6 +140,42 @@
   "create": {
     "title": "ドメイン所有権の確認",
     "titleDeploy": "ドメイントークン作成",
+    "memeToken": {
+      "title": "Memeトークンを作成",
+      "subtitle": "即座にローンチ、ゼロ障壁、フェアローンチ",
+      "launchOnBase": "Baseでローンチ",
+      "uploadLogo": "クリックしてトークンロゴをアップロード",
+      "nameLabel": "名前",
+      "namePlaceholder": "Doge Coin",
+      "symbolLabel": "シンボル",
+      "symbolPlaceholder": "DOGE",
+      "descriptionLabel": "説明",
+      "descriptionPlaceholder": "あなたのMemeトークンについて教えてください...",
+      "addSocialLinks": "ソーシャルリンクを追加（任意）",
+      "websitePlaceholder": "ウェブサイト",
+      "twitterPlaceholder": "Twitter",
+      "telegramPlaceholder": "Telegram",
+      "discordPlaceholder": "Discord",
+      "initialBuyTitle": "初期購入（任意）",
+      "initialBuySubtitle": "初期ホルダーになる",
+      "tokenSupply": "供給量",
+      "graduation": "卒業",
+      "feeRate": "手数料",
+      "bondingCurve": "ボンディングカーブ",
+      "serviceFee": "サービス料",
+      "gas": "ガス",
+      "buyAmount": "購入",
+      "createTokenButton": "トークンを作成",
+      "viewTransaction": "トランザクションを見る",
+      "termsAgree": "作成することで、以下に同意します",
+      "termsOfService": "利用規約",
+      "creating": "作成中...",
+      "submitTx": "トランザクション送信中...",
+      "waitingConfirm": "確認待ち...",
+      "createSuccess": "成功！",
+      "tokenCreated": "トークンが正常に作成されました！",
+      "fillNameAndSymbol": "トークン名とシンボルを入力してください"
+    },
     "step1Title": "ステップ1: ドメイン所有権の確認",
     "step1Desc": "DNS TXTレコードでドメイン所有権を確認します",
     "step2Title": "ステップ2: トークン作成",
@@ -203,7 +292,12 @@
     "realizedPnl": "実現損益",
     "unrealizedPnl": "未実現損益",
     "description": "説明",
-    "socialLinks": "ソーシャルリンク"
+    "socialLinks": "ソーシャルリンク",
+    "active": "アクティブ",
+    "paused": "一時停止",
+    "virtualBnb": "仮想BNB",
+    "virtualToken": "仮想トークン",
+    "total": "合計"
   },
   "chart": {
     "1min": "1分",
@@ -267,7 +361,11 @@
     "graduationTarget": "卒業目標",
     "graduatedMigrated": "トークン卒業済み、流動性はPancakeSwapに移行しました",
     "remainToGraduate": "残り {percent}% で卒業！",
-    "approxTokens": "≈ {amount}M トークン"
+    "approxTokens": "≈ {amount}M トークン",
+    "bondingCurveProgress": "ボンディングカーブ進捗",
+    "target": "目標",
+    "graduation": "卒業",
+    "graduatedMessage": "卒業済み！トークンはPancakeSwapに上場しました"
   },
   "holders": {
     "topHolders": "トップホルダー",
@@ -314,7 +412,11 @@
     "quantity": "数量",
     "pool": "プール",
     "details": "詳細",
-    "devSold": "DEV SOLD"
+    "devSold": "DEV SOLD",
+    "waitingForTrades": "取引を待っています...",
+    "pair": "ペア",
+    "direction": "方向",
+    "txHash": "Txハッシュ"
   },
   "graduation": {
     "progress": "卒業進捗",
@@ -356,7 +458,46 @@
     "deadlineHelp": "取引の有効期限。短すぎると失敗し、長すぎると価格が大きく変動する可能性があります。",
     "historyHelp": "最近訪問したドメインのクイックアクセス。",
     "slippageRange": "スリッページ許容度は0-50%の間である必要があります",
-    "deadlineRange": "取引期限は60-3600秒の間である必要があります"
+    "deadlineRange": "取引期限は60-3600秒の間である必要があります",
+    "navSecurity": "セキュリティ",
+    "navProfile": "プロフィール",
+    "navApi": "API管理",
+    "navNotifications": "通知設定",
+    "navFees": "手数料",
+    "navAppearance": "言語・表示",
+    "securitySubtitle": "多層セキュリティでアカウントを保護",
+    "walletConnection": "ウォレット接続",
+    "connected": "接続済み",
+    "notConnected": "未接続",
+    "disconnect": "切断",
+    "securityVerification": "セキュリティ認証",
+    "securityVerificationDesc": "重要な操作に多要素認証を有効化",
+    "tradingPassword": "取引パスワード",
+    "tradingPasswordDesc": "注文時に別途入力するパスワード",
+    "notSet": "未設定",
+    "setup": "設定する",
+    "signatureVerification": "署名認証",
+    "signatureVerificationDesc": "高額出金時にウォレット署名を要求",
+    "enabled": "有効",
+    "configure": "設定",
+    "withdrawWhitelist": "出金ホワイトリスト",
+    "withdrawWhitelistDesc": "承認済みアドレスへのみ出金を許可",
+    "disabled": "無効",
+    "apiKeyManagement": "APIキー管理",
+    "apiKeyManagementDesc": "プログラム取引用APIキーの管理",
+    "createApiKey": "APIキーを作成",
+    "permRead": "読取",
+    "permTrade": "取引",
+    "permReadOnly": "読取専用",
+    "delete": "削除",
+    "loginActivity": "ログイン履歴",
+    "loginActivityDesc": "最近のログインセッションとデバイス履歴",
+    "logoutOthers": "他のデバイスをログアウト",
+    "current": "現在",
+    "2daysAgo": "2日前",
+    "currentOnline": "現在 · オンライン",
+    "logout": "ログアウト",
+    "featureInDev": "この機能は開発中です。お楽しみに..."
   },
   "errors": {
     "unknown": "エラー",
@@ -918,7 +1059,26 @@
     "marketClose": "成行決済",
     "enterLimitPrice": "指値を入力してください",
     "tpPrice": "利確価格",
-    "slPrice": "損切価格"
+    "slPrice": "損切価格",
+    "marketTitle": "USDT 無期限契約",
+    "marketSubtitle": "高流動性 Meme トークン先物取引 · 最大 10x レバレッジ",
+    "searchPairs": "ペアを検索...",
+    "totalVolume24h": "24h 総取引量",
+    "totalOI": "24h 総建玉",
+    "activePairs": "アクティブペア",
+    "pairsUnit": "ペア",
+    "pair": "ペア",
+    "latestPrice": "最新価格",
+    "change24h": "24h 騰落",
+    "trend7d": "7日トレンド",
+    "action": "操作",
+    "perpetualLabel": "無期限",
+    "trade": "取引",
+    "noMatchingPairs": "一致するペアが見つかりません",
+    "catAll": "すべて",
+    "catHot": "人気",
+    "catNew": "新規",
+    "catFavorites": "お気に入り"
   },
   "earnings": {
     "title": "収益センター",
@@ -1078,6 +1238,102 @@
     "active": "アクティブ",
     "graduated": "卒業済み",
     "noTokensFound": "トークンが見つかりません",
-    "price": "価格"
+    "price": "価格",
+    "bnbReserve": "BNB準備金"
+  },
+  "imageUpload": {
+    "clickToUpload": "クリックしてアップロード",
+    "uploading": "アップロード中...",
+    "uploadFailed": "アップロード失敗",
+    "uploadError": "アップロードエラー、再試行してください"
+  },
+  "hooks": {
+    "connectWalletFirst": "ウォレットを接続してください",
+    "walletNotConnected": "ウォレットが接続されていません",
+    "tokenFactoryNotConfigured": "TokenFactoryコントラクトアドレスが設定されていません。.envでNEXT_PUBLIC_TOKEN_FACTORY_ADDRESSを設定してください",
+    "txSubmittedWaiting": "トランザクション送信済み、確認待ち...",
+    "buyTxSubmitted": "買い注文送信済み",
+    "sellTxSubmitted": "売り注文送信済み",
+    "fetchMetadataFailed": "メタデータの取得に失敗しました",
+    "tradingPairIdRequired": "取引ペアIDは必須です",
+    "walletAuthFailed": "ウォレット認証に失敗しました",
+    "saveMetadataFailed": "メタデータの保存に失敗しました"
+  },
+  "account": {
+    "title": "アカウント概要",
+    "connectWalletHint": "アカウント情報を表示するにはウォレットを接続してください",
+    "connectWallet": "ウォレット接続",
+    "walletBalance": "ウォレット残高",
+    "contractAccount": "コントラクトアカウント",
+    "availableBalance": "利用可能残高",
+    "lockedMargin": "ロック済み証拠金",
+    "currentPositions": "現在のポジション",
+    "pair": "ペア",
+    "direction": "方向",
+    "positionSize": "サイズ",
+    "margin": "証拠金",
+    "leverage": "レバレッジ",
+    "entryPrice": "参入価格",
+    "unrealizedPnl": "未実現損益",
+    "perpetual": "パーペチュアル",
+    "long": "ロング",
+    "short": "ショート",
+    "totalPnl": "合計損益",
+    "noPositions": "ポジションはありません",
+    "accountInfo": "アカウント情報",
+    "walletAddress": "ウォレットアドレス"
+  },
+  "leaderboard": {
+    "title": "トレーディングコンテスト",
+    "seasonBadge": "シーズン3 · 開催中",
+    "description": "トップトレーダーが賞金プールを競います。シーズン終了まで ",
+    "days": "日 ",
+    "tabPnl": "損益ランキング",
+    "tabVolume": "取引量",
+    "tabInvites": "紹介",
+    "tabPast": "過去のシーズン",
+    "reward": "賞金",
+    "rank": "順位",
+    "trader": "トレーダー",
+    "pnl": "損益",
+    "trades": "取引回数",
+    "you": "あなた"
+  },
+  "depositPage": {
+    "deposit": "入金",
+    "withdraw": "出金",
+    "depositTitle": "取引口座へ入金",
+    "withdrawTitle": "取引口座から出金",
+    "depositDesc": "ウォレットから取引口座へ資産を転送",
+    "withdrawDesc": "取引口座からウォレットへ資産を引き出し",
+    "selectAsset": "資産を選択",
+    "depositAmount": "入金額",
+    "withdrawAmount": "出金額",
+    "balance": "残高",
+    "connectWalletFirst": "まずウォレットを接続してください",
+    "processingStep": "ステップ {step} 処理中...",
+    "step1Label": "トークンを承認",
+    "step1Desc": "コントラクトにトークンの使用を許可",
+    "step2Label": "入金を確認",
+    "step2Desc": "取引コントラクトにトークンを送信",
+    "step3Label": "確認待ち",
+    "step3Desc": "ブロックチェーンの確認を待機中",
+    "txHistory": "取引履歴",
+    "viewAll": "すべて表示",
+    "filterAll": "すべて",
+    "confirmed": "完了",
+    "confirming": "確認中",
+    "failed": "失敗",
+    "retry": "再試行",
+    "balanceOverview": "残高概要",
+    "availableBalance": "利用可能残高",
+    "usedMargin": "使用中の証拠金",
+    "unrealizedPnl": "未実現損益",
+    "totalAssets": "総資産",
+    "2minAgo": "2分前",
+    "1hourAgo": "1時間前",
+    "3hoursAgo": "3時間前",
+    "yesterday": "昨日",
+    "2daysAgo": "2日前"
   }
 }

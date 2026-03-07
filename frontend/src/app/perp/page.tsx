@@ -71,16 +71,6 @@ function formatPrice(priceWei: string, ethPrice: number): string {
   return "$" + priceUsd.toFixed(8);
 }
 
-// 分类配置
-const CATEGORIES: { key: MarketCategory; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "hot", label: "热门" },
-  { key: "new", label: "新上线" },
-  { key: "meme", label: "Meme" },
-  { key: "layer2", label: "Layer2" },
-  { key: "favorites", label: "自选" },
-];
-
 function PerpContent() {
   trackRender("PerpContent");
 
@@ -108,6 +98,16 @@ function PerpContent() {
 
   const [activeCategory, setActiveCategory] = useState<MarketCategory>("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 分类配置 (i18n)
+  const CATEGORIES: { key: MarketCategory; label: string }[] = useMemo(() => [
+    { key: "all", label: tPerp("catAll") },
+    { key: "hot", label: tPerp("catHot") },
+    { key: "new", label: tPerp("catNew") },
+    { key: "meme", label: "Meme" },
+    { key: "layer2", label: "Layer2" },
+    { key: "favorites", label: tPerp("catFavorites") },
+  ], [tPerp]);
 
   useEffect(() => {
     setMounted(true);
@@ -171,7 +171,7 @@ function PerpContent() {
   if (!mounted || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-64px)]">
-        <div className="w-8 h-8 border-4 border-perp-yellow border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-meme-lime border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -198,7 +198,7 @@ function PerpContent() {
         <p className="text-okx-text-secondary text-lg">{t("market.noTokens")}</p>
         <button
           onClick={() => router.push("/create")}
-          className="bg-perp-yellow text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
+          className="bg-meme-lime text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
         >
           {t("nav.createToken")}
         </button>
@@ -207,26 +207,26 @@ function PerpContent() {
   }
 
   return (
-    <div className="perp-theme min-h-[calc(100vh-64px)] bg-[#0B0E11]">
+    <div className="perp-theme min-h-[calc(100vh-64px)] bg-okx-bg-primary">
       {/* Hero Section */}
-      <div className="border-b border-[#1E2329] px-12 py-6 space-y-6">
+      <div className="border-b border-okx-border-primary px-12 py-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">USDT 永续合约</h1>
-            <p className="text-sm text-[#848E9C] mt-1">高流动性 Meme 代币合约交易 · 最高 10x 杠杆</p>
+            <h1 className="text-2xl font-bold text-okx-text-primary">{tPerp("marketTitle")}</h1>
+            <p className="text-sm text-okx-text-secondary mt-1">{tPerp("marketSubtitle")}</p>
           </div>
 
           {/* Search */}
           <div className="relative">
             <input
               type="text"
-              placeholder="搜索交易对..."
+              placeholder={tPerp("searchPairs")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-[280px] h-10 bg-[#1E2329] border border-[#2B3139] rounded-lg px-4 text-sm text-white placeholder:text-[#474D57] focus:outline-none focus:border-[#F0B90B]"
+              className="w-[280px] h-10 bg-okx-bg-card border border-okx-border-primary rounded-lg px-4 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-meme-lime"
             />
             <svg
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#474D57]"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-okx-text-tertiary"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -239,13 +239,13 @@ function PerpContent() {
         {/* Stats Cards */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "24h 总交易量", value: formatValue(totalVolume24h), color: "text-white" },
-            { label: "24h 总持仓量", value: formatValue(totalMarketCap), color: "text-white" },
-            { label: "活跃交易对", value: `${activeTokens} 对`, color: "text-white" },
-            { label: "保险基金", value: "2.00 ETH", color: "text-[#0ECB81]" },
+            { label: tPerp("totalVolume24h"), value: formatValue(totalVolume24h), color: "text-okx-text-primary" },
+            { label: tPerp("totalOI"), value: formatValue(totalMarketCap), color: "text-okx-text-primary" },
+            { label: tPerp("activePairs"), value: `${activeTokens} ${tPerp("pairsUnit")}`, color: "text-okx-text-primary" },
+            { label: tPerp("insuranceFund"), value: "2.00 ETH", color: "text-okx-up" },
           ].map((stat, idx) => (
-            <div key={idx} className="bg-[#1E2329] rounded-lg p-4">
-              <div className="text-xs text-[#848E9C] mb-1">{stat.label}</div>
+            <div key={idx} className="bg-okx-bg-card rounded-lg p-4">
+              <div className="text-xs text-okx-text-secondary mb-1">{stat.label}</div>
               <div className={`text-lg font-bold font-mono ${stat.color}`}>{stat.value}</div>
             </div>
           ))}
@@ -262,8 +262,8 @@ function PerpContent() {
               onClick={() => setActiveCategory(cat.key)}
               className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${
                 activeCategory === cat.key
-                  ? "bg-[#F0B90B] text-[#0B0E11] font-bold"
-                  : "text-[#848E9C] hover:text-white hover:bg-[#1E2329]"
+                  ? "bg-meme-lime text-black font-bold"
+                  : "text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-card"
               }`}
             >
               {cat.label}
@@ -272,23 +272,23 @@ function PerpContent() {
         </div>
 
         {/* Table Header */}
-        <div className="flex items-center bg-[#1E2329] rounded-t-md px-4 py-3 text-xs font-semibold text-[#848E9C]">
-          <div className="w-[200px]">交易对</div>
-          <div className="w-[130px] text-right">最新价格</div>
-          <div className="w-[100px] text-right">24h 涨跌</div>
-          <div className="w-[140px] text-right">24h 成交量</div>
-          <div className="w-[140px] text-right">持仓量</div>
-          <div className="w-[100px] text-right">资金费率</div>
-          <div className="w-[120px] text-center">7日趋势</div>
-          <div className="flex-1 text-right">操作</div>
+        <div className="flex items-center bg-okx-bg-card rounded-t-md px-4 py-3 text-xs font-semibold text-okx-text-secondary">
+          <div className="w-[200px]">{tPerp("pair")}</div>
+          <div className="w-[130px] text-right">{tPerp("latestPrice")}</div>
+          <div className="w-[100px] text-right">{tPerp("change24h")}</div>
+          <div className="w-[140px] text-right">{tPerp("volume24h")}</div>
+          <div className="w-[140px] text-right">{tPerp("openInterest")}</div>
+          <div className="w-[100px] text-right">{tPerp("fundingRate")}</div>
+          <div className="w-[120px] text-center">{tPerp("trend7d")}</div>
+          <div className="flex-1 text-right">{tPerp("action")}</div>
         </div>
 
         {/* Table Rows */}
         <div>
           {filteredTokens.map((token) => {
             const isOnChain = token.isActive !== false;
-            const priceStr = formatPrice(token.currentPrice || "0", ETH_PRICE_USD);
-            const changeClass = token.priceChange24h >= 0 ? "text-[#0ECB81]" : "text-[#F6465D]";
+            const priceStr = formatPrice(token.price || "0", ETH_PRICE_USD);
+            const changeClass = token.priceChange24h >= 0 ? "text-okx-up" : "text-okx-down";
             const changeSign = token.priceChange24h >= 0 ? "+" : "";
             const isNew = Date.now() / 1000 - token.createdAt < 86400 * 3; // 3 days
 
@@ -296,14 +296,14 @@ function PerpContent() {
               <div
                 key={token.address}
                 onClick={() => isOnChain && router.push(`/perp?symbol=${token.address}`)}
-                className={`flex items-center px-4 py-3.5 border-b border-[#1E2329] transition-colors ${
-                  isOnChain ? "hover:bg-[#1E2329]/50 cursor-pointer" : "opacity-50 cursor-not-allowed"
+                className={`flex items-center px-4 py-3.5 border-b border-okx-border-primary transition-colors ${
+                  isOnChain ? "hover:bg-okx-bg-hover/50 cursor-pointer" : "opacity-50 cursor-not-allowed"
                 }`}
               >
                 {/* Pair Name */}
                 <div className="w-[200px] flex items-center gap-3">
-                  <span className="text-[#474D57] cursor-pointer hover:text-[#F0B90B] text-sm">☆</span>
-                  <div className="w-7 h-7 rounded-full overflow-hidden bg-[#2B3139] flex-shrink-0">
+                  <span className="text-okx-text-tertiary cursor-pointer hover:text-meme-lime text-sm">☆</span>
+                  <div className="w-7 h-7 rounded-full overflow-hidden bg-okx-bg-hover flex-shrink-0">
                     <img
                       src={parseMetadataURI(token.metadataURI) || `https://api.dicebear.com/7.x/identicon/svg?seed=${token.address}`}
                       alt={token.symbol}
@@ -315,26 +315,26 @@ function PerpContent() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-white">{token.symbol}/USDT</span>
+                      <span className="text-sm font-semibold text-okx-text-primary">{token.symbol}/USDT</span>
                       {isNew && (
-                        <span className="text-[10px] bg-[#F0B90B]/20 text-[#F0B90B] px-1.5 py-0.5 rounded font-bold">
+                        <span className="text-[10px] bg-meme-lime/20 text-meme-lime px-1.5 py-0.5 rounded font-bold">
                           NEW
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-[#474D57]">永续</div>
+                    <div className="text-[11px] text-okx-text-tertiary">{tPerp("perpetualLabel")}</div>
                   </div>
                 </div>
 
                 {/* Price */}
                 <div className="w-[130px] text-right">
-                  <span className="text-sm font-mono font-medium text-white">{priceStr}</span>
+                  <span className="text-sm font-mono font-medium text-okx-text-primary">{priceStr}</span>
                 </div>
 
                 {/* 24h Change */}
                 <div className="w-[100px] text-right">
                   <span className={`text-sm font-mono font-medium px-2 py-1 rounded ${changeClass} ${
-                    token.priceChange24h >= 0 ? "bg-[#0ECB81]/10" : "bg-[#F6465D]/10"
+                    token.priceChange24h >= 0 ? "bg-okx-up/10" : "bg-okx-down/10"
                   }`}>
                     {changeSign}{token.priceChange24h.toFixed(2)}%
                   </span>
@@ -342,21 +342,21 @@ function PerpContent() {
 
                 {/* 24h Volume */}
                 <div className="w-[140px] text-right">
-                  <span className="text-sm font-mono text-[#EAECEF]">
+                  <span className="text-sm font-mono text-okx-text-primary">
                     {formatValue(token.volume24h)}
                   </span>
                 </div>
 
                 {/* Open Interest */}
                 <div className="w-[140px] text-right">
-                  <span className="text-sm font-mono text-[#EAECEF]">
+                  <span className="text-sm font-mono text-okx-text-primary">
                     {formatValue(token.marketCapUsd)}
                   </span>
                 </div>
 
                 {/* Funding Rate */}
                 <div className="w-[100px] text-right">
-                  <span className="text-sm font-mono text-[#0ECB81]">+0.01%</span>
+                  <span className="text-sm font-mono text-okx-up">+0.01%</span>
                 </div>
 
                 {/* 7d Trend (simple placeholder) */}
@@ -366,7 +366,7 @@ function PerpContent() {
                       d={token.priceChange24h >= 0
                         ? "M0 20 L10 16 L20 18 L30 12 L40 14 L50 8 L60 10 L70 4 L80 6"
                         : "M0 4 L10 8 L20 6 L30 12 L40 10 L50 16 L60 14 L70 20 L80 18"}
-                      stroke={token.priceChange24h >= 0 ? "#0ECB81" : "#F6465D"}
+                      stroke={token.priceChange24h >= 0 ? "var(--okx-up)" : "var(--okx-down)"}
                       strokeWidth="1.5"
                       fill="none"
                     />
@@ -376,13 +376,13 @@ function PerpContent() {
                 {/* Trade Button */}
                 <div className="flex-1 text-right">
                   <button
-                    className="px-4 py-1.5 bg-[#F0B90B] text-[#0B0E11] text-xs font-bold rounded hover:opacity-90 transition-opacity"
+                    className="px-4 py-1.5 bg-meme-lime text-black text-xs font-bold rounded hover:opacity-90 transition-opacity"
                     onClick={(e) => {
                       e.stopPropagation();
                       router.push(`/perp?symbol=${token.address}`);
                     }}
                   >
-                    交易
+                    {tPerp("trade")}
                   </button>
                 </div>
               </div>
@@ -391,8 +391,8 @@ function PerpContent() {
         </div>
 
         {filteredTokens.length === 0 && (
-          <div className="py-12 text-center text-[#474D57] text-sm">
-            {searchQuery ? "未找到匹配的交易对" : t("market.noTokens")}
+          <div className="py-12 text-center text-okx-text-tertiary text-sm">
+            {searchQuery ? tPerp("noMatchingPairs") : t("market.noTokens")}
           </div>
         )}
       </div>
@@ -407,12 +407,12 @@ function PerpContent() {
  */
 export default function PerpetualTradingPage() {
   return (
-    <main className="min-h-screen bg-[#0B0E11] text-white">
+    <main className="min-h-screen bg-okx-bg-primary text-okx-text-primary">
       <Navbar />
       <Suspense
         fallback={
           <div className="flex items-center justify-center min-h-[calc(100vh-64px)]">
-            <div className="w-8 h-8 border-4 border-[#F0B90B] border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-8 h-8 border-4 border-meme-lime border-t-transparent rounded-full animate-spin"></div>
           </div>
         }
       >

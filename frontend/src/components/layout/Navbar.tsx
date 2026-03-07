@@ -64,13 +64,13 @@ export function Navbar() {
               {t('createToken')}
             </Link>
             <Link href="/leaderboard" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
-              {t('leaderboard') || '排行榜'}
+              {t('leaderboard')}
             </Link>
             <Link href="/deposit" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
-              {t('deposit') || '充值'}
+              {t('deposit')}
             </Link>
             <Link href="/invite" prefetch={false} className="hover:text-okx-text-primary cursor-pointer hidden lg:inline transition-colors">
-              {t('invite') || '邀请'}
+              {t('invite')}
             </Link>
           </div>
         </div>

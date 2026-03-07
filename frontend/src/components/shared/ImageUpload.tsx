@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { uploadToIPFS, getIPFSUrl } from "@/lib/ipfs";
 
 interface ImageUploadProps {
@@ -21,11 +22,12 @@ const sizeMap = {
 export function ImageUpload({
   value,
   onChange,
-  label = "上传图片",
+  label,
   hint,
   size = "md",
   disabled = false,
 }: ImageUploadProps) {
+  const t = useTranslations("imageUpload");
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(value ? getIPFSUrl(value) : null);
@@ -55,11 +57,11 @@ export function ImageUpload({
         setPreview(result.ipfsUrl);
         onChange(result.ipfsUrl, result.ipfsHash);
       } else {
-        setError(result.error || "上传失败");
+        setError(result.error || t("uploadFailed"));
         setPreview(null);
       }
     } catch (err) {
-      setError("上传出错，请重试");
+      setError(t("uploadError"));
       setPreview(null);
     } finally {
       setIsUploading(false);
@@ -110,7 +112,7 @@ export function ImageUpload({
         {isUploading ? (
           <div className="flex flex-col items-center justify-center">
             <div className="w-6 h-6 border-2 border-okx-accent border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-okx-text-tertiary mt-1">上传中...</span>
+            <span className="text-xs text-okx-text-tertiary mt-1">{t("uploading")}</span>
           </div>
         ) : preview ? (
           <>
@@ -135,7 +137,7 @@ export function ImageUpload({
             <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <span className="text-xs">点击上传</span>
+            <span className="text-xs">{t("clickToUpload")}</span>
           </div>
         )}
       </div>

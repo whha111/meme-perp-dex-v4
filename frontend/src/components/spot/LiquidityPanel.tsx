@@ -115,8 +115,8 @@ export function LiquidityPanel({
           {poolState.isGraduated
             ? t("swap.tokenGraduated")
             : poolState.isActive
-              ? "Active"
-              : "Paused"}
+              ? t("trading.active")
+              : t("trading.paused")}
         </span>
         {poolState.creator && (
           <span className="text-okx-text-tertiary text-[10px]">
@@ -155,15 +155,15 @@ export function LiquidityPanel({
         <StatCard
           label={t("trading.tokenReserve")}
           value={fmtNum(realToken)}
-          subValue={`/ ${fmtNum(totalSupply)} total`}
+          subValue={`/ ${fmtNum(totalSupply)} ${t("trading.total")}`}
         />
         <StatCard
-          label="Virtual BNB"
+          label={t("trading.virtualBnb")}
           value={`${vETH.toFixed(4)} BNB`}
           subValue={fmtUsd(vETH * bnbPriceUsd)}
         />
         <StatCard
-          label="Virtual Token"
+          label={t("trading.virtualToken")}
           value={fmtNum(vToken)}
         />
       </div>

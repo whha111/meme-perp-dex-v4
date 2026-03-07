@@ -198,8 +198,8 @@ export default function WalletPage() {
               {/* Derived Wallet Balance Card */}
               <div className="bg-okx-bg-secondary rounded-2xl border border-okx-border-primary p-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                    <EthIcon className="w-5 h-5 text-blue-400" />
+                  <div className="w-10 h-10 rounded-full bg-okx-accent/20 flex items-center justify-center">
+                    <EthIcon className="w-5 h-5 text-okx-accent" />
                   </div>
                   <div>
                     <div className="text-okx-text-tertiary text-sm">{t("walletBalance")}</div>
@@ -232,11 +232,11 @@ export default function WalletPage() {
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-okx-text-tertiary">Settlement:</span>
-                  <span className="text-blue-400">BNB  {formatBalance(settlementAvailable)}</span>
+                  <span className="text-okx-accent">BNB  {formatBalance(settlementAvailable)}</span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-okx-text-tertiary">{t("locked")}:</span>
-                  <span className="text-yellow-500">BNB  {formatBalance(settlementLocked)}</span>
+                  <span className="text-meme-lime">BNB  {formatBalance(settlementLocked)}</span>
                 </div>
               </div>
             </div>

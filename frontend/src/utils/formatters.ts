@@ -2,37 +2,54 @@
  * 通用格式化工具函数
  */
 
+// Static time-ago translations for all locales
+const timeAgoI18n: Record<string, { justNow: string; s: string; m: string; h: string; d: string }> = {
+  zh: { justNow: "刚刚", s: "秒前", m: "分钟前", h: "小时前", d: "天前" },
+  en: { justNow: "just now", s: "s ago", m: "m ago", h: "h ago", d: "d ago" },
+  ja: { justNow: "たった今", s: "秒前", m: "分前", h: "時間前", d: "日前" },
+  ko: { justNow: "방금", s: "초 전", m: "분 전", h: "시간 전", d: "일 전" },
+};
+
+function getLocale(): string {
+  if (typeof window === 'undefined') return 'zh';
+  try {
+    return localStorage.getItem('meme-perp-locale') || 'zh';
+  } catch {
+    return 'zh';
+  }
+}
+
 /**
  * 格式化时间为"多久之前"的形式
  * @param timestamp Unix 时间戳（秒或毫秒）或 bigint
- * @returns 格式化的时间字符串，如 "3分钟前"、"2小时前"
+ * @returns 格式化的时间字符串，如 "3m ago"、"2h ago"
  */
 export function formatTimeAgo(timestamp: bigint | number | undefined | null): string {
+  const t = timeAgoI18n[getLocale()] || timeAgoI18n.zh;
+
   if (timestamp === undefined || timestamp === null || timestamp === 0) {
-    return "刚刚";
+    return t.justNow;
   }
 
   // 自动检测: 如果时间戳大于 1e11，认为是毫秒；否则是秒
-  // 1e11 = 3001年1月1日 (如果是秒) 或 1973年 (如果是毫秒)
   let timestampMs = Number(timestamp);
   if (timestampMs < 1e11) {
-    timestampMs = timestampMs * 1000; // 秒转毫秒
+    timestampMs = timestampMs * 1000;
   }
 
   const seconds = Math.floor((Date.now() - timestampMs) / 1000);
 
-  // 防止负数（未来时间或时钟偏差）
-  if (seconds < 0) return "刚刚";
-  if (seconds < 60) return `${seconds}秒前`;
+  if (seconds < 0) return t.justNow;
+  if (seconds < 60) return `${seconds}${t.s}`;
 
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}分钟前`;
+  if (minutes < 60) return `${minutes}${t.m}`;
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}小时前`;
+  if (hours < 24) return `${hours}${t.h}`;
 
   const days = Math.floor(hours / 24);
-  return `${days}天前`;
+  return `${days}${t.d}`;
 }
 
 /**

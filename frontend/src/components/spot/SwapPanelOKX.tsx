@@ -495,7 +495,6 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         {address && validation.results.length > 0 && (
           <PreValidationWarning
             validation={validation}
-            locale="zh"
             className="mb-3"
             maxItems={2}
           />
@@ -721,7 +720,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
       {/* 内盘进度条 - Bonding Curve Progress */}
       <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-[10px] text-okx-text-tertiary">{t("bondingCurveProgress") || "bonding curve progress"}</span>
+          <span className="text-[10px] text-okx-text-tertiary">{t("bondingCurveProgress")}</span>
           <span className="text-[10px] text-okx-text-primary font-bold">{graduationProgress.toFixed(2)}%</span>
         </div>
         <div className="w-full h-2 bg-okx-bg-secondary rounded-full overflow-hidden relative">
@@ -734,12 +733,12 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
           </div>
         </div>
         <div className="flex justify-between text-[9px] mt-2 text-okx-text-tertiary">
-          <span>{t("sold") || "已售"}: {soldTokensM.toFixed(2)}M</span>
-          <span>{t("target") || "目标"}: 793M ({t("graduation") || "毕业"})</span>
+          <span>{t("sold")}: {soldTokensM.toFixed(2)}M</span>
+          <span>{t("target")}: 793M ({t("graduation")})</span>
         </div>
         {(graduationProgress >= 100 || isGraduated) && (
           <div className="mt-2 text-center text-[10px] text-[#FFB800] font-bold">
-            🎓 {t("graduatedMessage") || "已毕业！代币已上线 Uniswap"}
+            🎓 {t("graduatedMessage")}
           </div>
         )}
       </div>

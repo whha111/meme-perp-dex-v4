@@ -22,7 +22,9 @@
     "addressUnknown": "合约地址未知",
     "contractCopied": "合约地址已复制",
     "done": "完成",
-    "currentSetting": "当前设置"
+    "currentSetting": "当前设置",
+    "offline": "离线",
+    "wsConnectionFailed": "WebSocket 连接失败"
   },
   "nav": {
     "market": "行情",
@@ -34,7 +36,58 @@
     "inviteProgram": "邀请计划",
     "wallet": "钱包",
     "searchPlaceholder": "币种 / 地址 / DApp",
-    "lending": "借贷"
+    "lending": "借贷",
+    "leaderboard": "排行榜",
+    "deposit": "充值",
+    "invite": "邀请"
+  },
+  "home": {
+    "badge": "✦ BSC Testnet 已上线",
+    "heroTitle": "发现下一个",
+    "heroSubtitle": "一站式 Meme 代币创建、交易和永续合约平台。公平发射、链上透明、最高 10x 杠杆。",
+    "createToken": "创建代币 →",
+    "startTrading": "开始交易",
+    "stats": {
+      "volume24h": "24h 交易量",
+      "marketCap": "总市值",
+      "activeTokens": "活跃代币",
+      "totalTraders": "累计交易者"
+    },
+    "whyTitle": "为什么选择 MEMEPERP?",
+    "whySubtitle": "去中心化、透明、无需许可的 Meme 代币交易基础设施",
+    "features": {
+      "fairLaunch": {
+        "title": "公平发射",
+        "desc": "Bonding Curve 定价，无预售、无内部分配。每个人都有相同的起点。"
+      },
+      "perpetual": {
+        "title": "永续合约",
+        "desc": "链下撮合 + 链上结算，支持最高 10x 杠杆做多做空 Meme 代币。"
+      },
+      "security": {
+        "title": "链上安全",
+        "desc": "资金托管在 SettlementV2 合约，Merkle proof 提款，全程可验证。"
+      },
+      "referral": {
+        "title": "推荐返佣",
+        "desc": "邀请好友交易，获得最高 25% 的手续费返佣。多级推荐体系。"
+      },
+      "matching": {
+        "title": "毫秒级撮合",
+        "desc": "TypeScript 撮合引擎，亚毫秒级延迟。支持限价单、市价单。"
+      },
+      "competition": {
+        "title": "交易竞赛",
+        "desc": "定期举办交易竞赛，TOP 10 瓜分丰厚奖池。证明你的交易实力。"
+      }
+    },
+    "ctaTitle": "准备好了吗？",
+    "ctaSubtitle": "连接钱包，开始你的 Meme 交易之旅",
+    "ctaButton": "进入市场 →",
+    "footer": {
+      "settings": "设置",
+      "invite": "邀请"
+    }
   },
   "wallet": {
     "connect": "连接钱包",
@@ -253,7 +306,12 @@
     "avgCostBasis": "平均成本",
     "profitableAddresses": "盈利地址",
     "realizedPnl": "已实现盈亏",
-    "unrealizedPnl": "未实现盈亏"
+    "unrealizedPnl": "未实现盈亏",
+    "active": "活跃",
+    "paused": "暂停",
+    "virtualBnb": "虚拟 BNB",
+    "virtualToken": "虚拟代币",
+    "total": "总量"
   },
   "chart": {
     "1min": "1分",
@@ -317,7 +375,11 @@
     "graduationTarget": "毕业目标",
     "graduatedMigrated": "代币已毕业，流动性已迁移至 PancakeSwap",
     "remainToGraduate": "还差 {percent}% 即可毕业！",
-    "approxTokens": "≈ {amount}M 代币"
+    "approxTokens": "≈ {amount}M 代币",
+    "bondingCurveProgress": "Bonding Curve 进度",
+    "target": "目标",
+    "graduation": "毕业",
+    "graduatedMessage": "已毕业！代币已上线 PancakeSwap"
   },
   "holders": {
     "topHolders": "持币排行",
@@ -365,7 +427,11 @@
     "quantity": "数量",
     "pool": "资金池",
     "details": "详情",
-    "devSold": "DEV SOLD"
+    "devSold": "DEV SOLD",
+    "waitingForTrades": "等待新交易...",
+    "pair": "交易对",
+    "direction": "方向",
+    "txHash": "交易哈希"
   },
   "graduation": {
     "progress": "毕业进度",
@@ -407,7 +473,46 @@
     "deadlineHelp": "交易在多少秒后失效。设置过短可能导致交易失败，设置过长可能导致价格变化过大。",
     "historyHelp": "记录您最近访问的域名，方便快速返回。",
     "slippageRange": "滑点容忍度必须在 0-50% 之间",
-    "deadlineRange": "交易截止时间必须在 60-3600 秒之间"
+    "deadlineRange": "交易截止时间必须在 60-3600 秒之间",
+    "navSecurity": "安全设置",
+    "navProfile": "个人资料",
+    "navApi": "API 管理",
+    "navNotifications": "通知设置",
+    "navFees": "费率等级",
+    "navAppearance": "语言外观",
+    "securitySubtitle": "通过多层安全设置保护您的账户",
+    "walletConnection": "钱包连接",
+    "connected": "已连接",
+    "notConnected": "未连接",
+    "disconnect": "断开连接",
+    "securityVerification": "安全验证",
+    "securityVerificationDesc": "为关键操作启用多重验证",
+    "tradingPassword": "交易密码",
+    "tradingPasswordDesc": "下单交易需单独输入的密码",
+    "notSet": "未设置",
+    "setup": "设置",
+    "signatureVerification": "签名验证",
+    "signatureVerificationDesc": "大额提款时需要钱包签名确认",
+    "enabled": "已启用",
+    "configure": "配置",
+    "withdrawWhitelist": "提款白名单",
+    "withdrawWhitelistDesc": "仅允许提款到预先批准的地址",
+    "disabled": "未启用",
+    "apiKeyManagement": "API 密钥管理",
+    "apiKeyManagementDesc": "管理用于程序化交易的 API 密钥",
+    "createApiKey": "创建 API 密钥",
+    "permRead": "读取",
+    "permTrade": "交易",
+    "permReadOnly": "只读",
+    "delete": "删除",
+    "loginActivity": "登录活动",
+    "loginActivityDesc": "近期登录会话和设备历史",
+    "logoutOthers": "登出其他设备",
+    "current": "当前",
+    "2daysAgo": "2 天前",
+    "currentOnline": "当前 · 在线",
+    "logout": "登出",
+    "featureInDev": "此功能正在开发中，敬请期待..."
   },
   "errors": {
     "unknown": "出现错误",
@@ -984,7 +1089,26 @@
     "marketClose": "市价平仓",
     "enterLimitPrice": "请输入限价",
     "tpPrice": "止盈价格",
-    "slPrice": "止损价格"
+    "slPrice": "止损价格",
+    "marketTitle": "USDT 永续合约",
+    "marketSubtitle": "高流动性 Meme 代币合约交易 · 最高 10x 杠杆",
+    "searchPairs": "搜索交易对...",
+    "totalVolume24h": "24h 总交易量",
+    "totalOI": "24h 总持仓量",
+    "activePairs": "活跃交易对",
+    "pairsUnit": "对",
+    "pair": "交易对",
+    "latestPrice": "最新价格",
+    "change24h": "24h 涨跌",
+    "trend7d": "7日趋势",
+    "action": "操作",
+    "perpetualLabel": "永续",
+    "trade": "交易",
+    "noMatchingPairs": "未找到匹配的交易对",
+    "catAll": "全部",
+    "catHot": "热门",
+    "catNew": "新上线",
+    "catFavorites": "自选"
   },
   "walletManagement": {
     "title": "钱包管理",
@@ -1187,6 +1311,102 @@
     "active": "活跃",
     "graduated": "已毕业",
     "noTokensFound": "未找到代币",
-    "price": "价格"
+    "price": "价格",
+    "bnbReserve": "BNB 储备"
+  },
+  "imageUpload": {
+    "clickToUpload": "点击上传",
+    "uploading": "上传中...",
+    "uploadFailed": "上传失败",
+    "uploadError": "上传出错，请重试"
+  },
+  "hooks": {
+    "connectWalletFirst": "请先连接钱包",
+    "walletNotConnected": "钱包未连接",
+    "tokenFactoryNotConfigured": "TokenFactory 合约地址未配置，请在 .env 中设置 NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS",
+    "txSubmittedWaiting": "交易已提交，等待确认...",
+    "buyTxSubmitted": "买入交易已提交",
+    "sellTxSubmitted": "卖出交易已提交",
+    "fetchMetadataFailed": "获取元数据失败",
+    "tradingPairIdRequired": "交易对ID不能为空",
+    "walletAuthFailed": "钱包认证失败",
+    "saveMetadataFailed": "保存元数据失败"
+  },
+  "account": {
+    "title": "账户概览",
+    "connectWalletHint": "请连接钱包查看账户信息",
+    "connectWallet": "连接钱包",
+    "walletBalance": "钱包余额",
+    "contractAccount": "合约账户",
+    "availableBalance": "可用余额",
+    "lockedMargin": "已锁定保证金",
+    "currentPositions": "当前持仓",
+    "pair": "交易对",
+    "direction": "方向",
+    "positionSize": "仓位大小",
+    "margin": "保证金",
+    "leverage": "杠杆",
+    "entryPrice": "开仓价",
+    "unrealizedPnl": "未实现盈亏",
+    "perpetual": "永续",
+    "long": "多",
+    "short": "空",
+    "totalPnl": "总盈亏",
+    "noPositions": "暂无持仓",
+    "accountInfo": "账户信息",
+    "walletAddress": "钱包地址"
+  },
+  "leaderboard": {
+    "title": "交易竞赛排行榜",
+    "seasonBadge": "第 3 期 · 进行中",
+    "description": "顶尖交易者竞争奖池，赛季倒计时 ",
+    "days": "天 ",
+    "tabPnl": "盈亏排名",
+    "tabVolume": "交易量",
+    "tabInvites": "邀请排名",
+    "tabPast": "往期赛季",
+    "reward": "奖励",
+    "rank": "排名",
+    "trader": "交易者",
+    "pnl": "盈亏",
+    "trades": "交易次数",
+    "you": "你"
+  },
+  "depositPage": {
+    "deposit": "充值",
+    "withdraw": "提款",
+    "depositTitle": "充值到交易账户",
+    "withdrawTitle": "从交易账户提款",
+    "depositDesc": "将资产从钱包转入您的交易账户",
+    "withdrawDesc": "将资产从交易账户提取到您的钱包",
+    "selectAsset": "选择资产",
+    "depositAmount": "充值金额",
+    "withdrawAmount": "提款金额",
+    "balance": "余额",
+    "connectWalletFirst": "请先连接钱包",
+    "processingStep": "正在处理步骤 {step}...",
+    "step1Label": "授权代币",
+    "step1Desc": "授权合约使用您的代币",
+    "step2Label": "确认充值",
+    "step2Desc": "将代币发送到交易合约",
+    "step3Label": "等待确认",
+    "step3Desc": "等待区块链确认交易",
+    "txHistory": "交易记录",
+    "viewAll": "查看全部",
+    "filterAll": "全部",
+    "confirmed": "已完成",
+    "confirming": "确认中",
+    "failed": "失败",
+    "retry": "重试",
+    "balanceOverview": "余额概览",
+    "availableBalance": "可用余额",
+    "usedMargin": "已用保证金",
+    "unrealizedPnl": "未实现盈亏",
+    "totalAssets": "总资产",
+    "2minAgo": "2 分钟前",
+    "1hourAgo": "1 小时前",
+    "3hoursAgo": "3 小时前",
+    "yesterday": "昨天",
+    "2daysAgo": "2 天前"
   }
 }

@@ -647,7 +647,7 @@ export default function EarningsPage() {
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                         c.level === 1
                                           ? "bg-okx-up/20 text-okx-up"
-                                          : "bg-blue-500/20 text-blue-400"
+                                          : "bg-okx-accent/20 text-okx-accent"
                                       }`}>
                                         L{c.level}
                                       </span>

@@ -1,20 +1,22 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { useTradeHistory, type SpotTradeRecord } from "@/hooks/common/useTradeHistory";
 
 interface TradeHistoryTableProps {
-  token?: string;              // 代币地址
+  token?: string;
   maxRows?: number;
   className?: string;
 }
 
 export function TradeHistoryTable({ token, maxRows = 10, className = "" }: TradeHistoryTableProps) {
   const { trades, isConnected, error } = useTradeHistory({ token, limit: maxRows });
+  const t = useTranslations();
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
-    return date.toLocaleString("zh-CN", {
+    return date.toLocaleString(undefined, {
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
@@ -37,8 +39,7 @@ export function TradeHistoryTable({ token, maxRows = 10, className = "" }: Trade
   return (
     <div className={`bg-okx-bg-card border border-okx-border-primary rounded-xl p-4 ${className}`}>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold">交易历史</h3>
-        {/* WebSocket 连接状态指示器 */}
+        <h3 className="font-bold">{t('history.tradeHistory')}</h3>
         <div className="flex items-center gap-2 text-xs">
           <span
             className={`w-2 h-2 rounded-full ${
@@ -46,27 +47,27 @@ export function TradeHistoryTable({ token, maxRows = 10, className = "" }: Trade
             }`}
           />
           <span className="text-okx-text-tertiary">
-            {isConnected ? "实时" : "离线"}
+            {isConnected ? t('trading.realtime') : t('common.offline')}
           </span>
         </div>
       </div>
 
       {trades.length === 0 ? (
         <div className="text-center py-8 text-okx-text-tertiary">
-          {isConnected ? "等待新交易..." : "连接中..."}
+          {isConnected ? t('history.waitingForTrades') : t('trading.connecting')}
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-okx-text-tertiary border-b border-okx-border-primary">
-                <th className="text-left py-2">时间</th>
-                <th className="text-left py-2">交易对</th>
-                <th className="text-left py-2">方向</th>
-                <th className="text-right py-2">数量</th>
-                <th className="text-right py-2">价格</th>
-                <th className="text-right py-2">总额</th>
-                <th className="text-right py-2">交易哈希</th>
+                <th className="text-left py-2">{t('history.time')}</th>
+                <th className="text-left py-2">{t('history.pair')}</th>
+                <th className="text-left py-2">{t('history.direction')}</th>
+                <th className="text-right py-2">{t('history.quantity')}</th>
+                <th className="text-right py-2">{t('history.price')}</th>
+                <th className="text-right py-2">{t('history.total')}</th>
+                <th className="text-right py-2">{t('history.txHash')}</th>
               </tr>
             </thead>
             <tbody>
@@ -75,7 +76,7 @@ export function TradeHistoryTable({ token, maxRows = 10, className = "" }: Trade
                   <td className="py-3 text-okx-text-secondary">{formatTime(trade.timestamp)}</td>
                   <td className="py-3 font-mono text-xs">{trade.token.slice(0, 8)}...</td>
                   <td className={`py-3 font-medium ${trade.side === "buy" ? "text-okx-up" : "text-okx-down"}`}>
-                    {trade.side === "buy" ? "买入" : "卖出"}
+                    {trade.side === "buy" ? t('token.buy') : t('token.sell')}
                   </td>
                   <td className="py-3 text-right">{formatNumber(trade.size, 2)}</td>
                   <td className="py-3 text-right">{formatNumber(trade.price, 6)}</td>
@@ -103,7 +104,7 @@ export function TradeHistoryTable({ token, maxRows = 10, className = "" }: Trade
 
       {error && (
         <p className="text-xs text-okx-down mt-2 text-center">
-          WebSocket 连接失败: {error}
+          {t('common.wsConnectionFailed')}: {error}
         </p>
       )}
     </div>

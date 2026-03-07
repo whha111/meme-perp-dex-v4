@@ -7,11 +7,13 @@ import { Navbar } from "@/components/layout/Navbar";
 import { usePerpetualV2 } from "@/hooks/perpetual/usePerpetualV2";
 import { TradeHistoryTable } from "@/components/common/TradeHistoryTable";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { useTranslations } from "next-intl";
 
 export default function AccountPage() {
   const { address, isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
   const [mounted, setMounted] = useState(false);
+  const t = useTranslations("account");
 
   const { data: walletBalance } = useBalance({ address });
   const {
@@ -66,56 +68,56 @@ export default function AccountPage() {
       <Navbar />
 
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-6">账户概览</h1>
+        <h1 className="text-2xl font-bold mb-6">{t("title")}</h1>
 
         {!isConnected ? (
           <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-8 text-center">
             <p className="text-6xl mb-4">🔒</p>
-            <p className="text-okx-text-secondary mb-4">请连接钱包查看账户信息</p>
+            <p className="text-okx-text-secondary mb-4">{t("connectWalletHint")}</p>
             <button
               onClick={openConnectModal}
               className="bg-okx-up text-black px-6 py-3 rounded-lg font-bold hover:opacity-90"
             >
-              连接钱包
+              {t("connectWallet")}
             </button>
           </div>
         ) : (
           <div className="space-y-6">
-            {/* 资产概览卡片 */}
+            {/* Balance overview cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
-                <p className="text-okx-text-tertiary text-sm mb-1">钱包余额</p>
+                <p className="text-okx-text-tertiary text-sm mb-1">{t("walletBalance")}</p>
                 <p className="text-xl font-bold">{formatEthBalance(walletBalance?.value)} BNB</p>
               </div>
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
-                <p className="text-okx-text-tertiary text-sm mb-1">合约账户</p>
+                <p className="text-okx-text-tertiary text-sm mb-1">{t("contractAccount")}</p>
                 <p className="text-xl font-bold">BNB {formatBalance(vaultBalance)}</p>
               </div>
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
-                <p className="text-okx-text-tertiary text-sm mb-1">可用余额</p>
+                <p className="text-okx-text-tertiary text-sm mb-1">{t("availableBalance")}</p>
                 <p className="text-xl font-bold text-okx-up">BNB {formatBalance(availableBalance)}</p>
               </div>
               <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
-                <p className="text-okx-text-tertiary text-sm mb-1">已锁定保证金</p>
+                <p className="text-okx-text-tertiary text-sm mb-1">{t("lockedMargin")}</p>
                 <p className="text-xl font-bold">BNB {formatBalance(lockedMargin)}</p>
               </div>
             </div>
 
-            {/* 当前持仓 */}
+            {/* Current positions */}
             <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
-              <h2 className="font-bold mb-4">当前持仓 ({positions.length})</h2>
+              <h2 className="font-bold mb-4">{t("currentPositions")} ({positions.length})</h2>
               {hasPosition && positions.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-okx-text-tertiary border-b border-okx-border-primary">
-                        <th className="text-left py-2">交易对</th>
-                        <th className="text-left py-2">方向</th>
-                        <th className="text-right py-2">仓位大小</th>
-                        <th className="text-right py-2">保证金</th>
-                        <th className="text-right py-2">杠杆</th>
-                        <th className="text-right py-2">开仓价</th>
-                        <th className="text-right py-2">未实现盈亏</th>
+                        <th className="text-left py-2">{t("pair")}</th>
+                        <th className="text-left py-2">{t("direction")}</th>
+                        <th className="text-right py-2">{t("positionSize")}</th>
+                        <th className="text-right py-2">{t("margin")}</th>
+                        <th className="text-right py-2">{t("leverage")}</th>
+                        <th className="text-right py-2">{t("entryPrice")}</th>
+                        <th className="text-right py-2">{t("unrealizedPnl")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -123,9 +125,9 @@ export default function AccountPage() {
                         const positionPnL = BigInt(pos.unrealizedPnL || "0");
                         return (
                           <tr key={pos.pairId}>
-                            <td className="py-3">{pos.token.slice(0, 8)}... 永续</td>
+                            <td className="py-3">{pos.token.slice(0, 8)}... {t("perpetual")}</td>
                             <td className={`py-3 ${pos.isLong ? "text-okx-up" : "text-okx-down"}`}>
-                              {pos.isLong ? "多" : "空"}
+                              {pos.isLong ? t("long") : t("short")}
                             </td>
                             <td className="text-right py-3">{formatBalance(pos.size)}</td>
                             <td className="text-right py-3">BNB {formatBalance(pos.collateral)}</td>
@@ -139,7 +141,7 @@ export default function AccountPage() {
                       })}
                       {/* Total row */}
                       <tr className="border-t border-okx-border-primary font-bold">
-                        <td colSpan={6} className="text-right py-3">总盈亏:</td>
+                        <td colSpan={6} className="text-right py-3">{t("totalPnl")}:</td>
                         <td className={`text-right py-3 ${totalPnL >= 0n ? "text-okx-up" : "text-okx-down"}`}>
                           {totalPnL >= 0n ? "+" : ""}BNB {formatBalance(totalPnL)}
                         </td>
@@ -149,19 +151,19 @@ export default function AccountPage() {
                 </div>
               ) : (
                 <div className="text-center py-8 text-okx-text-tertiary">
-                  暂无持仓
+                  {t("noPositions")}
                 </div>
               )}
             </div>
 
-            {/* 交易历史 */}
+            {/* Trade history */}
             <TradeHistoryTable maxRows={20} />
 
-            {/* 账户地址 */}
+            {/* Account address */}
             <div className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4">
-              <h2 className="font-bold mb-3">账户信息</h2>
+              <h2 className="font-bold mb-3">{t("accountInfo")}</h2>
               <div className="flex items-center justify-between">
-                <span className="text-okx-text-tertiary text-sm">钱包地址</span>
+                <span className="text-okx-text-tertiary text-sm">{t("walletAddress")}</span>
                 <span className="font-mono text-sm">{address}</span>
               </div>
             </div>

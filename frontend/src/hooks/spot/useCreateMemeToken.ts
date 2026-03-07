@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi";
 import { parseEther, type Hash, type Address, decodeEventLog } from "viem";
+import { useTranslations } from "next-intl";
 import { useToast } from "@/components/shared/Toast";
 import { CONTRACTS, TOKEN_FACTORY_ABI } from "@/lib/contracts";
 
@@ -55,6 +56,7 @@ const DEFAULT_SERVICE_FEE = "0.001";
 export function useCreateMemeToken() {
   const { address, isConnected } = useAccount();
   const { showToast } = useToast();
+  const t = useTranslations("hooks");
 
   const [txHash, setTxHash] = useState<Hash | undefined>();
   const [step, setStep] = useState<"idle" | "creating" | "confirming" | "done">("idle");
@@ -123,15 +125,15 @@ export function useCreateMemeToken() {
    */
   const createToken = useCallback(async (params: CreateTokenParams): Promise<{ hash: Hash; tokenAddress?: Address }> => {
     if (!address) {
-      throw new Error("请先连接钱包");
+      throw new Error(t("connectWalletFirst"));
     }
 
     if (!isConnected) {
-      throw new Error("钱包未连接");
+      throw new Error(t("walletNotConnected"));
     }
 
     if (CONTRACTS.TOKEN_FACTORY === "0x0000000000000000000000000000000000000000") {
-      throw new Error("TokenFactory 合约地址未配置，请在 .env 中设置 NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS");
+      throw new Error(t("tokenFactoryNotConfigured"));
     }
 
     setStep("creating");
@@ -168,7 +170,7 @@ export function useCreateMemeToken() {
       setTxHash(hash);
       setStep("confirming");
 
-      showToast("交易已提交，等待确认...", "info");
+      showToast(t("txSubmittedWaiting"), "info");
 
       return { hash };
     } catch (error) {
@@ -176,7 +178,7 @@ export function useCreateMemeToken() {
       console.error("Create token error:", error);
       throw error;
     }
-  }, [address, isConnected, serviceFee, writeContractAsync, showToast]);
+  }, [address, isConnected, serviceFee, writeContractAsync, showToast, t]);
 
   // 当 receipt 更新时解析代币地址
   if (receipt && isConfirmed && !createdTokenAddress) {
@@ -224,6 +226,7 @@ export function useCreateMemeToken() {
 export function useBuyToken() {
   const { address, isConnected } = useAccount();
   const { showToast } = useToast();
+  const t = useTranslations("hooks");
 
   const [txHash, setTxHash] = useState<Hash | undefined>();
 
@@ -243,7 +246,7 @@ export function useBuyToken() {
 
   const buy = useCallback(async (tokenAddress: Address, ethAmount: string, minTokensOut: bigint = 0n) => {
     if (!address || !isConnected) {
-      throw new Error("请先连接钱包");
+      throw new Error(t("connectWalletFirst"));
     }
 
     const value = parseEther(ethAmount);
@@ -257,10 +260,10 @@ export function useBuyToken() {
     });
 
     setTxHash(hash);
-    showToast("买入交易已提交", "info");
+    showToast(t("buyTxSubmitted"), "info");
 
     return hash;
-  }, [address, isConnected, writeContractAsync, showToast]);
+  }, [address, isConnected, writeContractAsync, showToast, t]);
 
   const reset = useCallback(() => {
     setTxHash(undefined);
@@ -284,6 +287,7 @@ export function useBuyToken() {
 export function useSellToken() {
   const { address, isConnected } = useAccount();
   const { showToast } = useToast();
+  const t = useTranslations("hooks");
 
   const [txHash, setTxHash] = useState<Hash | undefined>();
 
@@ -303,7 +307,7 @@ export function useSellToken() {
 
   const sell = useCallback(async (tokenAddress: Address, tokenAmount: bigint, minETHOut: bigint = 0n) => {
     if (!address || !isConnected) {
-      throw new Error("请先连接钱包");
+      throw new Error(t("connectWalletFirst"));
     }
 
     const hash = await writeContractAsync({
@@ -314,10 +318,10 @@ export function useSellToken() {
     });
 
     setTxHash(hash);
-    showToast("卖出交易已提交", "info");
+    showToast(t("sellTxSubmitted"), "info");
 
     return hash;
-  }, [address, isConnected, writeContractAsync, showToast]);
+  }, [address, isConnected, writeContractAsync, showToast, t]);
 
   const reset = useCallback(() => {
     setTxHash(undefined);

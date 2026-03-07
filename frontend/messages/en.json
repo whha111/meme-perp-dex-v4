@@ -22,7 +22,9 @@
     "contractCopied": "Contract address copied",
     "done": "Done",
     "currentSetting": "Current setting",
-    "connectWallet": "Connect Wallet"
+    "connectWallet": "Connect Wallet",
+    "offline": "Offline",
+    "wsConnectionFailed": "WebSocket connection failed"
   },
   "nav": {
     "market": "Market",
@@ -34,7 +36,58 @@
     "inviteProgram": "Invite Program",
     "wallet": "Wallet",
     "searchPlaceholder": "Token / Address / DApp",
-    "lending": "Lending"
+    "lending": "Lending",
+    "leaderboard": "Leaderboard",
+    "deposit": "Deposit",
+    "invite": "Invite"
+  },
+  "home": {
+    "badge": "✦ BSC Testnet Live",
+    "heroTitle": "Discover the Next",
+    "heroSubtitle": "All-in-one meme token creation, trading and perpetual platform. Fair launch, on-chain transparency, up to 10x leverage.",
+    "createToken": "Create Token →",
+    "startTrading": "Start Trading",
+    "stats": {
+      "volume24h": "24h Volume",
+      "marketCap": "Total Market Cap",
+      "activeTokens": "Active Tokens",
+      "totalTraders": "Total Traders"
+    },
+    "whyTitle": "Why MEMEPERP?",
+    "whySubtitle": "Decentralized, transparent, permissionless meme token trading infrastructure",
+    "features": {
+      "fairLaunch": {
+        "title": "Fair Launch",
+        "desc": "Bonding Curve pricing, no presale, no insider allocation. Everyone starts equal."
+      },
+      "perpetual": {
+        "title": "Perpetual Contracts",
+        "desc": "Off-chain matching + on-chain settlement, supporting up to 10x leverage long/short on meme tokens."
+      },
+      "security": {
+        "title": "On-chain Security",
+        "desc": "Funds custodied in SettlementV2 contract, Merkle proof withdrawals, fully verifiable."
+      },
+      "referral": {
+        "title": "Referral Rewards",
+        "desc": "Invite friends to trade, earn up to 25% fee rebate. Multi-tier referral system."
+      },
+      "matching": {
+        "title": "Sub-ms Matching",
+        "desc": "TypeScript matching engine with sub-millisecond latency. Supports limit and market orders."
+      },
+      "competition": {
+        "title": "Trading Competition",
+        "desc": "Regular trading competitions, top 10 share the prize pool. Prove your trading skills."
+      }
+    },
+    "ctaTitle": "Ready to Start?",
+    "ctaSubtitle": "Connect your wallet and start your meme trading journey",
+    "ctaButton": "Enter Market →",
+    "footer": {
+      "settings": "Settings",
+      "invite": "Invite"
+    }
   },
   "wallet": {
     "connect": "Connect Wallet",
@@ -253,7 +306,12 @@
     "avgCostBasis": "Avg Cost Basis",
     "profitableAddresses": "Profitable Addresses",
     "realizedPnl": "Realized PnL",
-    "unrealizedPnl": "Unrealized PnL"
+    "unrealizedPnl": "Unrealized PnL",
+    "active": "Active",
+    "paused": "Paused",
+    "virtualBnb": "Virtual BNB",
+    "virtualToken": "Virtual Token",
+    "total": "total"
   },
   "chart": {
     "1min": "1m",
@@ -317,7 +375,11 @@
     "graduationTarget": "Graduation Target",
     "graduatedMigrated": "Token graduated, liquidity migrated to PancakeSwap",
     "remainToGraduate": "Remaining {percent}% to graduate!",
-    "approxTokens": "≈ {amount}M tokens"
+    "approxTokens": "≈ {amount}M tokens",
+    "bondingCurveProgress": "Bonding Curve Progress",
+    "target": "Target",
+    "graduation": "Graduation",
+    "graduatedMessage": "Graduated! Token listed on PancakeSwap"
   },
   "holders": {
     "topHolders": "Top Holders",
@@ -365,7 +427,11 @@
     "quantity": "Quantity",
     "pool": "Pool",
     "details": "Details",
-    "devSold": "DEV SOLD"
+    "devSold": "DEV SOLD",
+    "waitingForTrades": "Waiting for trades...",
+    "pair": "Pair",
+    "direction": "Direction",
+    "txHash": "Tx Hash"
   },
   "graduation": {
     "progress": "Graduation Progress",
@@ -407,7 +473,46 @@
     "deadlineHelp": "Transaction expires after this time. Too short may fail, too long may result in significant price changes.",
     "historyHelp": "Your recently visited domains for quick access.",
     "slippageRange": "Slippage tolerance must be between 0-50%",
-    "deadlineRange": "Transaction deadline must be between 60-3600 seconds"
+    "deadlineRange": "Transaction deadline must be between 60-3600 seconds",
+    "navSecurity": "Security",
+    "navProfile": "Profile",
+    "navApi": "API Keys",
+    "navNotifications": "Notifications",
+    "navFees": "Fee Tiers",
+    "navAppearance": "Appearance",
+    "securitySubtitle": "Protect your account with multi-layer security settings",
+    "walletConnection": "Wallet Connection",
+    "connected": "Connected",
+    "notConnected": "Not Connected",
+    "disconnect": "Disconnect",
+    "securityVerification": "Security Verification",
+    "securityVerificationDesc": "Enable multi-factor verification for critical operations",
+    "tradingPassword": "Trading Password",
+    "tradingPasswordDesc": "Separate password for placing orders",
+    "notSet": "Not Set",
+    "setup": "Set Up",
+    "signatureVerification": "Signature Verification",
+    "signatureVerificationDesc": "Require wallet signature for large withdrawals",
+    "enabled": "Enabled",
+    "configure": "Configure",
+    "withdrawWhitelist": "Withdraw Whitelist",
+    "withdrawWhitelistDesc": "Only allow withdrawals to pre-approved addresses",
+    "disabled": "Disabled",
+    "apiKeyManagement": "API Key Management",
+    "apiKeyManagementDesc": "Manage API keys for programmatic trading",
+    "createApiKey": "Create API Key",
+    "permRead": "Read",
+    "permTrade": "Trade",
+    "permReadOnly": "Read-Only",
+    "delete": "Delete",
+    "loginActivity": "Login Activity",
+    "loginActivityDesc": "Recent login sessions and device history",
+    "logoutOthers": "Logout All Others",
+    "current": "Current",
+    "2daysAgo": "2 days ago",
+    "currentOnline": "Current · Online",
+    "logout": "Logout",
+    "featureInDev": "This feature is under development, stay tuned..."
   },
   "errors": {
     "unknown": "Error",
@@ -979,7 +1084,26 @@
     "marketClose": "Market Close",
     "enterLimitPrice": "Please enter limit price",
     "tpPrice": "TP Price",
-    "slPrice": "SL Price"
+    "slPrice": "SL Price",
+    "marketTitle": "USDT Perpetual",
+    "marketSubtitle": "High liquidity meme token perpetual trading · Up to 10x leverage",
+    "searchPairs": "Search pairs...",
+    "totalVolume24h": "24h Total Volume",
+    "totalOI": "24h Total OI",
+    "activePairs": "Active Pairs",
+    "pairsUnit": "pairs",
+    "pair": "Pair",
+    "latestPrice": "Latest Price",
+    "change24h": "24h Change",
+    "trend7d": "7D Trend",
+    "action": "Action",
+    "perpetualLabel": "Perp",
+    "trade": "Trade",
+    "noMatchingPairs": "No matching pairs found",
+    "catAll": "All",
+    "catHot": "Hot",
+    "catNew": "New",
+    "catFavorites": "Favorites"
   },
   "walletManagement": {
     "title": "Wallet Management",
@@ -1182,6 +1306,102 @@
     "active": "Active",
     "graduated": "Graduated",
     "noTokensFound": "No tokens found",
-    "price": "Price"
+    "price": "Price",
+    "bnbReserve": "BNB Reserve"
+  },
+  "imageUpload": {
+    "clickToUpload": "Click to upload",
+    "uploading": "Uploading...",
+    "uploadFailed": "Upload failed",
+    "uploadError": "Upload error, please retry"
+  },
+  "hooks": {
+    "connectWalletFirst": "Please connect your wallet first",
+    "walletNotConnected": "Wallet not connected",
+    "tokenFactoryNotConfigured": "TokenFactory contract address not configured. Please set NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS in .env",
+    "txSubmittedWaiting": "Transaction submitted, waiting for confirmation...",
+    "buyTxSubmitted": "Buy transaction submitted",
+    "sellTxSubmitted": "Sell transaction submitted",
+    "fetchMetadataFailed": "Failed to fetch metadata",
+    "tradingPairIdRequired": "Trading pair ID cannot be empty",
+    "walletAuthFailed": "Wallet authentication failed",
+    "saveMetadataFailed": "Failed to save metadata"
+  },
+  "account": {
+    "title": "Account Overview",
+    "connectWalletHint": "Please connect your wallet to view account info",
+    "connectWallet": "Connect Wallet",
+    "walletBalance": "Wallet Balance",
+    "contractAccount": "Contract Account",
+    "availableBalance": "Available Balance",
+    "lockedMargin": "Locked Margin",
+    "currentPositions": "Current Positions",
+    "pair": "Pair",
+    "direction": "Direction",
+    "positionSize": "Size",
+    "margin": "Margin",
+    "leverage": "Leverage",
+    "entryPrice": "Entry Price",
+    "unrealizedPnl": "Unrealized PnL",
+    "perpetual": "Perp",
+    "long": "Long",
+    "short": "Short",
+    "totalPnl": "Total PnL",
+    "noPositions": "No open positions",
+    "accountInfo": "Account Info",
+    "walletAddress": "Wallet Address"
+  },
+  "leaderboard": {
+    "title": "Trading Competition Leaderboard",
+    "seasonBadge": "Season 3 · Live",
+    "description": "Top traders compete for prize pool. Season ends in ",
+    "days": "d ",
+    "tabPnl": "PnL Ranking",
+    "tabVolume": "Volume",
+    "tabInvites": "Referrals",
+    "tabPast": "Past Seasons",
+    "reward": "Prize",
+    "rank": "Rank",
+    "trader": "Trader",
+    "pnl": "PnL",
+    "trades": "Trades",
+    "you": "You"
+  },
+  "depositPage": {
+    "deposit": "Deposit",
+    "withdraw": "Withdraw",
+    "depositTitle": "Deposit to Trading Account",
+    "withdrawTitle": "Withdraw from Trading Account",
+    "depositDesc": "Transfer assets from wallet to your trading account",
+    "withdrawDesc": "Withdraw assets from trading account to your wallet",
+    "selectAsset": "Select Asset",
+    "depositAmount": "Deposit Amount",
+    "withdrawAmount": "Withdraw Amount",
+    "balance": "Balance",
+    "connectWalletFirst": "Connect Wallet First",
+    "processingStep": "Processing Step {step}...",
+    "step1Label": "Approve Token",
+    "step1Desc": "Authorize the contract to use your tokens",
+    "step2Label": "Confirm Deposit",
+    "step2Desc": "Send tokens to the trading contract",
+    "step3Label": "Awaiting Confirmation",
+    "step3Desc": "Waiting for blockchain confirmation",
+    "txHistory": "Transaction History",
+    "viewAll": "View All",
+    "filterAll": "All",
+    "confirmed": "Confirmed",
+    "confirming": "Confirming",
+    "failed": "Failed",
+    "retry": "Retry",
+    "balanceOverview": "Balance Overview",
+    "availableBalance": "Available Balance",
+    "usedMargin": "Used Margin",
+    "unrealizedPnl": "Unrealized PnL",
+    "totalAssets": "Total Assets",
+    "2minAgo": "2 min ago",
+    "1hourAgo": "1 hour ago",
+    "3hoursAgo": "3 hours ago",
+    "yesterday": "Yesterday",
+    "2daysAgo": "2 days ago"
   }
 }

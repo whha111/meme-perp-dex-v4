@@ -5,48 +5,47 @@ import { Navbar } from "@/components/layout/Navbar";
 import { useAccount, useBalance } from "wagmi";
 import { useTranslations } from "next-intl";
 import { usePerpetualV2 } from "@/hooks/perpetual/usePerpetualV2";
-import { useTradingWallet } from "@/hooks/common/useTradingWallet";
-import { CONTRACTS } from "@/config/contracts";
+import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
+import { CONTRACTS } from "@/lib/contracts";
 import { parseEther, formatEther } from "viem";
 
-// 充值步骤配置
-const DEPOSIT_STEPS = [
-  { label: "转入 BNB", desc: "从主钱包转入 BNB 到交易钱包" },
-  { label: "包装 WBNB", desc: "将 BNB 包装为 WBNB (WBNB.deposit)" },
-  { label: "存入合约", desc: "授权 + 存入 SettlementV2 合约" },
-];
-
-// 模拟交易记录
 interface TxRecord {
   type: "deposit" | "withdraw";
   amount: string;
   status: "confirmed" | "pending" | "failed";
-  time: string;
+  timeKey: string;
   confirmations?: string;
 }
-
-const MOCK_TX_HISTORY: TxRecord[] = [
-  { type: "deposit", amount: "+0.5000 ETH", status: "pending", time: "2 分钟前", confirmations: "2/12" },
-  { type: "deposit", amount: "+1.0000 ETH", status: "confirmed", time: "1 小时前" },
-  { type: "withdraw", amount: "-0.3000 ETH", status: "confirmed", time: "3 小时前" },
-  { type: "withdraw", amount: "-2.0000 ETH", status: "failed", time: "昨天" },
-  { type: "deposit", amount: "+0.2500 ETH", status: "confirmed", time: "2 天前" },
-];
 
 export default function DepositPage() {
   const { address, isConnected } = useAccount();
   const { data: walletBalance } = useBalance({ address });
+  const t = useTranslations("depositPage");
 
   const [activeTab, setActiveTab] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
   const [depositStep, setDepositStep] = useState(0);
   const [txFilter, setTxFilter] = useState<"all" | "deposit" | "withdraw">("all");
 
-  const filteredTx = MOCK_TX_HISTORY.filter(
+  const depositSteps = [
+    { label: t("step1Label"), desc: t("step1Desc") },
+    { label: t("step2Label"), desc: t("step2Desc") },
+    { label: t("step3Label"), desc: t("step3Desc") },
+  ];
+
+  // Mock transaction history
+  const mockTxHistory: TxRecord[] = [
+    { type: "deposit", amount: "+0.5000 ETH", status: "pending", timeKey: "2minAgo", confirmations: "2/12" },
+    { type: "deposit", amount: "+1.0000 ETH", status: "confirmed", timeKey: "1hourAgo" },
+    { type: "withdraw", amount: "-0.3000 ETH", status: "confirmed", timeKey: "3hoursAgo" },
+    { type: "withdraw", amount: "-2.0000 ETH", status: "failed", timeKey: "yesterday" },
+    { type: "deposit", amount: "+0.2500 ETH", status: "confirmed", timeKey: "2daysAgo" },
+  ];
+
+  const filteredTx = mockTxHistory.filter(
     (tx) => txFilter === "all" || tx.type === txFilter
   );
 
-  // 模拟余额
   const mockBalances = {
     available: "3.4500",
     margin: "1.2000",
@@ -57,7 +56,6 @@ export default function DepositPage() {
 
   const handleDeposit = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
-    // 模拟 3 步充值
     for (let i = 1; i <= 3; i++) {
       setDepositStep(i);
       await new Promise((r) => setTimeout(r, 1500));
@@ -81,20 +79,20 @@ export default function DepositPage() {
                 className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all ${
                   activeTab === "deposit"
                     ? "bg-meme-lime text-black font-bold"
-                    : "bg-okx-bg-card border border-okx-border-primary text-okx-text-secondary hover:text-white"
+                    : "bg-okx-bg-card border border-okx-border-primary text-okx-text-secondary hover:text-okx-text-primary"
                 }`}
               >
-                充值
+                {t("deposit")}
               </button>
               <button
                 onClick={() => setActiveTab("withdraw")}
                 className={`px-6 py-2.5 rounded-full text-sm font-medium transition-all ${
                   activeTab === "withdraw"
                     ? "bg-meme-lime text-black font-bold"
-                    : "bg-okx-bg-card border border-okx-border-primary text-okx-text-secondary hover:text-white"
+                    : "bg-okx-bg-card border border-okx-border-primary text-okx-text-secondary hover:text-okx-text-primary"
                 }`}
               >
-                提款
+                {t("withdraw")}
               </button>
             </div>
 
@@ -102,20 +100,18 @@ export default function DepositPage() {
             <div className="meme-card p-8 space-y-6">
               <div>
                 <h2 className="text-xl font-bold mb-1">
-                  {activeTab === "deposit" ? "充值到交易账户" : "从交易账户提款"}
+                  {activeTab === "deposit" ? t("depositTitle") : t("withdrawTitle")}
                 </h2>
                 <p className="text-sm text-okx-text-secondary">
-                  {activeTab === "deposit"
-                    ? "将资产从钱包转入 SettlementV2 合约，开始交易"
-                    : "通过 Merkle proof 从 SettlementV2 合约提取资产"}
+                  {activeTab === "deposit" ? t("depositDesc") : t("withdrawDesc")}
                 </p>
               </div>
 
               {/* Step 1: Select Asset */}
               <div className="space-y-2">
-                <label className="text-sm font-medium text-okx-text-secondary">选择资产</label>
+                <label className="text-sm font-medium text-okx-text-secondary">{t("selectAsset")}</label>
                 <div className="flex items-center gap-3 p-4 bg-okx-bg-hover rounded-xl border border-okx-border-primary">
-                  <div className="w-8 h-8 rounded-full bg-[#627EEA] flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-8 h-8 rounded-full bg-okx-accent/20 flex items-center justify-center text-okx-text-primary font-bold text-sm">
                     E
                   </div>
                   <div className="flex-1">
@@ -130,10 +126,10 @@ export default function DepositPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <label className="font-medium text-okx-text-secondary">
-                    {activeTab === "deposit" ? "充值金额" : "提款金额"}
+                    {activeTab === "deposit" ? t("depositAmount") : t("withdrawAmount")}
                   </label>
                   <span className="text-okx-text-tertiary">
-                    余额: {walletBalance ? parseFloat(walletBalance.formatted).toFixed(4) : "0.0000"}{" "}
+                    {t("balance")}: {walletBalance ? parseFloat(walletBalance.formatted).toFixed(4) : "0.0000"}{" "}
                     {walletBalance?.symbol || "BNB"}
                   </span>
                 </div>
@@ -159,7 +155,7 @@ export default function DepositPage() {
               {/* Step 3: Progress */}
               {depositStep > 0 && (
                 <div className="space-y-3">
-                  {DEPOSIT_STEPS.map((step, idx) => {
+                  {depositSteps.map((step, idx) => {
                     const stepNum = idx + 1;
                     const isActive = depositStep === stepNum;
                     const isDone = depositStep > stepNum;
@@ -168,7 +164,7 @@ export default function DepositPage() {
                         key={stepNum}
                         className={`flex items-center gap-3 p-3 rounded-lg border ${
                           isDone
-                            ? "border-[#0ECB81]/30 bg-[#0ECB81]/5"
+                            ? "border-okx-up/30 bg-okx-up/5"
                             : isActive
                             ? "border-meme-lime/30 bg-meme-lime/5"
                             : "border-okx-border-primary bg-okx-bg-card opacity-50"
@@ -177,7 +173,7 @@ export default function DepositPage() {
                         <div
                           className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
                             isDone
-                              ? "bg-[#0ECB81] text-black"
+                              ? "bg-okx-up text-black"
                               : isActive
                               ? "bg-meme-lime text-black animate-pulse"
                               : "bg-okx-bg-hover text-okx-text-tertiary"
@@ -186,7 +182,7 @@ export default function DepositPage() {
                           {isDone ? "✓" : stepNum}
                         </div>
                         <div>
-                          <div className={`text-sm font-medium ${isDone ? "text-[#0ECB81]" : ""}`}>
+                          <div className={`text-sm font-medium ${isDone ? "text-okx-up" : ""}`}>
                             {step.label}
                           </div>
                           <div className="text-xs text-okx-text-tertiary">{step.desc}</div>
@@ -208,12 +204,12 @@ export default function DepositPage() {
                 }`}
               >
                 {!isConnected
-                  ? "请先连接钱包"
+                  ? t("connectWalletFirst")
                   : depositStep > 0
-                  ? `步骤 ${depositStep}/3 处理中...`
+                  ? t("processingStep", { step: depositStep })
                   : activeTab === "deposit"
-                  ? "充值"
-                  : "提款"}
+                  ? t("deposit")
+                  : t("withdraw")}
               </button>
             </div>
           </div>
@@ -222,8 +218,8 @@ export default function DepositPage() {
           <div className="flex-1 space-y-5">
             {/* Header */}
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold">充值/提款记录</h3>
-              <button className="text-sm text-meme-lime hover:opacity-80">查看全部 →</button>
+              <h3 className="text-lg font-bold">{t("txHistory")}</h3>
+              <button className="text-sm text-meme-lime hover:opacity-80">{t("viewAll")}</button>
             </div>
 
             {/* Filter Pills */}
@@ -235,10 +231,10 @@ export default function DepositPage() {
                   className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
                     txFilter === f
                       ? "bg-meme-lime text-black"
-                      : "bg-okx-bg-card border border-okx-border-primary text-okx-text-secondary hover:text-white"
+                      : "bg-okx-bg-card border border-okx-border-primary text-okx-text-secondary hover:text-okx-text-primary"
                   }`}
                 >
-                  {f === "all" ? "全部" : f === "deposit" ? "充值" : "提款"}
+                  {f === "all" ? t("filterAll") : f === "deposit" ? t("deposit") : t("withdraw")}
                 </button>
               ))}
             </div>
@@ -253,7 +249,7 @@ export default function DepositPage() {
                   {/* Direction Icon */}
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                      tx.type === "deposit" ? "bg-[#0ECB81]/15 text-[#0ECB81]" : "bg-[#F6465D]/15 text-[#F6465D]"
+                      tx.type === "deposit" ? "bg-okx-up/15 text-okx-up" : "bg-okx-down/15 text-okx-down"
                     }`}
                   >
                     {tx.type === "deposit" ? "↓" : "↑"}
@@ -262,30 +258,30 @@ export default function DepositPage() {
                   {/* Info */}
                   <div className="flex-1">
                     <div className="text-sm font-medium">
-                      {tx.type === "deposit" ? "充值" : "提款"} ETH
+                      {tx.type === "deposit" ? t("deposit") : t("withdraw")} ETH
                     </div>
-                    <div className="text-xs text-okx-text-tertiary">{tx.time}</div>
+                    <div className="text-xs text-okx-text-tertiary">{t(tx.timeKey)}</div>
                   </div>
 
                   {/* Amount */}
-                  <div className={`text-sm font-mono font-medium ${tx.type === "deposit" ? "text-[#0ECB81]" : "text-[#F6465D]"}`}>
+                  <div className={`text-sm font-mono font-medium ${tx.type === "deposit" ? "text-okx-up" : "text-okx-down"}`}>
                     {tx.amount}
                   </div>
 
                   {/* Status */}
                   <div className="min-w-[80px] text-right">
                     {tx.status === "confirmed" && (
-                      <span className="text-xs text-[#0ECB81]">✓ 已完成</span>
+                      <span className="text-xs text-okx-up">✓ {t("confirmed")}</span>
                     )}
                     {tx.status === "pending" && (
-                      <span className="text-xs text-[#F0B90B]">
-                        ⏳ 确认中 ({tx.confirmations})
+                      <span className="text-xs text-meme-lime">
+                        ⏳ {t("confirming")} ({tx.confirmations})
                       </span>
                     )}
                     {tx.status === "failed" && (
                       <div className="flex items-center gap-2 justify-end">
-                        <span className="text-xs text-[#F6465D]">✗ 失败</span>
-                        <button className="text-xs text-meme-lime hover:opacity-80">重试 ↻</button>
+                        <span className="text-xs text-okx-down">✗ {t("failed")}</span>
+                        <button className="text-xs text-meme-lime hover:opacity-80">{t("retry")}</button>
                       </div>
                     )}
                   </div>
@@ -295,24 +291,24 @@ export default function DepositPage() {
 
             {/* Account Balance Summary */}
             <div className="meme-card p-5 space-y-4">
-              <h4 className="text-sm font-bold text-okx-text-secondary">账户余额概览</h4>
+              <h4 className="text-sm font-bold text-okx-text-secondary">{t("balanceOverview")}</h4>
 
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-okx-text-secondary">可用余额</span>
+                  <span className="text-okx-text-secondary">{t("availableBalance")}</span>
                   <span className="font-mono font-medium">{mockBalances.available} ETH</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-okx-text-secondary">已用保证金</span>
-                  <span className="font-mono font-medium text-[#F0B90B]">{mockBalances.margin} ETH</span>
+                  <span className="text-okx-text-secondary">{t("usedMargin")}</span>
+                  <span className="font-mono font-medium text-meme-lime">{mockBalances.margin} ETH</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-okx-text-secondary">未实现盈亏</span>
-                  <span className="font-mono font-medium text-[#0ECB81]">{mockBalances.unrealizedPnl} ETH</span>
+                  <span className="text-okx-text-secondary">{t("unrealizedPnl")}</span>
+                  <span className="font-mono font-medium text-okx-up">{mockBalances.unrealizedPnl} ETH</span>
                 </div>
                 <div className="h-px bg-okx-border-primary" />
                 <div className="flex justify-between text-sm">
-                  <span className="text-okx-text-secondary">总资产估值</span>
+                  <span className="text-okx-text-secondary">{t("totalAssets")}</span>
                   <div className="text-right">
                     <div className="font-mono font-bold text-meme-lime">{mockBalances.total} ETH</div>
                     <div className="text-xs text-okx-text-tertiary">≈ ${mockBalances.totalUsd}</div>
