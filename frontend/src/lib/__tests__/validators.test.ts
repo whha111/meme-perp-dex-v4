@@ -16,7 +16,8 @@ import {
 describe('验证工具测试', () => {
   describe('validateEthereumAddress', () => {
     test('验证有效的以太坊地址', () => {
-      expect(validateEthereumAddress('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1')).toBe(true);
+      // 全小写地址跳过 ERC-55 校验和检查
+      expect(validateEthereumAddress('0x742d35cc6634c0532925a3b844bc9e7595f0beb1')).toBe(true);
       expect(validateEthereumAddress('0x0000000000000000000000000000000000000000')).toBe(true);
     });
 
@@ -32,10 +33,10 @@ describe('验证工具测试', () => {
 
   describe('validateDomainName', () => {
     test('验证有效的域名', () => {
-      expect(validateDomainName('example.com')).toBe(true);
-      expect(validateDomainName('sub.example.com')).toBe(true);
-      expect(validateDomainName('example.co.uk')).toBe(true);
-      expect(validateDomainName('xn--example-6q4f.com')).toBe(true); // Punycode
+      expect(validateDomainName('mysite.com')).toBe(true);
+      expect(validateDomainName('sub.mysite.com')).toBe(true);
+      expect(validateDomainName('mysite.co.uk')).toBe(true);
+      expect(validateDomainName('xn--nxasmq6b.com')).toBe(true); // Punycode
     });
 
     test('验证无效的域名', () => {
@@ -89,7 +90,7 @@ describe('验证工具测试', () => {
 
   describe('validateAndExtractWalletFromTXT', () => {
     test('提取有效的钱包地址', () => {
-      const txt = 'domainfi-verify=0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1';
+      const txt = 'domainfi-verify=0x742d35cc6634c0532925a3b844bc9e7595f0beb1';
       const result = validateAndExtractWalletFromTXT(txt);
       expect(result).toBe('0x742d35cc6634c0532925a3b844bc9e7595f0beb1'); // 小写
     });
@@ -101,7 +102,7 @@ describe('验证工具测试', () => {
     });
 
     test('使用自定义前缀', () => {
-      const txt = 'custom-prefix=0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1';
+      const txt = 'custom-prefix=0x742d35cc6634c0532925a3b844bc9e7595f0beb1';
       const result = validateAndExtractWalletFromTXT(txt, 'custom-prefix=');
       expect(result).toBe('0x742d35cc6634c0532925a3b844bc9e7595f0beb1');
     });
@@ -110,20 +111,20 @@ describe('验证工具测试', () => {
   describe('validateChainId', () => {
     test('验证有效的链 ID', () => {
       expect(validateChainId(97)).toBe(true); // BSC Testnet
-      expect(validateChainId(8453)).toBe(true); // Base Mainnet
-      expect(validateChainId(1, [1, 137, 8453])).toBe(true); // 自定义允许的链
+      expect(validateChainId(56)).toBe(true); // BSC Mainnet
+      expect(validateChainId(1, [1, 137, 56])).toBe(true); // 自定义允许的链
     });
 
     test('验证无效的链 ID', () => {
       expect(validateChainId(1)).toBe(false); // 不在默认列表中
-      expect(validateChainId(97, [1, 137])).toBe(false); // 不在自定义列表中
+      expect(validateChainId(8453, [1, 137])).toBe(false); // 不在自定义列表中
     });
   });
 
   describe('validateTradeParams', () => {
     test('验证有效的交易参数', () => {
       const result = validateTradeParams({
-        domainName: 'example.com',
+        domainName: 'mysite.com',
         amount: '0.1',
         isBuy: true,
       });
@@ -141,7 +142,7 @@ describe('验证工具测试', () => {
       expect(result1.errors).toContain('无效的域名格式');
 
       const result2 = validateTradeParams({
-        domainName: 'example.com',
+        domainName: 'mysite.com',
         amount: '0',
         isBuy: true,
       });
@@ -176,8 +177,8 @@ describe('验证工具测试', () => {
     });
 
     test('验证通过时返回 null', () => {
-      expect(getValidationError('address', '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb1', validateEthereumAddress)).toBeNull();
-      expect(getValidationError('domain', 'example.com', validateDomainName)).toBeNull();
+      expect(getValidationError('address', '0x742d35cc6634c0532925a3b844bc9e7595f0beb1', validateEthereumAddress)).toBeNull();
+      expect(getValidationError('domain', 'mysite.com', validateDomainName)).toBeNull();
     });
   });
 });

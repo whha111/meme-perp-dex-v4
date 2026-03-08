@@ -5,7 +5,7 @@ import { createConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
 
 // =====================================================
-// 🔐 DomainFi Configuration (BSC)
+// 🔐 MemePerpDEX Configuration (BSC)
 // =====================================================
 
 const isDev = process.env.NODE_ENV === 'development';

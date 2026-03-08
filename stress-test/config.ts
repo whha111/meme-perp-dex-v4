@@ -6,11 +6,11 @@
  */
 import type { Address } from "viem";
 
-// ── RPC Endpoints ──────────────────────────────────────────────
+// ── RPC Endpoints (from env vars, default to BSC Mainnet) ─────
 export const RPC = {
-  http: "https://data-seed-prebsc-1-s1.binance.org:8545/",
-  wss: "wss://bsc-testnet-rpc.publicnode.com",
-  httpBackup: "https://bsc-testnet.nodereal.io/v1/",
+  http: process.env.RPC_URL || "https://bsc-dataseed.binance.org/",
+  wss: process.env.WSS_URL || "wss://bsc-rpc.publicnode.com",
+  httpBackup: process.env.RPC_URL_BACKUP || "https://bsc-dataseed1.defibit.io/",
 } as const;
 
 // ── Rate Limits (90% of empirically tested maximums) ───────────
@@ -25,25 +25,25 @@ export const RATE_LIMITS = {
 
 // ── Chain Config ───────────────────────────────────────────────
 export const CHAIN = {
-  id: 97,
-  name: "BSC Testnet",
+  id: parseInt(process.env.CHAIN_ID || "56"),
+  name: parseInt(process.env.CHAIN_ID || "56") === 56 ? "BSC Mainnet" : "BSC Testnet",
 } as const;
 
-// ── Contract Addresses (BSC Testnet - Fresh deploy 2026-03-06) ──
+// ── Contract Addresses (from env vars — NO hardcoded fallbacks) ──
 // Settlement must match matching engine's EIP-712 verifyingContract
 export const CONTRACTS = {
-  settlement: "0x234F468d196ea7B8F8dD4c560315F5aE207C2674" as Address,       // Settlement V1 (EIP-712 verifyingContract)
-  settlementV2: "0xF58A8a551F9c587CEF3B4e21F01e1bF5059bECE9" as Address,     // SettlementV2 (dYdX-style Merkle)
-  tokenFactory: "0x01819AFe97713eFf4e81cD93C2f66588816Ef8ee" as Address,      // Spot trading (TokenFactory)
-  perpTokenFactory: "0x01819AFe97713eFf4e81cD93C2f66588816Ef8ee" as Address,  // Same as tokenFactory (unified)
-  priceFeed: "0xBb62829e52EB1DC73b359ba326Ee84f8a06859ad" as Address,
-  perpVault: "0xc4CEC9636AD8D553cCFCf4AbAb5a0fC808c122C2" as Address,
-  positionManager: "0xEf4fb08D3B475e753A7B0678A503ffD451C539c0" as Address,
-  liquidation: "0x7a998aBCB01FBEBcFaE3023B8BDBfe25aE16a96f" as Address,
-  insuranceFund: "0x2f75Ff4Ce4e833fcA872ef9bFd5637fC7929dF62" as Address,
-  fundingRate: "0x695b8E1fC4A67e65035652Bde1C44936B3237Eb4" as Address,
-  vault: "0xF297fAd9A5851DBF8aa82f14ce01a13BBA019640" as Address,
-  lendingPool: "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4" as Address,
+  settlement: (process.env.SETTLEMENT_ADDRESS || "") as Address,
+  settlementV2: (process.env.SETTLEMENT_V2_ADDRESS || "") as Address,
+  tokenFactory: (process.env.TOKEN_FACTORY_ADDRESS || "") as Address,
+  perpTokenFactory: (process.env.TOKEN_FACTORY_ADDRESS || "") as Address,
+  priceFeed: (process.env.PRICE_FEED_ADDRESS || "") as Address,
+  perpVault: (process.env.PERP_VAULT_ADDRESS || "") as Address,
+  positionManager: (process.env.POSITION_MANAGER_ADDRESS || "") as Address,
+  liquidation: (process.env.LIQUIDATION_ADDRESS || "") as Address,
+  insuranceFund: (process.env.INSURANCE_FUND_ADDRESS || "") as Address,
+  fundingRate: (process.env.FUNDING_RATE_ADDRESS || "") as Address,
+  vault: (process.env.VAULT_ADDRESS || "") as Address,
+  lendingPool: (process.env.LENDING_POOL_ADDRESS || "") as Address,
 } as const;
 
 // ── Matching Engine ────────────────────────────────────────────
@@ -52,8 +52,8 @@ export const MATCHING_ENGINE = {
   submitEndpoint: "/api/order/submit",
 } as const;
 
-// ── WBNB (BSC Testnet native wrapped BNB) ───────────────────
-export const WETH_ADDRESS = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address;
+// ── WBNB (from env var — default to BSC Mainnet WBNB) ───────
+export const WETH_ADDRESS = (process.env.WETH_ADDRESS || process.env.COLLATERAL_TOKEN_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
 // ── EIP-712 Signing ────────────────────────────────────────────
 // MUST use Settlement V1 address as verifyingContract because the matching engine's

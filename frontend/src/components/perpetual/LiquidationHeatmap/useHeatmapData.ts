@@ -32,7 +32,7 @@ export function useHeatmapData(
 
     try {
       const response = await fetch(
-        `${API_BASE}/api/liquidation-heatmap/${token}?timeRange=${timeRange}`
+        `${API_BASE}/api/liquidation-map/${token}?timeRange=${timeRange}`
       );
 
       if (!response.ok) {

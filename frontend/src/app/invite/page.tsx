@@ -1,18 +1,16 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
 import { useTranslations } from "next-intl";
 import { Navbar } from "@/components/layout/Navbar";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
 interface ReferrerInfo {
   code: string;
-  tier: number;
   totalInvites: number;
   totalEarned: string;
   monthlyEarned: string;
-  currentRebatePercent: number;
   invitees: InviteeRow[];
 }
 
@@ -23,58 +21,47 @@ interface InviteeRow {
   rebate: string;
 }
 
-// VIP tier config matching design
-const VIP_TIERS = [
-  { level: "VIP 1", rangeKey: "vip1Range", rate: "10%", rewardKey: "noDataPlaceholder" },
-  { level: "VIP 2", rangeKey: "vip2Range", rate: "25%", rewardKey: "vip2Reward" },
-  { level: "VIP 3", rangeKey: "vip3Range", rate: "35%", rewardKey: "vip3Reward" },
-  { level: "VIP 4", rangeKey: "vip4Range", rate: "50%", rewardKey: "vip4Reward" },
-];
-
-function calculateVipTier(totalInvites: number): number {
-  if (totalInvites >= 100) return 3;
-  if (totalInvites >= 30) return 2;
-  if (totalInvites >= 10) return 1;
-  return 0;
-}
-
-function getNextTierRequirement(currentTier: number): { count: number; level: string } | null {
-  if (currentTier >= 3) return null;
-  const next = VIP_TIERS[currentTier + 1];
-  const counts = [10, 30, 100];
-  return { count: counts[currentTier], level: next.level };
-}
+// 固定返佣费率 (与后端 REFERRAL_CONFIG 一致)
+const COMMISSION_RATES = {
+  level1: 30,  // 直推返佣 30%
+  level2: 10,  // 二级返佣 10%
+};
 
 export default function InvitePage() {
   const t = useTranslations("referral");
   const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [info, setInfo] = useState<ReferrerInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
 
+  // C-2: 邀请链接指向 /invite/[code] (Next.js 路由真实存在)
   const inviteLink = info?.code
-    ? `https://memeperp.io/ref/${address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ""}`
+    ? `${typeof window !== "undefined" ? window.location.origin : "https://memeperp.io"}/invite/${info.code}`
     : "";
 
   const fetchReferrerInfo = useCallback(async (addr: string) => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`${MATCHING_ENGINE_URL}/api/referral/referrer?address=${addr}`);
+      if (!res.ok) {
+        throw new Error(`Server error: ${res.status}`);
+      }
       const data = await res.json();
 
       if (data.isReferrer && data.referrer) {
         const r = data.referrer;
         const totalInvites = (r.level1Referrals || 0) + (r.level2Referrals || 0);
-        const tier = calculateVipTier(r.level1Referrals || 0);
-        const rebatePercents = [10, 25, 35, 50];
 
         setInfo({
           code: r.code || "",
-          tier,
           totalInvites,
           totalEarned: (Number(r.totalEarnings || "0") / 1e18).toFixed(4),
           monthlyEarned: (Number(r.pendingEarnings || "0") / 1e18).toFixed(4),
-          currentRebatePercent: rebatePercents[tier],
           invitees: [],
         });
       } else {
@@ -84,27 +71,28 @@ export default function InvitePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ address: addr }),
         });
+        if (!registerRes.ok) {
+          throw new Error(`Registration failed: ${registerRes.status}`);
+        }
         const registerData = await registerRes.json();
         const code = registerData?.referrer?.code || "";
 
         setInfo({
           code,
-          tier: 0,
           totalInvites: 0,
           totalEarned: "0",
           monthlyEarned: "0",
-          currentRebatePercent: 10,
           invitees: [],
         });
       }
-    } catch {
+    } catch (e) {
+      console.error("[Invite] Failed to fetch referrer info:", e);
+      setError(e instanceof Error ? e.message : "Failed to load referral data");
       setInfo({
         code: "",
-        tier: 0,
         totalInvites: 0,
         totalEarned: "0",
         monthlyEarned: "0",
-        currentRebatePercent: 10,
         invitees: [],
       });
     } finally {
@@ -126,7 +114,37 @@ export default function InvitePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const nextTier = info ? getNextTierRequirement(info.tier) : null;
+  // C-4: 提现全部待领取佣金
+  const handleWithdraw = async () => {
+    if (!address || !info) return;
+    const pendingWei = info.monthlyEarned; // already in ETH display string
+    if (pendingWei === "0" || pendingWei === "0.0000") return;
+
+    setWithdrawing(true);
+    setError(null);
+    try {
+      const normalizedAddr = address.toLowerCase();
+      const withdrawMessage = `Withdraw commission for ${normalizedAddr}`;
+      const signature = await signMessageAsync({ message: withdrawMessage });
+      const res = await fetch(`${MATCHING_ENGINE_URL}/api/referral/withdraw`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, signature }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Withdraw failed: ${res.status}`);
+      }
+      setWithdrawSuccess(true);
+      setTimeout(() => setWithdrawSuccess(false), 3000);
+      // Refresh data
+      fetchReferrerInfo(address);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Withdraw failed");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#000000] text-white">
@@ -145,6 +163,19 @@ export default function InvitePage() {
         </div>
       ) : (
         <>
+          {/* H-7: Error banner */}
+          {error && (
+            <div className="mx-16 mt-4 px-4 py-3 bg-red-900/30 border border-red-500/50 rounded-lg flex items-center justify-between">
+              <span className="text-sm text-red-400">{error}</span>
+              <button
+                onClick={() => address && fetchReferrerInfo(address)}
+                className="text-xs text-red-300 hover:text-white underline ml-4"
+              >
+                {t("retry") || "Retry"}
+              </button>
+            </div>
+          )}
+
           {/* Hero Section — gradient bg */}
           <div
             className="px-16 py-12"
@@ -161,7 +192,7 @@ export default function InvitePage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center px-5 py-3.5 bg-[#111111] border border-[#333333] rounded-lg w-[520px]">
                 <span className="text-sm font-mono text-[#BFFF00] truncate">
-                  {inviteLink || "https://memeperp.io/ref/..."}
+                  {inviteLink || "https://memeperp.io/invite/..."}
                 </span>
               </div>
               <button
@@ -200,7 +231,7 @@ export default function InvitePage() {
               </div>
             </div>
 
-            {/* Card 3: Monthly Rebate */}
+            {/* Card 3: Pending Rebate + Withdraw */}
             <div className="flex-1 bg-[#111111] border border-[#1a1a1a] rounded-xl p-6">
               <div className="text-[13px] text-[#888888] mb-2">{t("monthlyRebate")}</div>
               <div className="flex items-baseline gap-1">
@@ -209,17 +240,25 @@ export default function InvitePage() {
                 </span>
                 <span className="text-sm text-[#666666]">ETH</span>
               </div>
+              {/* C-4: Withdraw button */}
+              <button
+                onClick={handleWithdraw}
+                disabled={withdrawing || !info?.monthlyEarned || info.monthlyEarned === "0" || info.monthlyEarned === "0.0000"}
+                className="mt-3 w-full px-3 py-2 bg-[#BFFF00] text-black text-xs font-bold rounded-lg hover:bg-[#d4ff4d] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                {withdrawing ? t("withdrawing") || "Withdrawing..." : withdrawSuccess ? (t("withdrawSuccess") || "✓ Withdrawn!") : (t("withdraw") || "Withdraw")}
+              </button>
             </div>
 
-            {/* Card 4: Current Tier */}
+            {/* Card 4: Commission Rate */}
             <div className="flex-1 bg-[#111111] border border-[#1a1a1a] rounded-xl p-6">
               <div className="text-[13px] text-[#888888] mb-2">{t("currentLevel")}</div>
               <div className="flex items-baseline gap-1">
                 <span className="text-[32px] font-extrabold font-mono text-[#BFFF00]">
-                  VIP {(info?.tier ?? 0) + 1}
+                  {COMMISSION_RATES.level1}%
                 </span>
                 <span className="text-sm text-[#666666]">
-                  / {info?.currentRebatePercent ?? 10}%{t("rebateSuffix")}
+                  {t("rebateSuffix")}
                 </span>
               </div>
             </div>
@@ -227,72 +266,51 @@ export default function InvitePage() {
 
           {/* Body — Two Columns */}
           <div className="flex gap-8 px-16 pb-12">
-            {/* Left Column: Tier Table */}
+            {/* Left Column: Commission Rates */}
             <div className="flex-1 flex flex-col gap-4">
-              {/* Title Row */}
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-white">{t("rebateTierTitle")}</h2>
-                {nextTier && (
-                  <span className="text-xs text-[#666666]">
-                    {t("upgradeHint", { count: nextTier.count, level: nextTier.level })}
-                  </span>
-                )}
-              </div>
+              <h2 className="text-lg font-bold text-white">{t("rebateTierTitle")}</h2>
 
-              {/* Table Header */}
-              <div className="flex items-center px-4 py-2.5 bg-[#0a0a0a] rounded-lg">
-                <span className="flex-1 text-xs font-semibold text-[#888888]">{t("tierLevelCol")}</span>
-                <span className="flex-1 text-xs font-semibold text-[#888888] text-center">{t("inviteCountCol")}</span>
-                <span className="flex-1 text-xs font-semibold text-[#888888] text-center">{t("rebateRateCol")}</span>
-                <span className="flex-1 text-xs font-semibold text-[#888888] text-right">{t("extraRewardCol")}</span>
-              </div>
-
-              {/* Tier Rows */}
-              {VIP_TIERS.map((tier, idx) => {
-                const isActive = idx === (info?.tier ?? 0);
-                return (
-                  <div
-                    key={idx}
-                    className={`flex items-center px-4 py-3 ${
-                      isActive
-                        ? "bg-[#BFFF00]/[0.03] border border-[#BFFF00]/[0.13] rounded-md"
-                        : "border-b border-[#1a1a1a]"
-                    }`}
-                  >
-                    <div className="flex-1 flex items-center gap-1.5">
-                      <span
-                        className={`text-[13px] font-mono font-semibold ${
-                          isActive ? "text-[#BFFF00] font-bold" : "text-[#888888]"
-                        }`}
-                      >
-                        {tier.level}
+              {/* Commission Rate Cards */}
+              <div className="bg-[#111111] border border-[#1a1a1a] rounded-xl p-6 flex flex-col gap-5">
+                {/* Level 1: Direct Referral */}
+                <div className="flex items-center justify-between py-4 border-b border-[#1a1a1a]">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">{t("level1Label")}</span>
+                      <span className="text-[9px] font-bold text-black bg-[#BFFF00] px-1.5 py-0.5 rounded">
+                        L1
                       </span>
-                      {isActive && (
-                        <span className="text-[9px] font-bold text-black bg-[#BFFF00] px-1.5 py-0.5 rounded">
-                          {t("currentBadge")}
-                        </span>
-                      )}
                     </div>
-                    <span className="flex-1 text-[13px] font-mono text-white text-center">
-                      {t(tier.rangeKey as any)}
-                    </span>
-                    <span
-                      className={`flex-1 text-[13px] font-mono text-center ${
-                        isActive ? "text-[#BFFF00] font-bold" : "text-[#BFFF00]"
-                      }`}
-                    >
-                      {tier.rate}
-                    </span>
-                    <span
-                      className={`flex-1 text-xs text-right ${
-                        isActive ? "text-[#BFFF00]" : "text-[#888888]"
-                      }`}
-                    >
-                      {idx === 0 ? t("noDataPlaceholder") : t(tier.rewardKey as any)}
-                    </span>
+                    <span className="text-xs text-[#888888]">{t("level1Desc")}</span>
                   </div>
-                );
-              })}
+                  <span className="text-3xl font-extrabold font-mono text-[#BFFF00]">
+                    {COMMISSION_RATES.level1}%
+                  </span>
+                </div>
+
+                {/* Level 2: Indirect Referral */}
+                <div className="flex items-center justify-between py-4">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">{t("level2Label")}</span>
+                      <span className="text-[9px] font-bold text-[#BFFF00] border border-[#BFFF00] px-1.5 py-0.5 rounded">
+                        L2
+                      </span>
+                    </div>
+                    <span className="text-xs text-[#888888]">{t("level2Desc")}</span>
+                  </div>
+                  <span className="text-3xl font-extrabold font-mono text-[#BFFF00]">
+                    {COMMISSION_RATES.level2}%
+                  </span>
+                </div>
+              </div>
+
+              {/* How it works */}
+              <div className="bg-[#0a0a0a] rounded-lg p-4">
+                <p className="text-xs text-[#666666] leading-relaxed">
+                  {t("commissionExplainer")}
+                </p>
+              </div>
             </div>
 
             {/* Right Column: Invite History */}

@@ -9,45 +9,49 @@ import TOKEN_FACTORY_ABI_IMPORT from "../abis/TokenFactory.json";
 export const TOKEN_FACTORY_ABI = TOKEN_FACTORY_ABI_IMPORT.abi;
 
 /**
- * Deployed Contract Addresses (BSC Testnet)
+ * Deployed Contract Addresses (BSC Mainnet)
+ *
+ * All addresses MUST be set via NEXT_PUBLIC_* environment variables.
+ * No fallback values — if an address is missing, the app will show warnings.
+ * Set addresses in .env.local (dev) or docker-compose build args (production).
  */
 export const CONTRACTS = {
   // TokenFactory - Pump.fun 风格 Bonding Curve 代币工厂
-  TOKEN_FACTORY: (process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS || "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb") as Address,
+  TOKEN_FACTORY: (process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS || "") as Address,
 
   // Platform tokens
-  MEME_TOKEN: (process.env.NEXT_PUBLIC_MEME_TOKEN_ADDRESS || "0xB3D475Bf9c7427Fd1dC6494227803fE163320d69") as Address,
-  LP_TOKEN_AMM: (process.env.NEXT_PUBLIC_AMM_LP_TOKEN_ADDRESS || "0xef54701cab1B76701Aa8B607Bd561E14BD14Db24") as Address,
-  LP_TOKEN_LENDING: (process.env.NEXT_PUBLIC_LP_TOKEN_ADDRESS || "0x0e422348A737D9ee57D3B8f17f750dA5743D51eB") as Address,
+  MEME_TOKEN: (process.env.NEXT_PUBLIC_MEME_TOKEN_ADDRESS || "") as Address,
+  LP_TOKEN_AMM: (process.env.NEXT_PUBLIC_AMM_LP_TOKEN_ADDRESS || "") as Address,
+  LP_TOKEN_LENDING: (process.env.NEXT_PUBLIC_LP_TOKEN_ADDRESS || "") as Address,
 
-  // Perpetual trading contracts (2026-02-28)
-  SETTLEMENT: (process.env.NEXT_PUBLIC_SETTLEMENT_ADDRESS || "0x63df8d6acF3f99Ae59Bee6184A5EB6beA8663eb7") as Address,
-  VAULT: (process.env.NEXT_PUBLIC_VAULT_ADDRESS || "0xACE7014F60eF9c367E7fA5Dd80601A9945E6F4d1") as Address,
-  PRICE_FEED: (process.env.NEXT_PUBLIC_PRICE_FEED_ADDRESS || "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48") as Address,
-  RISK_MANAGER: (process.env.NEXT_PUBLIC_RISK_MANAGER_ADDRESS || "0xd4fbB0f140d8909e73e3D91C897EBe66f01B15F9") as Address,
-  POSITION_MANAGER: (process.env.NEXT_PUBLIC_POSITION_MANAGER_ADDRESS || "0x04C515CcFac80BFFF27E0c5A9113e515171057b6") as Address,
-  INSURANCE_FUND: (process.env.NEXT_PUBLIC_INSURANCE_FUND_ADDRESS || "0x162CEbAe2013545D191360d13ceA5083E6fcE1a7") as Address,
-  CONTRACT_REGISTRY: (process.env.NEXT_PUBLIC_CONTRACT_REGISTRY_ADDRESS || "0x6956c982aec9Ad08040b91417a313003879d0f48") as Address,
+  // Perpetual trading contracts
+  SETTLEMENT: (process.env.NEXT_PUBLIC_SETTLEMENT_ADDRESS || "") as Address,
+  VAULT: (process.env.NEXT_PUBLIC_VAULT_ADDRESS || "") as Address,
+  PRICE_FEED: (process.env.NEXT_PUBLIC_PRICE_FEED_ADDRESS || "") as Address,
+  RISK_MANAGER: (process.env.NEXT_PUBLIC_RISK_MANAGER_ADDRESS || "") as Address,
+  POSITION_MANAGER: (process.env.NEXT_PUBLIC_POSITION_MANAGER_ADDRESS || "") as Address,
+  INSURANCE_FUND: (process.env.NEXT_PUBLIC_INSURANCE_FUND_ADDRESS || "") as Address,
+  CONTRACT_REGISTRY: (process.env.NEXT_PUBLIC_CONTRACT_REGISTRY_ADDRESS || "") as Address,
 
-  // Stablecoins (MockUSDT/USDC - 可铸造测试币)
-  USDT: (process.env.NEXT_PUBLIC_USDT_ADDRESS || "0x050C988477F818b19a2f44Feee87a147D8f04DfF") as Address,
-  USDC: (process.env.NEXT_PUBLIC_USDC_ADDRESS || "0xC9067996aF0b55414EF025002121Bf289D28c32B") as Address,
-  USD1: (process.env.NEXT_PUBLIC_USD1_ADDRESS || "0x0A0FbEac39BeF8258795a742A82d170E8a255025") as Address,
-  WETH: (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address, // WBNB on BSC Mainnet
+  // Stablecoins
+  USDT: (process.env.NEXT_PUBLIC_USDT_ADDRESS || "") as Address,
+  USDC: (process.env.NEXT_PUBLIC_USDC_ADDRESS || "") as Address,
+  USD1: (process.env.NEXT_PUBLIC_USD1_ADDRESS || "") as Address,
+  WETH: (process.env.NEXT_PUBLIC_WETH_ADDRESS || "") as Address, // WBNB on BSC Mainnet
 
-  // SettlementV2 (dYdX-style Merkle Withdrawal System - Redeployed 2026-02-28)
-  SETTLEMENT_V2: (process.env.NEXT_PUBLIC_SETTLEMENT_V2_ADDRESS || "0x7fF9d60aE49F14bB604FeF1961910D7931067873") as Address,
+  // SettlementV2 (dYdX-style Merkle Withdrawal System)
+  SETTLEMENT_V2: (process.env.NEXT_PUBLIC_SETTLEMENT_V2_ADDRESS || "") as Address,
 
-  // PerpVault (GMX-style LP pool - Deployed 2026-02-28)
-  PERP_VAULT: (process.env.NEXT_PUBLIC_PERP_VAULT_ADDRESS || "0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75") as Address,
+  // PerpVault (GMX-style LP pool)
+  PERP_VAULT: (process.env.NEXT_PUBLIC_PERP_VAULT_ADDRESS || "") as Address,
 
   // Other contracts
-  AMM: (process.env.NEXT_PUBLIC_AMM_ADDRESS || "0x2c23046DC1595754528a10b8340F2AD8fdE05112") as Address,
-  LENDING_POOL: (process.env.NEXT_PUBLIC_LENDING_POOL_ADDRESS || "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4") as Address,
-  FUNDING_RATE: (process.env.NEXT_PUBLIC_FUNDING_RATE_ADDRESS || "0x0a513bf3DE079Bf2439A5884583712bD014487aa") as Address,
-  LIQUIDATION: (process.env.NEXT_PUBLIC_LIQUIDATION_ADDRESS || "0x322AeeD67C12c10684B134e1727866425dc75F1c") as Address,
-  CONTRACT_SPEC: (process.env.NEXT_PUBLIC_CONTRACT_SPEC_ADDRESS || "0x6AB576624d66e3E60385851ab6Fc65262CEAFafA") as Address,
-  ROUTER: (process.env.NEXT_PUBLIC_ROUTER_ADDRESS || "0xF15197BA411b578dafC7936C241bE9DD725c22BE") as Address,
+  AMM: (process.env.NEXT_PUBLIC_AMM_ADDRESS || "") as Address,
+  LENDING_POOL: (process.env.NEXT_PUBLIC_LENDING_POOL_ADDRESS || "") as Address,
+  FUNDING_RATE: (process.env.NEXT_PUBLIC_FUNDING_RATE_ADDRESS || "") as Address,
+  LIQUIDATION: (process.env.NEXT_PUBLIC_LIQUIDATION_ADDRESS || "") as Address,
+  CONTRACT_SPEC: (process.env.NEXT_PUBLIC_CONTRACT_SPEC_ADDRESS || "") as Address,
+  ROUTER: (process.env.NEXT_PUBLIC_ROUTER_ADDRESS || "") as Address,
 
 } as const;
 
@@ -56,9 +60,9 @@ export const CONTRACTS = {
  */
 export const NETWORK_CONFIG = {
   CHAIN_ID: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56"),
-  CHAIN_NAME: "BSC Mainnet",
+  CHAIN_NAME: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56") === 56 ? "BSC Mainnet" : "BSC Testnet",
   BLOCK_EXPLORER: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || "https://bscscan.com",
-  RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || "https://bsc-dataseed.binance.org/",
+  RPC_URL: process.env.NEXT_PUBLIC_BSC_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "https://bsc-dataseed.binance.org/",
 };
 
 /**
@@ -372,7 +376,15 @@ export function getExplorerUrl(addressOrTx: string, type: "address" | "tx" = "ad
  * Check if contracts are configured
  */
 export function areContractsConfigured(): boolean {
-  return CONTRACTS.AMM !== ("" as Address) && CONTRACTS.MEME_TOKEN !== ("" as Address);
+  // Check all critical contract addresses are set (not empty strings)
+  const criticalContracts = [
+    CONTRACTS.SETTLEMENT_V2,
+    CONTRACTS.PERP_VAULT,
+    CONTRACTS.TOKEN_FACTORY,
+    CONTRACTS.PRICE_FEED,
+    CONTRACTS.WETH,
+  ];
+  return criticalContracts.every((addr) => addr && addr !== ("" as Address));
 }
 
 /**

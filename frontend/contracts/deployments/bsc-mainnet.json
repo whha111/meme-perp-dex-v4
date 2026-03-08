@@ -1,0 +1,60 @@
+{
+  "network": "bsc-mainnet",
+  "chainId": 56,
+  "deployedAt": "TBD",
+  "note": "Fill in addresses after running DeployBSCMainnet.s.sol",
+  "contracts": {
+    "TokenFactory": {
+      "address": "",
+      "deployer": ""
+    },
+    "Settlement": {
+      "address": "",
+      "deployer": ""
+    },
+    "SettlementV2": {
+      "address": "",
+      "deployer": ""
+    },
+    "PriceFeed": {
+      "address": "",
+      "deployer": ""
+    },
+    "PositionManager": {
+      "address": "",
+      "deployer": ""
+    },
+    "Vault": {
+      "address": "",
+      "deployer": ""
+    },
+    "PerpVault": {
+      "address": "",
+      "deployer": ""
+    },
+    "InsuranceFund": {
+      "address": "",
+      "deployer": ""
+    },
+    "ContractRegistry": {
+      "address": "",
+      "deployer": ""
+    },
+    "FundingRate": {
+      "address": "",
+      "deployer": ""
+    },
+    "Liquidation": {
+      "address": "",
+      "deployer": ""
+    },
+    "RiskManager": {
+      "address": "",
+      "deployer": ""
+    }
+  },
+  "tokens": {
+    "WBNB": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
+  },
+  "explorer": "https://bscscan.com"
+}

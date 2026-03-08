@@ -29,7 +29,7 @@ import db, {
   type SettlementLog,
   type MarketStats,
 } from "./database";
-import { connectRedis as connectNewRedis, disconnectRedis, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, NonceRepo, InsuranceFundRepo, SettlementLogRepo as RedisSettlementLogRepo, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
+import { connectRedis as connectNewRedis, disconnectRedis, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, NonceRepo, InsuranceFundRepo, ReferralRepo, SettlementLogRepo as RedisSettlementLogRepo, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
 // P1-5: PostgreSQL 订单镜像 (Write-Through Cache)
 import { connectPostgres, disconnectPostgres, isPostgresConnected, OrderMirrorRepo, type PgOrderMirror } from "./database/postgres";
 // P2-4: 仓位大小限制常量
@@ -77,15 +77,16 @@ import {
 
 const PORT = parseInt(process.env.PORT || "8081");
 const RPC_URL = process.env.RPC_URL || "https://bsc-dataseed.binance.org/";
-const WSS_URL = process.env.WSS_URL || "wss://bsc-testnet-rpc.publicnode.com";
+const WSS_URL = process.env.WSS_URL || "wss://bsc-rpc.publicnode.com";
 const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
 const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
 const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address; // dYdX v3 style Merkle withdrawal contract
-const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8") as Address;
-const PRICE_FEED_ADDRESS = (process.env.PRICE_FEED_ADDRESS || "0x8A57904F9b9392dAB4163a6c372Df1c4Cdd1eb36") as Address;
-const LENDING_POOL_ADDRESS_LOCAL = (process.env.LENDING_POOL_ADDRESS || "0x7Ddb15B5E680D8a74FE44958d18387Bb3999C633") as Address;
-const LIQUIDATION_ADDRESS_LOCAL = (process.env.LIQUIDATION_ADDRESS || "0x80c720F87cd061B5952d1d84Ce900aa91CBB167B") as Address;
-const PERP_VAULT_ADDRESS_LOCAL = (process.env.PERP_VAULT_ADDRESS || "") as Address;
+// All contract addresses loaded from env vars (no fallbacks — fail fast via config.ts validation)
+const TOKEN_FACTORY_ADDRESS = process.env.TOKEN_FACTORY_ADDRESS as Address;
+const PRICE_FEED_ADDRESS = process.env.PRICE_FEED_ADDRESS as Address;
+const LENDING_POOL_ADDRESS_LOCAL = process.env.LENDING_POOL_ADDRESS as Address;
+const LIQUIDATION_ADDRESS_LOCAL = process.env.LIQUIDATION_ADDRESS as Address;
+const PERP_VAULT_ADDRESS_LOCAL = process.env.PERP_VAULT_ADDRESS as Address;
 const BATCH_INTERVAL_MS = parseInt(process.env.BATCH_INTERVAL_MS || "30000"); // 30 seconds
 const FUNDING_RATE_INTERVAL_MS = parseInt(process.env.FUNDING_RATE_INTERVAL_MS || "5000"); // 5 seconds
 const SPOT_PRICE_SYNC_INTERVAL_MS = parseInt(process.env.SPOT_PRICE_SYNC_INTERVAL_MS || "3000"); // 3 seconds (multicall batches all tokens)
@@ -96,13 +97,18 @@ if (process.env.NODE_ENV === "production" && process.env.SKIP_SIGNATURE_VERIFY =
   console.error("🚨 FATAL: SKIP_SIGNATURE_VERIFY=true is FORBIDDEN in production! Aborting.");
   process.exit(1);
 }
-const FEE_RECEIVER_ADDRESS = (process.env.FEE_RECEIVER_ADDRESS || "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE").toLowerCase() as Address; // 平台手续费接收钱包
+const FEE_RECEIVER_ADDRESS = (process.env.FEE_RECEIVER_ADDRESS || "").toLowerCase() as Address; // 平台手续费接收钱包 (validated in config.ts)
 
 // P2-57: 生产环境必须显式配置所有合约地址，禁止使用 localhost 默认值
+// NOTE: config.ts now has comprehensive startup validation for ALL contract addresses.
+// This block provides an additional safety net for server.ts-specific local variables.
 if (process.env.NODE_ENV === "production") {
   const requiredEnvVars = [
     "MATCHER_PRIVATE_KEY", "SETTLEMENT_ADDRESS", "TOKEN_FACTORY_ADDRESS",
     "PRICE_FEED_ADDRESS", "RPC_URL", "FEE_RECEIVER_ADDRESS",
+    "SETTLEMENT_V2_ADDRESS", "PERP_VAULT_ADDRESS", "COLLATERAL_TOKEN_ADDRESS",
+    "INSURANCE_FUND_ADDRESS", "VAULT_ADDRESS", "POSITION_MANAGER_ADDRESS",
+    "FUNDING_RATE_ADDRESS", "LIQUIDATION_ADDRESS", "LENDING_POOL_ADDRESS",
   ];
   const missing = requiredEnvVars.filter((key) => !process.env[key]);
   if (missing.length > 0) {
@@ -186,7 +192,7 @@ function evictOldest<K, V>(map: Map<K, V>, maxSize: number): void {
 const EIP712_DOMAIN = {
   name: "MemePerp",
   version: "1",
-  chainId: 56, // BSC Mainnet
+  chainId: CONFIG_CHAIN_ID, // BSC — reads from env CHAIN_ID (default 56)
   verifyingContract: SETTLEMENT_ADDRESS,
 };
 
@@ -3549,6 +3555,14 @@ function registerAsReferrer(address: Address): Referrer | { error: string } {
   referrers.set(normalizedAddress, referrer);
   referralCodes.set(code, normalizedAddress);
 
+  // 持久化到 Redis (异步，不阻塞)
+  ReferralRepo.saveReferrer(referrer).catch(e =>
+    console.error(`[Referral] Failed to persist referrer: ${e}`)
+  );
+  ReferralRepo.saveCode(code, normalizedAddress).catch(e =>
+    console.error(`[Referral] Failed to persist code: ${e}`)
+  );
+
   console.log(`[Referral] Registered referrer ${normalizedAddress.slice(0, 10)} with code ${code}`);
 
   return referrer;
@@ -3616,6 +3630,22 @@ function bindReferral(
   }
 
   console.log(`[Referral] ${normalizedAddress.slice(0, 10)} bound to referrer ${referrerAddress.slice(0, 10)} (code: ${upperCode})`);
+
+  // 持久化到 Redis (异步，不阻塞)
+  ReferralRepo.saveReferee(referee).catch(e =>
+    console.error(`[Referral] Failed to persist referee: ${e}`)
+  );
+  ReferralRepo.saveReferrer(referrer).catch(e =>
+    console.error(`[Referral] Failed to persist referrer (L1 update): ${e}`)
+  );
+  if (level2Referrer) {
+    const l2Data = referrers.get(level2Referrer);
+    if (l2Data) {
+      ReferralRepo.saveReferrer(l2Data).catch(e =>
+        console.error(`[Referral] Failed to persist referrer (L2 update): ${e}`)
+      );
+    }
+  }
 
   broadcastReferralBound(normalizedAddress, referrerAddress, upperCode);
 
@@ -3721,15 +3751,34 @@ function processTradeCommission(
   if (referralCommissions.length > 10000) {
     referralCommissions.splice(0, referralCommissions.length - 10000);
   }
+
+  // 持久化推荐人和被邀请人到 Redis (异步，不阻塞交易路径)
+  const l1Ref = referrers.get(referee.referrer);
+  if (l1Ref) {
+    ReferralRepo.saveReferrer(l1Ref).catch(e =>
+      console.error(`[Referral] Failed to persist L1 referrer after commission: ${e}`)
+    );
+  }
+  if (referee.level2Referrer) {
+    const l2Ref = referrers.get(referee.level2Referrer);
+    if (l2Ref) {
+      ReferralRepo.saveReferrer(l2Ref).catch(e =>
+        console.error(`[Referral] Failed to persist L2 referrer after commission: ${e}`)
+      );
+    }
+  }
+  ReferralRepo.saveReferee(referee).catch(e =>
+    console.error(`[Referral] Failed to persist referee after commission: ${e}`)
+  );
 }
 
 /**
  * 提取返佣
  */
-function withdrawCommission(
+async function withdrawCommission(
   referrerAddress: Address,
   amount?: bigint
-): { success: boolean; withdrawnAmount?: bigint; error?: string } {
+): Promise<{ success: boolean; withdrawnAmount?: bigint; error?: string }> {
   const normalizedAddress = referrerAddress.toLowerCase() as Address;
   const referrer = referrers.get(normalizedAddress);
 
@@ -3754,20 +3803,37 @@ function withdrawCommission(
     };
   }
 
+  // CR-2: 原子化 — 先保存快照用于回滚
+  const prevPending = referrer.pendingEarnings;
+  const prevWithdrawn = referrer.withdrawnEarnings;
+  const prevUpdatedAt = referrer.updatedAt;
+
   // 扣除待提取，增加已提取
   referrer.pendingEarnings -= withdrawAmount;
   referrer.withdrawnEarnings += withdrawAmount;
   referrer.updatedAt = Date.now();
 
-  // TODO: 实际转账逻辑 — 当前仅更新内存状态
-  // 正式上线后应调用 SettlementV2.depositFor(referrer, amount) 或直接 addMode2Adjustment
-  // P3-P5: 明确标记此功能为 MVP stub，不做真实资金转移
-  console.warn(`[Referral] ⚠️ STUB: Commission withdrawal is in-memory only, no on-chain transfer`);
-  console.log(`[Referral] Withdrawal: ${normalizedAddress.slice(0, 10)} withdrew $${Number(withdrawAmount) / 1e18}`);
+  try {
+    // ✅ 实际转账: 从平台手续费钱包扣除，转入推荐人可用余额
+    // addMode2Adjustment 已有 Redis 持久化 (Mode2AdjustmentRepo.save)
+    addMode2Adjustment(FEE_RECEIVER_ADDRESS, -withdrawAmount, "REFERRAL_PAYOUT");
+    addMode2Adjustment(normalizedAddress, withdrawAmount, "REFERRAL_PAYOUT");
+    console.log(`[Referral] ✅ Payout: ${normalizedAddress.slice(0, 10)} received Ξ${Number(withdrawAmount) / 1e18} from platform fee wallet`);
 
-  broadcastCommissionWithdrawn(normalizedAddress, withdrawAmount);
+    // 持久化推荐人数据 — await 确保写入成功
+    await ReferralRepo.saveReferrer(referrer);
 
-  return { success: true, withdrawnAmount };
+    broadcastCommissionWithdrawn(normalizedAddress, withdrawAmount);
+
+    return { success: true, withdrawnAmount };
+  } catch (e) {
+    // 回滚内存状态
+    referrer.pendingEarnings = prevPending;
+    referrer.withdrawnEarnings = prevWithdrawn;
+    referrer.updatedAt = prevUpdatedAt;
+    console.error(`[Referral] ❌ Withdrawal failed, rolled back: ${e}`);
+    return { success: false, error: "Withdrawal failed, please retry" };
+  }
 }
 
 /**
@@ -3845,13 +3911,29 @@ function getReferralLeaderboard(limit: number = 20): {
     }));
 }
 
-// 推荐系统广播函数
+// 推荐系统私发函数 (H-4: 改用 wsTraderClients 发送给目标用户，不广播)
+function sendToTrader(trader: Address, type: string, data: Record<string, unknown>): void {
+  const normalized = trader.toLowerCase() as Address;
+  const wsSet = wsTraderClients.get(normalized);
+  if (wsSet) {
+    const message = JSON.stringify({ type, ...data, timestamp: Date.now() });
+    for (const client of wsSet) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    }
+  }
+}
+
 function broadcastReferralBound(referee: Address, referrer: Address, code: string): void {
-  broadcast("referral_bound", { referee, referrer, code });
+  // 只通知被邀请人和推荐人，不广播给全部用户
+  sendToTrader(referee, "referral_bound", { referee, referrer, code });
+  sendToTrader(referrer, "referral_bound", { referee, referrer, code });
 }
 
 function broadcastCommissionEarned(referrer: Address, amount: bigint, level: number, from: Address): void {
-  broadcast("commission_earned", {
+  // H-4: 只通知推荐人自己，不泄露佣金信息给其他用户
+  sendToTrader(referrer, "commission_earned", {
     referrer,
     amount: amount.toString(),
     level,
@@ -3924,7 +4006,8 @@ async function handleGetMarketTrades(instId: string, limit: number): Promise<Res
 }
 
 function broadcastCommissionWithdrawn(referrer: Address, amount: bigint): void {
-  broadcast("commission_withdrawn", {
+  // H-4: 只通知推荐人自己，不泄露提现信息给其他用户
+  sendToTrader(referrer, "commission_withdrawn", {
     referrer,
     amount: amount.toString(),
     display: `$${(Number(amount) / 1e18).toFixed(2)}`,
@@ -6319,6 +6402,52 @@ function incrementUserNonce(trader: Address): void {
 }
 
 // ============================================================
+// Reduce-Only Order Validation
+// ============================================================
+
+/**
+ * Validate a reduce-only order against the trader's existing positions.
+ * A reduce-only order must:
+ * 1. Have an existing position in the OPPOSITE direction (reduce-only closes positions)
+ * 2. Not exceed the current position size
+ */
+function validateReduceOnlyOrder(
+  trader: Address,
+  token: Address,
+  isLong: boolean,
+  size: bigint
+): { valid: boolean; reason?: string } {
+  const normalizedTrader = trader.toLowerCase() as Address;
+  const positions = userPositions.get(normalizedTrader) || [];
+
+  // Find position for this token in the OPPOSITE direction
+  // A reduce-only LONG order closes an existing SHORT, and vice versa
+  const existingPosition = positions.find(
+    (p) =>
+      p.token.toLowerCase() === token.toLowerCase() &&
+      p.isLong !== isLong &&
+      BigInt(p.size) > 0n
+  );
+
+  if (!existingPosition) {
+    return {
+      valid: false,
+      reason: "No open position to reduce. Reduce-only orders require an existing position in the opposite direction.",
+    };
+  }
+
+  const positionSize = BigInt(existingPosition.size);
+  if (size > positionSize) {
+    return {
+      valid: false,
+      reason: `Reduce-only size (${size}) exceeds position size (${positionSize}). Maximum reduce size: ${positionSize}`,
+    };
+  }
+
+  return { valid: true };
+}
+
+// ============================================================
 // API Handlers
 // ============================================================
 
@@ -6886,6 +7015,20 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     const normalizedTraderAddr = (trader as string).toLowerCase() as Address;
     await syncUserBalanceFromChain(normalizedTraderAddr);
     broadcastBalanceUpdate(normalizedTraderAddr);
+
+    // H-4: 对手方余额也需要刷新 (成交后对手方仓位/保证金已变)
+    if (matches.length > 0) {
+      const counterparties = new Set<Address>();
+      for (const m of matches) {
+        const cp = (order.isLong ? m.shortOrder.trader : m.longOrder.trader).toLowerCase() as Address;
+        if (cp !== normalizedTraderAddr) {
+          counterparties.add(cp);
+        }
+      }
+      for (const cp of counterparties) {
+        broadcastBalanceUpdate(cp);
+      }
+    }
 
     return jsonResponse({
       success: true,
@@ -10164,22 +10307,36 @@ async function handleGetCommissions(req: Request): Promise<Response> {
 async function handleWithdrawCommission(req: Request): Promise<Response> {
   try {
     const body = await req.json();
-    const { address, amount } = body;
+    const { address, amount, signature } = body;
 
     if (!address) {
       return errorResponse("Missing address");
     }
 
-    const result = withdrawCommission(
-      address as Address,
-      amount ? BigInt(amount) : undefined
+    const normalizedAddress = (address as string).toLowerCase() as Address;
+
+    // CR-1: 鉴权 — 验证提现请求确实来自钱包持有者
+    const withdrawAmount = amount ? BigInt(amount) : undefined;
+    const withdrawMessage = `Withdraw commission${withdrawAmount ? ` ${withdrawAmount}` : ""} for ${normalizedAddress}`;
+    const auth = await verifyTraderSignature(address, signature, withdrawMessage);
+    if (!auth.valid) {
+      return errorResponse(auth.error || "Authentication failed", 401);
+    }
+
+    // CR-2: withLock 防止并发提现导致双倍支付
+    const result = await withLock(
+      `referral:withdraw:${normalizedAddress}`,
+      15000,
+      async () => {
+        return withdrawCommission(normalizedAddress, withdrawAmount);
+      }
     );
 
     if (!result.success) {
       return errorResponse(result.error || "Failed to withdraw");
     }
 
-    const referrer = getReferrerInfo(address as Address);
+    const referrer = getReferrerInfo(normalizedAddress);
 
     return jsonResponse({
       success: true,
@@ -10502,8 +10659,13 @@ async function handleRequest(req: Request): Promise<Response> {
     });
   }
 
-  // Redis status check
+  // Redis status check (internal only)
   if (path === "/api/redis/status") {
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    const providedKey = req.headers.get("x-api-key");
+    if (!expectedKey || providedKey !== expectedKey) {
+      return errorResponse("Unauthorized", 401);
+    }
     const connected = db.isConnected();
     const positionCount = await PositionRepo.getAll().then(p => p.length).catch(() => 0);
     return jsonResponse({
@@ -10513,8 +10675,13 @@ async function handleRequest(req: Request): Promise<Response> {
     });
   }
 
-  // Test Redis write (for debugging)
+  // Test Redis write (internal only, for debugging)
   if (path === "/api/redis/test" && method === "POST") {
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    const providedKey = req.headers.get("x-api-key");
+    if (!expectedKey || providedKey !== expectedKey) {
+      return errorResponse("Unauthorized", 401);
+    }
     if (!db.isConnected()) {
       return errorResponse("Redis not connected");
     }
@@ -10727,7 +10894,7 @@ async function handleRequest(req: Request): Promise<Response> {
   if (path === "/api/v1/market/mark-price" && method === "GET") {
     const instId = url.searchParams.get("instId");
     // 如果没有指定 instId，返回所有代币的标记价格
-    const tokens = instId ? [instId.split("-")[0] as Address] : Array.from(engine.getOrderBooks().keys());
+    const tokens = instId ? [instId.split("-")[0] as Address] : engine.getSupportedTokens();
     const markPrices = tokens.map(token => {
       const ob = engine.getOrderBook(token);
       const currentPrice = ob.getCurrentPrice();
@@ -10760,9 +10927,9 @@ async function handleRequest(req: Request): Promise<Response> {
 
       // 鉴权: 只允许用户同步自己的余额
       if (signature && authNonce !== undefined && authDeadline) {
-        const authResult = await verifyAuthSignature(normalizedTrader, signature, BigInt(authNonce), Number(authDeadline));
+        const authResult = await verifyAuthSignature(normalizedTrader, BigInt(authNonce), BigInt(authDeadline), signature as Hex);
         if (!authResult.valid) {
-          return errorResponse(`Authentication failed: ${authResult.reason}`, 401);
+          return errorResponse(`Authentication failed: ${authResult.error}`, 401);
         }
       } else {
         return errorResponse("Authentication required: signature, authNonce, authDeadline", 401);
@@ -10796,74 +10963,77 @@ async function handleRequest(req: Request): Promise<Response> {
       // ═══════════════════════════════════════════════════════════
       // V2 Path: SettlementV2 Merkle proof withdrawal
       // Returns authorization data for frontend to submit on-chain
+      // H-6: withLock prevents concurrent withdrawal requests from double-spending
       // ═══════════════════════════════════════════════════════════
       if (SETTLEMENT_V2_ADDRESS) {
-        // 1. Check pending orders locked margin
-        let pendingOrdersLocked = 0n;
-        const userOrders = engine.getUserOrders(normalizedTrader);
-        for (const order of userOrders) {
-          if (order.status === "PENDING" || order.status === "PARTIALLY_FILLED") {
-            const marginInfo = orderMarginInfos.get(order.id);
-            if (marginInfo) {
-              const unfilledRatio = marginInfo.totalSize > 0n
-                ? ((marginInfo.totalSize - marginInfo.settledSize) * 10000n) / marginInfo.totalSize
-                : 10000n;
-              pendingOrdersLocked += (marginInfo.totalDeducted * unfilledRatio) / 10000n;
+        return withLock(`v2:withdraw:${normalizedTrader}`, 15000, async () => {
+          // 1. Check pending orders locked margin
+          let pendingOrdersLocked = 0n;
+          const userOrders = engine.getUserOrders(normalizedTrader);
+          for (const order of userOrders) {
+            if (order.status === "PENDING" || order.status === "PARTIALLY_FILLED") {
+              const marginInfo = orderMarginInfos.get(order.id);
+              if (marginInfo) {
+                const unfilledRatio = marginInfo.totalSize > 0n
+                  ? ((marginInfo.totalSize - marginInfo.settledSize) * 10000n) / marginInfo.totalSize
+                  : 10000n;
+                pendingOrdersLocked += (marginInfo.totalDeducted * unfilledRatio) / 10000n;
+              }
             }
           }
-        }
 
-        // 2. Check position margin
-        const posMargin = (userPositions.get(normalizedTrader) || []).reduce(
-          (sum, p) => sum + BigInt(p.collateral || "0"), 0n
-        );
-
-        // 3. Get user equity from Merkle snapshot
-        const proof = getUserProof(normalizedTrader);
-        if (!proof) {
-          return errorResponse("No Merkle snapshot available. Please wait for the next snapshot cycle (~1 minute).");
-        }
-
-        // 4. Validate withdrawable amount
-        const availableEquity = proof.equity - pendingOrdersLocked - posMargin;
-        if (withdrawAmount > availableEquity) {
-          return errorResponse(
-            `提取金额超出可用余额。可提取: Ξ${Number(availableEquity > 0n ? availableEquity : 0n) / 1e18}, ` +
-            `挂单锁定: Ξ${Number(pendingOrdersLocked) / 1e18}, ` +
-            `仓位保证金: Ξ${Number(posMargin) / 1e18}`
+          // 2. Check position margin
+          const posMargin = (userPositions.get(normalizedTrader) || []).reduce(
+            (sum, p) => sum + BigInt(p.collateral || "0"), 0n
           );
-        }
 
-        // 5. Generate Merkle proof + EIP-712 signature
-        const result = await requestWithdrawal(normalizedTrader, withdrawAmount);
-        if (!result.success) {
-          return errorResponse(result.error || "Withdrawal authorization failed");
-        }
+          // 3. Get user equity from Merkle snapshot
+          const proof = getUserProof(normalizedTrader);
+          if (!proof) {
+            return errorResponse("No Merkle snapshot available. Please wait for the next snapshot cycle (~1 hour).");
+          }
 
-        // AUDIT-FIX ME-C15: 预扣提款金额，防止双重提款
-        // 用户余额在链上提款确认前先减少，防止用同一余额多次请求提款
-        const withdrawBalance = getUserBalance(normalizedTrader);
-        if (withdrawBalance.availableBalance >= withdrawAmount) {
-          withdrawBalance.availableBalance -= withdrawAmount;
-        } else {
-          // 如果 availableBalance 不足但 equity 校验通过，说明 mode2Adj 有余额
-          // 仍然预扣以防双重提款
-          withdrawBalance.availableBalance = 0n;
-        }
-        withdrawBalance.totalBalance = withdrawBalance.availableBalance + (withdrawBalance.usedMargin || 0n);
+          // 4. Validate withdrawable amount
+          const availableEquity = proof.equity - pendingOrdersLocked - posMargin;
+          if (withdrawAmount > availableEquity) {
+            return errorResponse(
+              `提取金额超出可用余额。可提取: Ξ${Number(availableEquity > 0n ? availableEquity : 0n) / 1e18}, ` +
+              `挂单锁定: Ξ${Number(pendingOrdersLocked) / 1e18}, ` +
+              `仓位保证金: Ξ${Number(posMargin) / 1e18}`
+            );
+          }
 
-        console.log(`[Withdraw:V2] ${normalizedTrader.slice(0, 10)} authorized Ξ${Number(withdrawAmount) / 1e18} withdrawal (balance pre-deducted)`);
+          // 5. Generate Merkle proof + EIP-712 signature
+          const result = await requestWithdrawal(normalizedTrader, withdrawAmount);
+          if (!result.success) {
+            return errorResponse(result.error || "Withdrawal authorization failed");
+          }
 
-        // 6. Return authorization for frontend to submit on-chain
-        // Frontend calls SettlementV2.withdraw(amount, userEquity, proof, deadline, sig)
-        return jsonResponse({
-          success: true,
-          authorization: {
-            userEquity: proof.equity.toString(),
-            merkleProof: result.authorization!.merkleProof,
-            deadline: result.authorization!.deadline.toString(),
-            signature: result.authorization!.signature,
-          },
+          // AUDIT-FIX ME-C15: 预扣提款金额，防止双重提款
+          // 用户余额在链上提款确认前先减少，防止用同一余额多次请求提款
+          const withdrawBalance = getUserBalance(normalizedTrader);
+          if (withdrawBalance.availableBalance >= withdrawAmount) {
+            withdrawBalance.availableBalance -= withdrawAmount;
+          } else {
+            // 如果 availableBalance 不足但 equity 校验通过，说明 mode2Adj 有余额
+            // 仍然预扣以防双重提款
+            withdrawBalance.availableBalance = 0n;
+          }
+          withdrawBalance.totalBalance = withdrawBalance.availableBalance + (withdrawBalance.usedMargin || 0n);
+
+          console.log(`[Withdraw:V2] ${normalizedTrader.slice(0, 10)} authorized Ξ${Number(withdrawAmount) / 1e18} withdrawal (balance pre-deducted)`);
+
+          // 6. Return authorization for frontend to submit on-chain
+          // Frontend calls SettlementV2.withdraw(amount, userEquity, proof, deadline, sig)
+          return jsonResponse({
+            success: true,
+            authorization: {
+              userEquity: proof.equity.toString(),
+              merkleProof: result.authorization!.merkleProof,
+              deadline: result.authorization!.deadline.toString(),
+              signature: result.authorization!.signature,
+            },
+          });
         });
       }
 
@@ -11368,42 +11538,63 @@ async function handleRequest(req: Request): Promise<Response> {
   // ============================================================
 
   // 获取现货交易历史
+  // C-5: try-catch 保护 — ./api/handlers 模块可能不存在 (仅永续部署时)
   if (path.match(/^\/api\/v1\/spot\/trades\/0x[a-fA-F0-9]+$/) && method === "GET") {
-    const token = path.split("/")[5] as Address;
-    const limit = parseInt(url.searchParams.get("limit") || "100");
-    const before = url.searchParams.get("before") ? parseInt(url.searchParams.get("before")!) : undefined;
-    const { handleGetSpotTrades } = await import("./api/handlers");
-    const result = await handleGetSpotTrades(token, limit, before);
-    return jsonResponse(result);
+    try {
+      const token = path.split("/")[5] as Address;
+      const limit = parseInt(url.searchParams.get("limit") || "100");
+      const before = url.searchParams.get("before") ? parseInt(url.searchParams.get("before")!) : undefined;
+      const { handleGetSpotTrades } = await import("./api/handlers");
+      const result = await handleGetSpotTrades(token, limit, before);
+      return jsonResponse(result);
+    } catch (e) {
+      console.warn("[Spot API] handlers module unavailable for /spot/trades:", (e as Error).message);
+      return jsonResponse({ success: false, error: "Spot trading API not available" }, 503);
+    }
   }
 
   // 获取现货 K 线数据
   if (path.match(/^\/api\/v1\/spot\/klines\/0x[a-fA-F0-9]+$/) && method === "GET") {
-    const token = path.split("/")[5] as Address;
-    const resolution = url.searchParams.get("resolution") || "1m";
-    const from = parseInt(url.searchParams.get("from") || "0");
-    const to = parseInt(url.searchParams.get("to") || Math.floor(Date.now() / 1000).toString());
-    const { handleGetKlines: handleGetSpotKlines } = await import("./api/handlers");
-    const result = await handleGetSpotKlines(token, resolution, from, to);
-    return jsonResponse(result);
+    try {
+      const token = path.split("/")[5] as Address;
+      const resolution = url.searchParams.get("resolution") || "1m";
+      const from = parseInt(url.searchParams.get("from") || "0");
+      const to = parseInt(url.searchParams.get("to") || Math.floor(Date.now() / 1000).toString());
+      const { handleGetKlines: handleGetSpotKlines } = await import("./api/handlers");
+      const result = await handleGetSpotKlines(token, resolution, from, to);
+      return jsonResponse(result);
+    } catch (e) {
+      console.warn("[Spot API] handlers module unavailable for /spot/klines:", (e as Error).message);
+      return jsonResponse({ success: false, error: "Spot trading API not available" }, 503);
+    }
   }
 
   // 获取最新 K 线数据 (简化接口)
   if (path.match(/^\/api\/v1\/spot\/klines\/latest\/0x[a-fA-F0-9]+$/) && method === "GET") {
-    const token = path.split("/")[6] as Address;
-    const resolution = url.searchParams.get("resolution") || "1m";
-    const limit = parseInt(url.searchParams.get("limit") || "100");
-    const { handleGetLatestKlines } = await import("./api/handlers");
-    const result = await handleGetLatestKlines(token, resolution, limit);
-    return jsonResponse(result);
+    try {
+      const token = path.split("/")[6] as Address;
+      const resolution = url.searchParams.get("resolution") || "1m";
+      const limit = parseInt(url.searchParams.get("limit") || "100");
+      const { handleGetLatestKlines } = await import("./api/handlers");
+      const result = await handleGetLatestKlines(token, resolution, limit);
+      return jsonResponse(result);
+    } catch (e) {
+      console.warn("[Spot API] handlers module unavailable for /spot/klines/latest:", (e as Error).message);
+      return jsonResponse({ success: false, error: "Spot trading API not available" }, 503);
+    }
   }
 
   // 获取现货价格和 24h 统计
   if (path.match(/^\/api\/v1\/spot\/price\/0x[a-fA-F0-9]+$/) && method === "GET") {
-    const token = path.split("/")[5] as Address;
-    const { handleGetSpotPrice } = await import("./api/handlers");
-    const result = await handleGetSpotPrice(token);
-    return jsonResponse(result);
+    try {
+      const token = path.split("/")[5] as Address;
+      const { handleGetSpotPrice } = await import("./api/handlers");
+      const result = await handleGetSpotPrice(token);
+      return jsonResponse(result);
+    } catch (e) {
+      console.warn("[Spot API] handlers module unavailable for /spot/price:", (e as Error).message);
+      return jsonResponse({ success: false, error: "Spot trading API not available" }, 503);
+    }
   }
 
   // 回填历史交易数据 (管理员)
@@ -12734,6 +12925,67 @@ async function startServer(): Promise<void> {
       console.log(`[Server] Restored insurance fund from Redis: global=$${globalBal.toFixed(4)}, ${savedTokenFunds.size} token funds`);
     } catch (e) {
       console.error("[Server] Failed to restore insurance fund:", e);
+    }
+
+    // H-6: 从 Redis 恢复推荐系统数据 — 逐条 try-catch，一条坏数据不影响其余
+    {
+      let referrerOk = 0, referrerFail = 0, refereeOk = 0, refereeFail = 0;
+      try {
+        const savedReferrers = await ReferralRepo.getAllReferrers();
+        for (const [addr, data] of savedReferrers) {
+          try {
+            const referrer: Referrer = {
+              address: addr as Address,
+              code: data.code,
+              level1Referrals: JSON.parse(data.level1Referrals || "[]"),
+              level2Referrals: JSON.parse(data.level2Referrals || "[]"),
+              totalEarnings: BigInt(data.totalEarnings || "0"),
+              pendingEarnings: BigInt(data.pendingEarnings || "0"),
+              withdrawnEarnings: BigInt(data.withdrawnEarnings || "0"),
+              level1Earnings: BigInt(data.level1Earnings || "0"),
+              level2Earnings: BigInt(data.level2Earnings || "0"),
+              totalTradesReferred: parseInt(data.totalTradesReferred || "0"),
+              totalVolumeReferred: BigInt(data.totalVolumeReferred || "0"),
+              createdAt: parseInt(data.createdAt || "0"),
+              updatedAt: parseInt(data.updatedAt || "0"),
+            };
+            referrers.set(addr as Address, referrer);
+            referralCodes.set(referrer.code, addr as Address);
+            referrerOk++;
+          } catch (e) {
+            referrerFail++;
+            console.error(`[Server] Failed to restore referrer ${addr.slice(0, 10)}:`, e);
+          }
+        }
+      } catch (e) {
+        console.error("[Server] Failed to fetch referrers from Redis:", e);
+      }
+
+      try {
+        const savedReferees = await ReferralRepo.getAllReferees();
+        for (const [addr, data] of savedReferees) {
+          try {
+            const referee: Referee = {
+              address: addr as Address,
+              referrerCode: data.referrerCode,
+              referrer: data.referrer as Address,
+              level2Referrer: data.level2Referrer ? data.level2Referrer as Address : null,
+              totalFeesPaid: BigInt(data.totalFeesPaid || "0"),
+              totalCommissionGenerated: BigInt(data.totalCommissionGenerated || "0"),
+              joinedAt: parseInt(data.joinedAt || "0"),
+            };
+            referees.set(addr as Address, referee);
+            refereeOk++;
+          } catch (e) {
+            refereeFail++;
+            console.error(`[Server] Failed to restore referee ${addr.slice(0, 10)}:`, e);
+          }
+        }
+      } catch (e) {
+        console.error("[Server] Failed to fetch referees from Redis:", e);
+      }
+
+      console.log(`[Server] Restored referral data: ${referrerOk} referrers (${referrerFail} failed), ${refereeOk} referees (${refereeFail} failed), ${referralCodes.size} codes`);
     }
   } else {
     console.warn("[Server] Redis connection failed, using in-memory storage only");

@@ -20,18 +20,44 @@ export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "56"); // BSC Mainnet
 export const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
 export const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
 export const INSURANCE_FUND_ADDRESS = process.env.INSURANCE_FUND_ADDRESS as Address;
-export const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb") as Address;
-export const PRICE_FEED_ADDRESS = (process.env.PRICE_FEED_ADDRESS || "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48") as Address;
-export const VAULT_ADDRESS = (process.env.VAULT_ADDRESS || "0xACE7014F60eF9c367E7fA5Dd80601A9945E6F4d1") as Address;
-export const POSITION_MANAGER_ADDRESS = (process.env.POSITION_MANAGER_ADDRESS || "0x04C515CcFac80BFFF27E0c5A9113e515171057b6") as Address;
-export const FUNDING_RATE_ADDRESS = (process.env.FUNDING_RATE_ADDRESS || "0x0a513bf3DE079Bf2439A5884583712bD014487aa") as Address;
-export const LIQUIDATION_ADDRESS = (process.env.LIQUIDATION_ADDRESS || "0x322AeeD67C12c10684B134e1727866425dc75F1c") as Address;
-export const LENDING_POOL_ADDRESS = (process.env.LENDING_POOL_ADDRESS || "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4") as Address;
-export const PERP_VAULT_ADDRESS = (process.env.PERP_VAULT_ADDRESS || "0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75") as Address;
-export const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address; // dYdX-style Merkle withdrawal contract
+// All contract addresses MUST be set via environment variables. No fallbacks — fail fast on missing config.
+export const TOKEN_FACTORY_ADDRESS = process.env.TOKEN_FACTORY_ADDRESS as Address;
+export const PRICE_FEED_ADDRESS = process.env.PRICE_FEED_ADDRESS as Address;
+export const VAULT_ADDRESS = process.env.VAULT_ADDRESS as Address;
+export const POSITION_MANAGER_ADDRESS = process.env.POSITION_MANAGER_ADDRESS as Address;
+export const FUNDING_RATE_ADDRESS = process.env.FUNDING_RATE_ADDRESS as Address;
+export const LIQUIDATION_ADDRESS = process.env.LIQUIDATION_ADDRESS as Address;
+export const LENDING_POOL_ADDRESS = process.env.LENDING_POOL_ADDRESS as Address;
+export const PERP_VAULT_ADDRESS = process.env.PERP_VAULT_ADDRESS as Address;
+export const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address;
 export const COLLATERAL_TOKEN_ADDRESS = process.env.COLLATERAL_TOKEN_ADDRESS as Address;
-export const FEE_RECEIVER_ADDRESS = (process.env.FEE_RECEIVER_ADDRESS || "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE") as Address;
-export const LIQUIDATOR_BOT_ADDRESS = (process.env.LIQUIDATOR_BOT_ADDRESS || process.env.FEE_RECEIVER_ADDRESS || "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE") as Address;
+export const FEE_RECEIVER_ADDRESS = process.env.FEE_RECEIVER_ADDRESS as Address;
+export const LIQUIDATOR_BOT_ADDRESS = (process.env.LIQUIDATOR_BOT_ADDRESS || process.env.FEE_RECEIVER_ADDRESS) as Address;
+
+// Startup validation: crash immediately if any required contract address is missing
+const REQUIRED_CONTRACT_ADDRESSES: Record<string, Address | undefined> = {
+  TOKEN_FACTORY_ADDRESS,
+  PRICE_FEED_ADDRESS,
+  VAULT_ADDRESS,
+  POSITION_MANAGER_ADDRESS,
+  FUNDING_RATE_ADDRESS,
+  LIQUIDATION_ADDRESS,
+  LENDING_POOL_ADDRESS,
+  PERP_VAULT_ADDRESS,
+  SETTLEMENT_V2_ADDRESS,
+  COLLATERAL_TOKEN_ADDRESS,
+  FEE_RECEIVER_ADDRESS,
+  SETTLEMENT_ADDRESS,
+  INSURANCE_FUND_ADDRESS,
+};
+const missingAddresses = Object.entries(REQUIRED_CONTRACT_ADDRESSES)
+  .filter(([, v]) => !v)
+  .map(([k]) => k);
+if (missingAddresses.length > 0) {
+  console.error(`🚨 FATAL: Missing required contract address env vars: ${missingAddresses.join(", ")}`);
+  console.error("All contract addresses must be explicitly set. No fallback values allowed.");
+  process.exit(1);
+}
 
 // ============================================================
 // 时间间隔配置 (毫秒)

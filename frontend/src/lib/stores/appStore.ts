@@ -69,7 +69,7 @@ export interface AppState {
 }
 
 // 默认偏好设置
-const DEFAULT_PREFERENCES: UserPreferences = {
+export const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'dark',
   slippageTolerance: 0.5, // 0.5%
   transactionDeadline: 20, // 20分钟

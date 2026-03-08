@@ -74,7 +74,7 @@
       },
       "referral": {
         "title": "紹介リワード",
-        "desc": "友人を招待して取引し、最大 25% の手数料リベート。マルチティア紹介システム。"
+        "desc": "友人を招待して取引し、最大 30% の手数料リベート。2段階紹介システム。"
       },
       "matching": {
         "title": "ミリ秒未満マッチング",
@@ -630,7 +630,7 @@
   },
   "referral": {
     "title": "招待プログラム",
-    "subtitle": "友達を招待して取引し、最大25%のコミッションを獲得",
+    "subtitle": "友達を招待して取引し、最大30%のコミッションを獲得",
     "connectWalletTitle": "ウォレットを接続して開始",
     "connectWalletDesc": "ウォレットを接続して、あなた専用の招待コードとリンクを生成",
     "myInviteCode": "招待コード",
@@ -694,7 +694,7 @@
     "sellTrade": "売却",
     "claimedToWallet": "報酬をウォレットに請求しました",
     "viewOnExplorer": "トランザクションを表示",
-    "welcomeTitle": "DomainFiへようこそ",
+    "welcomeTitle": "MemePerpDEXへようこそ",
     "welcomeSubtitle": "友達から招待されました",
     "yourBenefits": "あなたの特典",
     "benefit1": "初回取引で割引手数料",
@@ -712,10 +712,10 @@
     "totalInvited": "招待人数",
     "totalRebate": "累計リベート",
     "monthlyRebate": "今月のリベート",
-    "currentLevel": "現在のレベル",
+    "currentLevel": "コミッション率",
     "personUnit": "人",
     "rebateSuffix": "リベート",
-    "rebateTierTitle": "リベートティア",
+    "rebateTierTitle": "コミッション規則",
     "upgradeHint": "アップグレード条件: {count}人招待で {level} に昇格",
     "tierLevelCol": "レベル",
     "inviteCountCol": "招待人数",
@@ -735,7 +735,12 @@
     "vip2Reward": "取引手数料10%オフ",
     "vip3Reward": "手数料20%オフ + 限定バッジ",
     "vip4Reward": "手数料30%オフ + エアドロップ優先",
-    "noDataPlaceholder": "--"
+    "noDataPlaceholder": "--",
+    "level1Label": "直接紹介",
+    "level1Desc": "あなたが直接招待した友達の取引手数料",
+    "level2Label": "間接紹介",
+    "level2Desc": "あなたの友達が招待した人の取引手数料",
+    "commissionExplainer": "直接招待した友達（レベル1）の取引手数料の30%を獲得できます。その友達が招待した人（レベル2）の取引手数料の10%も獲得できます。コミッションは自動的に蓄積され、いつでもウォレット残高に引き出せます。"
   },
   "exchange": {
     "title": "取引所",
@@ -812,7 +817,7 @@
     },
     "features": {
       "title": "なぜNamespaceウォレット？",
-      "subtitle": "Web3決済の未来のために構築。安全、直感的、DomainFiによって動作。",
+      "subtitle": "Web3決済の未来のために構築。安全、直感的、MemePerpDEXによって動作。",
       "domainAddress": {
         "title": "ドメインがアドレスに",
         "desc": "確認済みのどのドメインにも暗号通貨を送金できます。複雑なアドレスをコピー＆ペーストする必要はありません。spotify.comと入力するだけで送金。"
@@ -874,7 +879,7 @@
       "registerDomain": "ドメインを登録"
     },
     "footer": {
-      "copyright": "2024 DomainFi. All rights reserved."
+      "copyright": "2025 MemePerpDEX. All rights reserved."
     }
   },
   "walletManagement": {

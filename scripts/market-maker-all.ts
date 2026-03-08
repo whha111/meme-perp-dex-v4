@@ -27,31 +27,43 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { bscTestnet } from "viem/chains";
+import { bsc, bscTestnet } from "viem/chains";
 
 // ============================================================
-// Config
+// Config — All values from environment variables
 // ============================================================
 
-const RPC_URL = "https://sepolia.base.org";
-const API_URL = "http://localhost:8081";
-const CHAIN_ID = 97;
+const RPC_URL = process.env.RPC_URL || process.env.MEMEPERP_BLOCKCHAIN_RPC_URL || "https://bsc-dataseed.binance.org/";
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_MATCHING_ENGINE_URL || "http://localhost:8081";
+const CHAIN_ID = parseInt(process.env.CHAIN_ID || process.env.MEMEPERP_BLOCKCHAIN_CHAIN_ID || "56");
 
 // AUDIT-FIX DP-C01/C05: Deployer key from env (optional — can use pre-funded wallets)
 const DEPLOYER_KEY = (process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY) as Hex | undefined;
 // EIP-712 verifyingContract MUST match matching engine's SETTLEMENT_ADDRESS (V1)
-const SETTLEMENT = (process.env.SETTLEMENT_ADDRESS || "0x1660b3571fB04f16F70aea40ac0E908607061DBE") as Address;
-const SETTLEMENT_V2 = (process.env.SETTLEMENT_V2_ADDRESS || "0x733EccCf612F70621c772D63334Cf5606d7a7C75") as Address;
-const WETH_ADDRESS = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address; // BSC Testnet WBNB
-const TOKEN_FACTORY = (process.env.TOKEN_FACTORY_ADDRESS || "0x757eF02C2233b8cE2161EE65Fb7D626776b8CB73") as Address;
+const SETTLEMENT = process.env.SETTLEMENT_ADDRESS as Address;
+const SETTLEMENT_V2 = process.env.SETTLEMENT_V2_ADDRESS as Address;
+const WETH_ADDRESS = process.env.WETH_ADDRESS as Address; // WBNB: 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c (mainnet)
+const TOKEN_FACTORY = process.env.TOKEN_FACTORY_ADDRESS as Address;
 
-// Token addresses from the CURRENT TokenFactory deployment (2026-02-28 redeploy)
-// These must match TokenFactory.getAllTokens() so syncSpotPrices() keeps prices updated
-const TOKENS: [string, Address][] = [
-  ["DOGE", "0x1BC7c612e55b8CC8e24aA4041FAC3732d50C4C6F"],
-  ["PEPE", "0x0d0156063c5f805805d5324af69932FB790819D5"],
-  ["SHIB", "0x0724863BD88e1F4919c85294149ae87209E917Da"],
-];
+// Validate required env vars
+const requiredMM = { SETTLEMENT, SETTLEMENT_V2, WETH_ADDRESS, TOKEN_FACTORY };
+const missingMM = Object.entries(requiredMM).filter(([, v]) => !v).map(([k]) => k);
+if (missingMM.length > 0) {
+  console.error(`🚨 Missing required env vars for market maker: ${missingMM.join(", ")}`);
+  console.error("Set these in .env or pass them on the command line.");
+  process.exit(1);
+}
+
+// Token addresses — loaded dynamically from TokenFactory at startup
+// (populated in main() via fetchTokens, or override with MM_TOKENS env var)
+let TOKENS: [string, Address][] = [];
+const MM_TOKENS_ENV = process.env.MM_TOKENS; // Format: "DOGE:0x...,PEPE:0x...,SHIB:0x..."
+if (MM_TOKENS_ENV) {
+  TOKENS = MM_TOKENS_ENV.split(",").map((pair) => {
+    const [name, addr] = pair.split(":");
+    return [name, addr as Address];
+  });
+}
 
 // Pre-funded wallets from main-wallets.json (no deployer funding needed)
 const MAIN_WALLETS_PATH = resolve(import.meta.dir, "../backend/src/matching/main-wallets.json");
@@ -109,7 +121,7 @@ const LEV_PREC = 10000n;
 // ============================================================
 
 const transport = http(RPC_URL, { timeout: 30_000 });
-const pub = createPublicClient({ chain: bscTestnet, transport });
+const pub = createPublicClient({ chain: CHAIN_ID === 56 ? bsc : bscTestnet, transport });
 
 // ============================================================
 // Wallet
@@ -124,7 +136,7 @@ interface W {
 
 function mkW(key: Hex): W {
   const acc = privateKeyToAccount(key);
-  return { key, addr: acc.address, acc, cli: createWalletClient({ account: acc, chain: bscTestnet, transport }), nonce: -1, busy: false };
+  return { key, addr: acc.address, acc, cli: createWalletClient({ account: acc, chain: CHAIN_ID === 56 ? bsc : bscTestnet, transport }), nonce: -1, busy: false };
 }
 
 // Load pre-funded wallets sorted by balance (will be determined in setup)

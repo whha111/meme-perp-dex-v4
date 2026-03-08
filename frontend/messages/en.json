@@ -74,7 +74,7 @@
       },
       "referral": {
         "title": "Referral Rewards",
-        "desc": "Invite friends to trade, earn up to 25% fee rebate. Multi-tier referral system."
+        "desc": "Invite friends to trade, earn up to 30% fee rebate. Two-tier referral system."
       },
       "matching": {
         "title": "Sub-ms Matching",
@@ -645,7 +645,7 @@
   },
   "referral": {
     "title": "Referral Program",
-    "subtitle": "Invite friends to trade and earn up to 25% commission",
+    "subtitle": "Invite friends to trade and earn up to 30% commission",
     "connectWalletTitle": "Connect Wallet to Start",
     "connectWalletDesc": "Connect your wallet to generate your unique invite code and link",
     "myInviteCode": "My Invite Code",
@@ -709,7 +709,7 @@
     "sellTrade": "Sell",
     "claimedToWallet": "Rewards claimed to wallet",
     "viewOnExplorer": "View Transaction",
-    "welcomeTitle": "Welcome to DomainFi",
+    "welcomeTitle": "Welcome to MemePerpDEX",
     "welcomeSubtitle": "You've been invited by a friend",
     "yourBenefits": "Your Benefits",
     "benefit1": "Discounted trading fees on first trade",
@@ -727,10 +727,10 @@
     "totalInvited": "Total Invited",
     "totalRebate": "Total Rebate",
     "monthlyRebate": "Monthly Rebate",
-    "currentLevel": "Current Tier",
+    "currentLevel": "Commission Rate",
     "personUnit": "",
     "rebateSuffix": "rebate",
-    "rebateTierTitle": "Rebate Tiers",
+    "rebateTierTitle": "Commission Rules",
     "upgradeHint": "Upgrade: invite {count} people to reach {level}",
     "tierLevelCol": "Tier",
     "inviteCountCol": "Invites",
@@ -750,7 +750,12 @@
     "vip2Reward": "10% off trading fees",
     "vip3Reward": "20% off fees + exclusive badge",
     "vip4Reward": "30% off fees + airdrop priority",
-    "noDataPlaceholder": "--"
+    "noDataPlaceholder": "--",
+    "level1Label": "Direct Referral",
+    "level1Desc": "Trading fee from friends you directly invited",
+    "level2Label": "Indirect Referral",
+    "level2Desc": "Trading fee from friends invited by your referrals",
+    "commissionExplainer": "You earn 30% of trading fees from your direct invitees (Level 1). You also earn 10% from their invitees (Level 2). Commission accumulates automatically and can be withdrawn to your wallet balance at any time."
   },
   "exchange": {
     "title": "Exchange",
@@ -871,7 +876,7 @@
     },
     "features": {
       "title": "Why Namespace Wallet?",
-      "subtitle": "Built for the future of Web3 payments. Secure, intuitive, and powered by DomainFi.",
+      "subtitle": "Built for the future of Web3 payments. Secure, intuitive, and powered by MemePerpDEX.",
       "domainAddress": {
         "title": "Domain as Address",
         "desc": "Send crypto to any verified domain. No more copying and pasting complex addresses. Just type spotify.com and send."
@@ -933,7 +938,7 @@
       "registerDomain": "Register Your Domain"
     },
     "footer": {
-      "copyright": "2024 DomainFi. All rights reserved."
+      "copyright": "2025 MemePerpDEX. All rights reserved."
     }
   },
   "orderBook": {

@@ -236,8 +236,8 @@ export class OrderBook {
       if (a.price === 0n && b.price !== 0n) return -1;
       if (b.price === 0n && a.price !== 0n) return 1;
       // L-03 FIX: 使用 BigInt 比较替代 Number() 避免精度丢失
-      // 价格高的优先
-      if (a.price !== b.price) return b.price > a.price ? -1 : 1;
+      // 价格高的优先（买单：出价高的先成交）
+      if (a.price !== b.price) return a.price > b.price ? -1 : 1;
       // 时间早的优先
       return a.createdAt - b.createdAt;
     });
@@ -283,7 +283,8 @@ export class OrderBook {
       const result = Array.from(priceMap.values());
       // L-03 FIX: 使用 BigInt 比较替代 Number() 避免精度丢失
       if (isLong) {
-        result.sort((a, b) => b.price > a.price ? -1 : b.price < a.price ? 1 : 0);
+        // Longs: descending (highest bid first) — best price on top
+        result.sort((a, b) => a.price > b.price ? -1 : a.price < b.price ? 1 : 0);
       } else {
         result.sort((a, b) => a.price > b.price ? 1 : a.price < b.price ? -1 : 0);
       }

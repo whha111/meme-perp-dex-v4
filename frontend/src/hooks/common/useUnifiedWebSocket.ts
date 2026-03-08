@@ -445,6 +445,23 @@ class WebSocketManager {
           // Handled separately by specific components
           break;
 
+        // H-3: Handle referral commission events from targeted WS broadcasts
+        case "commission_earned":
+          // A commission was earned from a referee's trade
+          // Invalidate referral queries to refresh data
+          console.log("[UnifiedWS] Commission earned event received");
+          break;
+
+        case "referral_bound":
+          // A new user bound using our referral code
+          console.log("[UnifiedWS] Referral bound event received");
+          break;
+
+        case "commission_withdrawn":
+          // Commission withdrawal was processed
+          console.log("[UnifiedWS] Commission withdrawn event received");
+          break;
+
         default:
           // Unknown message type
           break;

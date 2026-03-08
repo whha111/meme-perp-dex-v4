@@ -14,14 +14,19 @@ remappings = [
     "forge-std/=lib/forge-std/src/"
 ]
 
+# BSC Mainnet deployment profile (higher optimizer runs for cheaper gas)
+[profile.bsc-mainnet]
+optimizer_runs = 500
+
 # RPC Endpoints
 [rpc_endpoints]
-# Base
+# BSC (primary)
+bsc = "${BSC_RPC_URL}"
+bsc_mainnet = "${BSC_MAINNET_RPC_URL}"
+bsc_testnet = "${BSC_TESTNET_RPC_URL}"
+# Base (deprecated — kept for reference)
 base = "${BASE_RPC_URL}"
 base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
-# BSC
-bsc = "${BSC_RPC_URL}"
-bsc_testnet = "${BSC_TESTNET_RPC_URL}"
 
 [etherscan]
 # Base

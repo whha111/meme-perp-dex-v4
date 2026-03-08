@@ -74,7 +74,7 @@
       },
       "referral": {
         "title": "추천 리워드",
-        "desc": "친구를 초대하여 거래, 최대 25% 수수료 리베이트. 다단계 추천 시스템."
+        "desc": "친구를 초대하여 거래, 최대 30% 수수료 리베이트. 2단계 추천 시스템."
       },
       "matching": {
         "title": "밀리초 미만 매칭",
@@ -630,7 +630,7 @@
   },
   "referral": {
     "title": "초대 프로그램",
-    "subtitle": "친구를 초대하여 거래하고 최대 25% 커미션을 받으세요",
+    "subtitle": "친구를 초대하여 거래하고 최대 30% 커미션을 받으세요",
     "connectWalletTitle": "지갑을 연결하여 시작",
     "connectWalletDesc": "지갑을 연결하면 고유한 초대 코드와 링크가 생성됩니다",
     "myInviteCode": "내 초대 코드",
@@ -694,7 +694,7 @@
     "sellTrade": "판매",
     "claimedToWallet": "보상이 지갑으로 청구됨",
     "viewOnExplorer": "트랜잭션 보기",
-    "welcomeTitle": "DomainFi에 오신 것을 환영합니다",
+    "welcomeTitle": "MemePerpDEX에 오신 것을 환영합니다",
     "welcomeSubtitle": "친구로부터 초대받았습니다",
     "yourBenefits": "혜택",
     "benefit1": "첫 거래 할인 수수료",
@@ -712,10 +712,10 @@
     "totalInvited": "총 초대 인원",
     "totalRebate": "누적 리베이트",
     "monthlyRebate": "이번 달 리베이트",
-    "currentLevel": "현재 등급",
+    "currentLevel": "커미션 비율",
     "personUnit": "명",
     "rebateSuffix": "리베이트",
-    "rebateTierTitle": "리베이트 등급",
+    "rebateTierTitle": "커미션 규칙",
     "upgradeHint": "업그레이드 조건: {count}명 초대 시 {level} 달성",
     "tierLevelCol": "등급",
     "inviteCountCol": "초대 인원",
@@ -735,7 +735,12 @@
     "vip2Reward": "거래 수수료 10% 할인",
     "vip3Reward": "수수료 20% 할인 + 전용 배지",
     "vip4Reward": "수수료 30% 할인 + 에어드롭 우선",
-    "noDataPlaceholder": "--"
+    "noDataPlaceholder": "--",
+    "level1Label": "직접 추천",
+    "level1Desc": "직접 초대한 친구의 거래 수수료",
+    "level2Label": "간접 추천",
+    "level2Desc": "친구가 초대한 사람의 거래 수수료",
+    "commissionExplainer": "직접 초대한 친구(1단계)의 거래 수수료의 30%를 받을 수 있습니다. 친구가 초대한 사람(2단계)의 거래 수수료의 10%도 받을 수 있습니다. 커미션은 자동으로 누적되며 언제든지 지갑 잔액으로 인출할 수 있습니다."
   },
   "exchange": {
     "title": "거래소",
@@ -812,7 +817,7 @@
     },
     "features": {
       "title": "왜 Namespace 지갑인가요?",
-      "subtitle": "Web3 결제의 미래를 위해 구축. 안전하고 직관적이며 DomainFi로 구동됩니다.",
+      "subtitle": "Web3 결제의 미래를 위해 구축. 안전하고 직관적이며 MemePerpDEX로 구동됩니다.",
       "domainAddress": {
         "title": "도메인이 곧 주소",
         "desc": "인증된 모든 도메인으로 암호화폐를 전송하세요. 복잡한 주소를 복사 붙여넣기할 필요 없이 spotify.com만 입력하면 됩니다."
@@ -874,7 +879,7 @@
       "registerDomain": "도메인 등록"
     },
     "footer": {
-      "copyright": "2024 DomainFi. All rights reserved."
+      "copyright": "2025 MemePerpDEX. All rights reserved."
     }
   },
   "walletManagement": {

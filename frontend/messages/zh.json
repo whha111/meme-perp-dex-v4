@@ -74,7 +74,7 @@
       },
       "referral": {
         "title": "推荐返佣",
-        "desc": "邀请好友交易，获得最高 25% 的手续费返佣。多级推荐体系。"
+        "desc": "邀请好友交易，获得最高 30% 的手续费返佣。两级推荐体系。"
       },
       "matching": {
         "title": "毫秒级撮合",
@@ -645,7 +645,7 @@
   },
   "referral": {
     "title": "邀请返佣计划",
-    "subtitle": "邀请好友一起交易，享受高达 25% 的返佣奖励",
+    "subtitle": "邀请好友一起交易，享受高达 30% 的手续费返佣",
     "connectWalletTitle": "连接钱包开始邀请",
     "connectWalletDesc": "连接钱包后即可生成专属邀请码和链接",
     "myInviteCode": "我的邀请码",
@@ -709,7 +709,7 @@
     "sellTrade": "卖出",
     "claimedToWallet": "返佣已领取到钱包",
     "viewOnExplorer": "查看交易",
-    "welcomeTitle": "欢迎加入 DomainFi",
+    "welcomeTitle": "欢迎加入 MemePerpDEX",
     "welcomeSubtitle": "您已收到好友的邀请",
     "yourBenefits": "您将获得",
     "benefit1": "首次交易享受优惠费率",
@@ -727,10 +727,10 @@
     "totalInvited": "已邀请人数",
     "totalRebate": "累计返佣",
     "monthlyRebate": "本月返佣",
-    "currentLevel": "当前等级",
+    "currentLevel": "返佣比例",
     "personUnit": "人",
     "rebateSuffix": "返佣",
-    "rebateTierTitle": "返佣等级",
+    "rebateTierTitle": "返佣规则",
     "upgradeHint": "升级条件: 邀请{count}人达到 {level}",
     "tierLevelCol": "等级",
     "inviteCountCol": "邀请人数",
@@ -750,7 +750,12 @@
     "vip2Reward": "交易手续费9折",
     "vip3Reward": "交易手续费8折 + 专属徽章",
     "vip4Reward": "交易手续费7折 + 空投优先",
-    "noDataPlaceholder": "--"
+    "noDataPlaceholder": "--",
+    "level1Label": "直推返佣",
+    "level1Desc": "您直接邀请的好友每笔交易手续费",
+    "level2Label": "二级返佣",
+    "level2Desc": "您的好友邀请的人每笔交易手续费",
+    "commissionExplainer": "您邀请的好友（一级）每笔交易手续费的 30% 将自动计入您的返佣余额。您的好友再邀请的人（二级）每笔交易手续费的 10% 也会归您。返佣可随时提取到钱包余额。"
   },
   "exchange": {
     "title": "兑换",
@@ -871,7 +876,7 @@
     },
     "features": {
       "title": "为什么选择 Namespace 钱包？",
-      "subtitle": "为 Web3 支付的未来而生。安全、直观，由 DomainFi 驱动。",
+      "subtitle": "为 Web3 支付的未来而生。安全、直观，由 MemePerpDEX 驱动。",
       "domainAddress": {
         "title": "域名即地址",
         "desc": "向任何已验证的域名发送加密货币。不再需要复制粘贴复杂的地址，只需输入 spotify.com 即可发送。"
@@ -933,7 +938,7 @@
       "registerDomain": "注册您的域名"
     },
     "footer": {
-      "copyright": "2024 DomainFi. 保留所有权利。"
+      "copyright": "2025 MemePerpDEX. 保留所有权利。"
     }
   },
   "orderBook": {
