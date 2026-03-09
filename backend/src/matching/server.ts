@@ -1110,7 +1110,7 @@ const liquidationQueue: LiquidationCandidate[] = [];
 function calculateADLScore(position: Position): bigint {
   const upnl = BigInt(position.unrealizedPnL);
   const margin = BigInt(position.collateral);
-  const leverage = BigInt(position.leverage);
+  const leverage = BigInt(Math.round(parseFloat(position.leverage) * 10000)); // 1e4 basis points
 
   if (margin === 0n) return 0n;
 
@@ -1525,7 +1525,7 @@ function onPriceChange(token: Address, oldPrice: bigint, newPrice: bigint): void
       // 动态 MMR
       // ⚠️ size 是 ETH 名义价值 (1e18 精度)，直接就是 positionValue
       const positionValue = BigInt(pos.size);
-      const leverage = BigInt(pos.leverage) * 10000n;
+      const leverage = BigInt(Math.round(parseFloat(pos.leverage) * 10000)); // 1e4 basis points
       const initialMarginRate = 10000n * 10000n / leverage;
       const baseMmr = 200n;
       const maxMmr = initialMarginRate / 2n;
@@ -1693,7 +1693,7 @@ function runRiskCheck(): void {
       const positionValue = BigInt(pos.size);
       // MMR = min(2%, 初始保证金率 * 50%)
       // 这样确保 MMR < 初始保证金率，强平价才会在正确的一侧
-      const leverage = BigInt(pos.leverage) * 10000n; // 转换为 1e4 精度
+      const leverage = BigInt(Math.round(parseFloat(pos.leverage) * 10000)); // 转换为 1e4 精度
       const initialMarginRate = 10000n * 10000n / leverage; // 基点
       const baseMmr = 200n; // 基础 2%
       const maxMmr = initialMarginRate / 2n; // 不能超过初始保证金率的一半
@@ -6307,6 +6307,110 @@ function createOrUpdatePosition(
   }
 }
 
+/**
+ * 平仓匹配: reduce-only 订单成交时调用，关闭或减少现有仓位
+ * 计算 PnL 并退还剩余保证金
+ */
+function closePositionByMatch(
+  trader: Address,
+  token: Address,
+  closingSide: boolean, // true = 关闭多头, false = 关闭空头
+  closeSize: bigint,
+  closePrice: bigint,
+  orderId: string
+): void {
+  const normalizedTrader = trader.toLowerCase() as Address;
+  const normalizedToken = token.toLowerCase() as Address;
+  const positions = userPositions.get(normalizedTrader) || [];
+
+  const posIdx = positions.findIndex(
+    (p) => p.token.toLowerCase() === normalizedToken && p.isLong === closingSide && BigInt(p.size) > 0n
+  );
+
+  if (posIdx < 0) {
+    console.error(`[CloseByMatch] No ${closingSide ? 'LONG' : 'SHORT'} position to close for ${normalizedTrader.slice(0, 10)}`);
+    return;
+  }
+
+  const pos = positions[posIdx];
+  const posSize = BigInt(pos.size);
+  const entryPrice = BigInt(pos.entryPrice);
+  const collateral = BigInt(pos.collateral);
+
+  // PnL 计算 (GMX 标准)
+  const pnl = closingSide // isLong
+    ? (closeSize * (closePrice - entryPrice)) / entryPrice
+    : (closeSize * (entryPrice - closePrice)) / entryPrice;
+
+  // 平仓手续费
+  const feeRate = 5n; // 0.05%
+  const closeFee = (closeSize * feeRate) / 10000n;
+
+  if (closeSize >= posSize) {
+    // 全部平仓
+    const returnAmount = collateral + pnl - closeFee;
+    if (returnAmount > 0n) {
+      adjustUserBalance(normalizedTrader, returnAmount, "CLOSE_POSITION");
+    }
+    // 解锁已用保证金
+    const traderBalance = userBalances.get(normalizedTrader);
+    if (traderBalance) {
+      traderBalance.usedMargin = (traderBalance.usedMargin || 0n) - collateral;
+      if (traderBalance.usedMargin < 0n) traderBalance.usedMargin = 0n;
+    }
+
+    positions.splice(posIdx, 1);
+    userPositions.set(normalizedTrader, positions);
+    deletePositionFromRedis(pos.pairId).catch(e => console.error("[Redis] Failed to delete closed position:", e));
+    tpslOrders.delete(pos.pairId);
+
+    console.log(`[CloseByMatch] Fully closed ${closingSide ? 'LONG' : 'SHORT'}: ${normalizedTrader.slice(0, 10)} PnL=$${Number(pnl) / 1e18}, fee=$${Number(closeFee) / 1e18}`);
+  } else {
+    // 部分平仓
+    const ratio = (closeSize * 10000n) / posSize;
+    const releasedCollateral = (collateral * ratio) / 10000n;
+    const returnAmount = releasedCollateral + pnl - closeFee;
+    if (returnAmount > 0n) {
+      adjustUserBalance(normalizedTrader, returnAmount, "PARTIAL_CLOSE");
+    }
+    // 部分解锁已用保证金
+    const traderBalance = userBalances.get(normalizedTrader);
+    if (traderBalance) {
+      traderBalance.usedMargin = (traderBalance.usedMargin || 0n) - releasedCollateral;
+      if (traderBalance.usedMargin < 0n) traderBalance.usedMargin = 0n;
+    }
+
+    const newSize = posSize - closeSize;
+    const newCollateral = collateral - releasedCollateral;
+    positions[posIdx] = {
+      ...pos,
+      size: newSize.toString(),
+      collateral: newCollateral.toString(),
+      margin: newCollateral.toString(),
+      updatedAt: Date.now(),
+    };
+    userPositions.set(normalizedTrader, positions);
+    savePositionToRedis(positions[posIdx]).catch(e => console.error("[Redis] Failed to update partial close:", e));
+
+    console.log(`[CloseByMatch] Partially closed ${closingSide ? 'LONG' : 'SHORT'}: ${normalizedTrader.slice(0, 10)} closed=${closeSize}, remaining=${newSize}`);
+  }
+
+  // PerpVault: 减少 OI
+  if (isPerpVaultEnabled()) {
+    vaultDecreaseOI(normalizedToken, closingSide, closeSize).catch(err =>
+      console.error(`[PerpVault] decreaseOI failed (close): ${err}`)
+    );
+  }
+
+  broadcastPositionUpdate(normalizedTrader, normalizedToken);
+
+  // 扣除平仓手续费 (从 FEE_RECEIVER 收取)
+  const feeReceiver = (process.env.FEE_RECEIVER_ADDRESS || "").toLowerCase() as Address;
+  if (feeReceiver && closeFee > 0n) {
+    addMode2Adjustment(feeReceiver, closeFee, "CLOSE_FEE");
+  }
+}
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -6882,26 +6986,43 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       broadcastTrade(trade);
 
       // 创建/更新持仓记录 (关联订单号便于排查)
-      createOrUpdatePosition(
-        match.longOrder.trader,
-        token as Address,
-        true, // isLong
-        match.matchSize,
-        match.matchPrice,
-        match.longOrder.leverage,
-        match.shortOrder.trader,
-        match.longOrder.id
-      );
-      createOrUpdatePosition(
-        match.shortOrder.trader,
-        token as Address,
-        false, // isShort
-        match.matchSize,
-        match.matchPrice,
-        match.shortOrder.leverage,
-        match.longOrder.trader,
-        match.shortOrder.id
-      );
+      // Reduce-only 订单: 平仓而不是开新仓
+      if (match.longOrder.reduceOnly) {
+        // 多头reduce-only = 关闭空头仓位
+        closePositionByMatch(
+          match.longOrder.trader, token as Address, false, // 关闭空头
+          match.matchSize, match.matchPrice, match.longOrder.id
+        );
+      } else {
+        createOrUpdatePosition(
+          match.longOrder.trader,
+          token as Address,
+          true, // isLong
+          match.matchSize,
+          match.matchPrice,
+          match.longOrder.leverage,
+          match.shortOrder.trader,
+          match.longOrder.id
+        );
+      }
+      if (match.shortOrder.reduceOnly) {
+        // 空头reduce-only = 关闭多头仓位
+        closePositionByMatch(
+          match.shortOrder.trader, token as Address, true, // 关闭多头
+          match.matchSize, match.matchPrice, match.shortOrder.id
+        );
+      } else {
+        createOrUpdatePosition(
+          match.shortOrder.trader,
+          token as Address,
+          false, // isShort
+          match.matchSize,
+          match.matchPrice,
+          match.shortOrder.leverage,
+          match.longOrder.trader,
+          match.shortOrder.id
+        );
+      }
 
       // ============================================================
       // 成交后结算保证金 (从已扣除 → 已用保证金)
@@ -9518,10 +9639,18 @@ async function handleSetTPSL(req: Request, pairId: string): Promise<Response> {
     }
 
     // P3-P2: 统一 TP/SL 精度为 1e18 — 自动检测并转换旧 1e12 格式
-    // 如果值 < 1e15 则认为是 1e12 格式，乘 1e6 转换
+    // 仅当仓位入场价 >= 1e15 时才转换 (排除价格本身就很小的 meme 代币)
+    let positionEntryPrice = 0n;
+    for (const [, positions] of userPositions.entries()) {
+      const found = positions.find(p => p.pairId === pairId);
+      if (found) { positionEntryPrice = BigInt(found.entryPrice); break; }
+    }
+
     function normalizeToE18(raw: string | bigint): bigint {
       const val = BigInt(raw);
-      if (val > 0n && val < 1_000_000_000_000_000n) {
+      // Only auto-convert if the position's entry price is >= 1e15 (normal 1e18 scale)
+      // For tiny meme token prices (entry < 1e15), values are real — don't normalize
+      if (val > 0n && val < 1_000_000_000_000_000n && positionEntryPrice >= 1_000_000_000_000_000n) {
         console.warn(`[TP/SL] Auto-converting 1e12 → 1e18: ${val} → ${val * 1_000_000n}`);
         return val * 1_000_000n;
       }
@@ -9755,11 +9884,12 @@ function addMarginToPosition(pairId: string, amount: bigint): AddMarginResult {
   const positionValue = BigInt(position.size);
   // M-06 FIX: 全程 BigInt 计算杠杆 (1e4 basis points)，避免 Math.floor 截断
   const leverageBp = (positionValue * 10000n) / newCollateral;  // e.g. 58000 = 5.8x
+  const newLeverage = Number(leverageBp) / 10000;  // e.g. 5.8
 
   // 更新仓位
   position.collateral = newCollateral.toString();
   position.margin = (newCollateral + BigInt(position.unrealizedPnL)).toString();
-  position.leverage = (Number(leverageBp) / 10000).toString();
+  position.leverage = newLeverage.toString();
 
   // 重新计算强平价格
   const entryPrice = BigInt(position.entryPrice);
@@ -9882,11 +10012,12 @@ function removeMarginFromPosition(pairId: string, amount: bigint): RemoveMarginR
   const newCollateral = oldCollateral - amount;
   // M-06 FIX: 全程 BigInt 计算杠杆
   const leverageBp = (positionValue * 10000n) / newCollateral;
+  const newLeverage = Number(leverageBp) / 10000;
 
   // 更新仓位
   position.collateral = newCollateral.toString();
   position.margin = (newCollateral + BigInt(position.unrealizedPnL)).toString();
-  position.leverage = (Number(leverageBp) / 10000).toString();
+  position.leverage = newLeverage.toString();
 
   // 重新计算强平价格
   const entryPrice = BigInt(position.entryPrice);
@@ -11553,34 +11684,87 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
-  // 获取现货 K 线数据
+  // 获取现货 K 线数据 (时间范围查询)
   if (path.match(/^\/api\/v1\/spot\/klines\/0x[a-fA-F0-9]+$/) && method === "GET") {
     try {
       const token = path.split("/")[5] as Address;
       const resolution = url.searchParams.get("resolution") || "1m";
       const from = parseInt(url.searchParams.get("from") || "0");
       const to = parseInt(url.searchParams.get("to") || Math.floor(Date.now() / 1000).toString());
-      const { handleGetKlines: handleGetSpotKlines } = await import("./api/handlers");
-      const result = await handleGetSpotKlines(token, resolution, from, to);
-      return jsonResponse(result);
+      try {
+        const { handleGetKlines: handleGetSpotKlines } = await import("./api/handlers");
+        const result = await handleGetSpotKlines(token, resolution, from, to);
+        return jsonResponse(result);
+      } catch {
+        // Fallback: read directly from Redis kline storage
+        const { getRedisClient } = await import("./database/redis");
+        const redis = getRedisClient();
+        const normalizedToken = token.toLowerCase();
+        // Convert seconds to minute-aligned ms timestamps
+        const fromMs = from * 1000;
+        const toMs = to * 1000;
+        const bars: Array<{ time: number; open: string; high: string; low: string; close: string; volume: string }> = [];
+
+        // Scan minute-by-minute from 'from' to 'to'
+        for (let minuteTs = Math.floor(fromMs / 60000) * 60000; minuteTs <= toMs; minuteTs += 60000) {
+          const data = await redis.get(`kline:1m:${normalizedToken}:${minuteTs}`);
+          if (data) {
+            try {
+              const d = JSON.parse(data);
+              bars.push({ time: Math.floor(minuteTs / 1000), open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v });
+            } catch { /* skip malformed */ }
+          }
+        }
+
+        bars.sort((a, b) => a.time - b.time);
+        return jsonResponse({ success: true, data: bars, source: "redis" });
+      }
     } catch (e) {
-      console.warn("[Spot API] handlers module unavailable for /spot/klines:", (e as Error).message);
-      return jsonResponse({ success: false, error: "Spot trading API not available" }, 503);
+      console.error("[Kline API] Error:", (e as Error).message);
+      return jsonResponse({ success: false, error: "Failed to fetch klines" }, 500);
     }
   }
 
-  // 获取最新 K 线数据 (简化接口)
+  // 获取最新 K 线数据 (简化接口 — 前端主要使用)
   if (path.match(/^\/api\/v1\/spot\/klines\/latest\/0x[a-fA-F0-9]+$/) && method === "GET") {
     try {
       const token = path.split("/")[6] as Address;
       const resolution = url.searchParams.get("resolution") || "1m";
       const limit = parseInt(url.searchParams.get("limit") || "100");
-      const { handleGetLatestKlines } = await import("./api/handlers");
-      const result = await handleGetLatestKlines(token, resolution, limit);
-      return jsonResponse(result);
+      try {
+        const { handleGetLatestKlines } = await import("./api/handlers");
+        const result = await handleGetLatestKlines(token, resolution, limit);
+        return jsonResponse(result);
+      } catch {
+        // Fallback: read latest K-lines directly from Redis
+        const { getRedisClient } = await import("./database/redis");
+        const redis = getRedisClient();
+        const normalizedToken = token.toLowerCase();
+        const now = Date.now();
+        const bars: Array<{ time: number; open: string; high: string; low: string; close: string; volume: string }> = [];
+
+        // Walk backwards from current minute, collecting up to 'limit' bars
+        const currentMinute = Math.floor(now / 60000) * 60000;
+        const maxLookback = Math.min(limit * 3, 1440); // Look back at most 24h (1440 minutes)
+
+        for (let i = 0; i < maxLookback && bars.length < limit; i++) {
+          const minuteTs = currentMinute - i * 60000;
+          const data = await redis.get(`kline:1m:${normalizedToken}:${minuteTs}`);
+          if (data) {
+            try {
+              const d = JSON.parse(data);
+              bars.push({ time: Math.floor(minuteTs / 1000), open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v });
+            } catch { /* skip malformed */ }
+          }
+        }
+
+        // Return in chronological order
+        bars.sort((a, b) => a.time - b.time);
+        return jsonResponse({ success: true, data: bars, count: bars.length, source: "redis" });
+      }
     } catch (e) {
-      console.warn("[Spot API] handlers module unavailable for /spot/klines/latest:", (e as Error).message);
-      return jsonResponse({ success: false, error: "Spot trading API not available" }, 503);
+      console.error("[Kline API] Error:", (e as Error).message);
+      return jsonResponse({ success: false, error: "Failed to fetch klines" }, 500);
     }
   }
 

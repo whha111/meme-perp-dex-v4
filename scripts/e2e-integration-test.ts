@@ -52,73 +52,35 @@ const ORDER_TYPES = {
   ],
 } as const;
 
-// Will be resolved from live tickers
-let TEST_TOKEN = "0xcafe000000000000000000000000000000000001" as Address;
-let MARK_PRICE = "0"; // Will be fetched from engine
+// Generate a random test token address per run to guarantee empty orderbook (no stale orders)
+// The engine creates orderbooks on-demand and skips price deviation checks when markPrice=0
+const _runId = Date.now().toString(16).slice(-6); // 6 hex chars
+let TEST_TOKEN = `0x0000000000000000000000000000000e2e${_runId}` as Address; // 31 zeros + "e2e" + 6 = 40 hex
+let MARK_PRICE = "0"; // 0 = engine skips price deviation check for fresh tokens
 
-// Fetch a real supported token and its mark price
 async function resolveTestToken(): Promise<void> {
-  try {
-    // 1. Get tickers — find first token with a non-zero last price
-    const res = await fetch(`${BASE_URL}/api/v1/market/tickers`);
-    const tickerJson = await res.json();
-    const tickers = tickerJson.data || [];
-    for (const t of tickers) {
-      const instId = t.instId as string; // "0x....-ETH"
-      const last = t.last || t.markPx || "0";
-      if (last && last !== "0") {
-        TEST_TOKEN = instId.split("-")[0].toLowerCase() as Address;
-        MARK_PRICE = last;
-        break;
-      }
-    }
-
-    // 2. If mark price still 0, try orderbook lastPrice for each token
-    if (MARK_PRICE === "0") {
-      for (const t of tickers) {
-        const token = (t.instId as string).split("-")[0].toLowerCase();
-        try {
-          const obRes = await fetch(`${BASE_URL}/api/v1/market/books?instId=${token}-ETH&sz=1`);
-          const obData = await obRes.json();
-          // Engine returns { lastPrice, longs, shorts } at top level
-          const p = obData.lastPrice || obData.data?.lastPrice || obData.data?.markPrice;
-          if (p && p !== "0") {
-            TEST_TOKEN = token as Address;
-            MARK_PRICE = p;
-            break;
-          }
-        } catch {}
-      }
-    }
-
-    console.log(`  📌 Test Token: ${TEST_TOKEN.slice(0, 12)}...`);
-    console.log(`  📌 Mark Price: ${MARK_PRICE} (${(Number(MARK_PRICE) / 1e18).toExponential(4)} ETH)`);
-    if (MARK_PRICE === "0") {
-      console.warn(`  ⚠️ Could not resolve mark price — order tests will use fallback`);
-    }
-  } catch (e) {
-    console.warn(`  ⚠️ Failed to resolve test token: ${e}`);
-  }
+  console.log(`  📌 Test Token: ${TEST_TOKEN.slice(0, 12)}...${TEST_TOKEN.slice(-8)} (fresh random — empty orderbook ✓)`);
+  console.log(`  📌 Mark Price: 0 (fresh token — deviation check skipped)`);
 }
 
 // Helper: get price string close to mark price
 function priceNearMark(multiplier: number = 1.0): string {
-  if (MARK_PRICE === "0") return "1000000000000000"; // fallback 0.001 ETH
-  const markBigInt = BigInt(MARK_PRICE);
+  const markBigInt = MARK_PRICE === "0" ? 1000000000000000n : BigInt(MARK_PRICE); // fallback 0.001 ETH
   // Apply multiplier (using integer math)
   const result = (markBigInt * BigInt(Math.round(multiplier * 10000))) / 10000n;
   return result.toString();
 }
 
 // Generate a unique price for each scene to avoid matching stale orders or cross-scene matches.
-// Each call returns a different multiplier — within the 100% max deviation limit.
-// NOTE: deviation formula is asymmetric: (mark-order)/order for order < mark.
-// So we keep multipliers in [0.85, 1.15] to stay well within bounds.
+// Uses strictly incrementing multipliers with large gaps so no two scenes overlap.
+// Each call returns a multiplier stepped by ~3% from 0.88 upward, staying within 100% max deviation.
 let _sceneSeed = 0;
 function scenePrice(): string {
   _sceneSeed += 1;
-  // Small seed to avoid JS safe-integer overflow in multiplication
-  const mult = 0.85 + ((_sceneSeed * 7919) % 3000) / 10000;
+  // Each scene gets a distinct multiplier band: 0.88, 0.91, 0.94, 0.97, 1.00, 1.03, ...
+  // 3% gap ensures no cross-scene matching (engine only matches exact price)
+  const mult = 0.88 + (_sceneSeed * 0.03);
+  if (mult > 1.90) throw new Error("Too many scene prices — would exceed 100% deviation");
   return priceNearMark(mult);
 }
 
@@ -268,8 +230,8 @@ async function setTPSL(
   // Server route: POST /api/position/:pairId/tpsl
   return api("POST", `/api/position/${encodeURIComponent(pairId)}/tpsl`, {
     trader: wallet.address,
-    takeProfit: tp,
-    stopLoss: sl,
+    takeProfitPrice: tp,
+    stopLossPrice: sl,
     signature,
   });
 }
@@ -593,20 +555,14 @@ async function scene3_FullLifecycle() {
   // Step 3: Set TP/SL
   console.log("\n  🎯 Step 3: 设置止盈止损");
   const tpPrice = priceNearMark(2.0); // TP at 2x mark price
-  const slPrice = priceNearMark(0.5); // SL at half mark price
+  const slPrice = priceNearMark(0.85); // SL at 85% mark (must be above liq price for 5x leverage)
   const tpslRes = await setTPSL(trader, pairId, tpPrice, slPrice);
-  assert(tpslRes.ok, "设置 TP=0.002, SL=0.0005", tpslRes.data?.error);
+  assert(tpslRes.ok, `设置 TP=${(Number(tpPrice)/1e18).toFixed(6)}, SL=${(Number(slPrice)/1e18).toFixed(6)}`, tpslRes.data?.error);
 
-  // Verify TP/SL stored
-  await sleep(200);
-  const posAfterTPSL = await getPositions(trader.address);
-  if (posAfterTPSL.length > 0) {
-    const p = posAfterTPSL[0];
-    assert(
-      p.takeProfit !== undefined || p.tp !== undefined,
-      "TP 已保存",
-      `tp: ${p.takeProfit || p.tp}`,
-    );
+  // Verify TP/SL stored — check from setTPSL response (TP/SL lives in tpslOrders, not on position)
+  if (tpslRes.ok && tpslRes.data) {
+    const savedTp = tpslRes.data.takeProfitPrice;
+    assert(savedTp !== null && savedTp !== undefined, "TP 已保存", `tp: ${savedTp}`);
   }
 
   // Step 4: Remove Margin
@@ -628,18 +584,11 @@ async function scene3_FullLifecycle() {
   await fakeDeposit(closer.address, "10");
 
   const closePrice = scenePrice();
-  // Note: reduceOnly=true may trigger server bug "validateReduceOnlyOrder is not defined"
-  // In that case, we close with a normal opposite-direction order
-  let closeOrder = await signAndSubmitOrder(trader, {
+  // Close with reduce-only opposite-direction order
+  const closeOrder = await signAndSubmitOrder(trader, {
     token: TEST_TOKEN, isLong: false, sizeEth: "1", leverage: 5, priceRaw: closePrice,
     reduceOnly: true,
   });
-  if (!closeOrder.ok && closeOrder.data?.error?.includes("validateReduceOnly")) {
-    console.log("    ⚠️ reduceOnly bug detected — using normal close order");
-    closeOrder = await signAndSubmitOrder(trader, {
-      token: TEST_TOKEN, isLong: false, sizeEth: "1", leverage: 5, priceRaw: closePrice,
-    });
-  }
   const closeCounter = await signAndSubmitOrder(closer, {
     token: TEST_TOKEN, isLong: true, sizeEth: "1", leverage: 5, priceRaw: closePrice,
   });
