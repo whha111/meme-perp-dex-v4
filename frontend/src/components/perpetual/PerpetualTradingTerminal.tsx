@@ -248,6 +248,9 @@ export function PerpetualTradingTerminal({
     "positions" | "openOrders" | "orderHistory" | "tradeHistory" | "hunting" | "risk" | "bills"
   >("positions");
 
+  // Mobile responsive: section switcher for Chart/Book/Trade (only used < md breakpoint)
+  const [mobileActiveSection, setMobileActiveSection] = useState<"chart" | "book" | "trade">("chart");
+
   // 订单历史和成交记录状态
   const [orderHistoryData, setOrderHistoryData] = useState<HistoricalOrder[]>([]);
   const [tradeHistoryData, setTradeHistoryData] = useState<PerpTradeRecord[]>([]);
@@ -547,176 +550,231 @@ export function PerpetualTradingTerminal({
     <div
       className={`flex flex-col bg-okx-bg-primary min-h-screen text-okx-text-primary ${className}`}
     >
-      {/* Top Bar — 设计稿 uItYJ: pair + 永续 tag + leverage tag + separator + stats */}
-      <div className="h-14 bg-okx-bg-secondary border-b border-okx-border-primary flex items-center px-4 gap-6">
-        {/* Symbol — 设计稿: pair name 16px bold + "永续" tag (9px #848E9C on #2B3139) + "5x" leverage tag */}
-        <div className="flex items-center gap-2">
-          <span className="text-[16px] font-bold font-mono text-okx-text-primary">
-            {displaySymbol.toUpperCase()}USDT
-          </span>
-          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-sm bg-okx-bg-hover text-okx-text-secondary">
-            {t("perpetualLabel")}
-          </span>
-          <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-sm bg-okx-accent/[0.13] text-okx-accent">
-            10x
-          </span>
-        </div>
+      {/* Top Bar — Responsive: Row 1 always visible, Row 2 (stats) scrollable on mobile */}
+      <div className="bg-okx-bg-secondary border-b border-okx-border-primary">
+        {/* Row 1: Symbol + Price + Change + Account */}
+        <div className="h-12 md:h-14 flex items-center px-3 md:px-4 gap-2 md:gap-6">
+          {/* Symbol */}
+          <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
+            <span className="text-[14px] md:text-[16px] font-bold font-mono text-okx-text-primary">
+              {displaySymbol.toUpperCase()}USDT
+            </span>
+            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-sm bg-okx-bg-hover text-okx-text-secondary">
+              {t("perpetualLabel")}
+            </span>
+            <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-sm bg-okx-accent/[0.13] text-okx-accent">
+              10x
+            </span>
+          </div>
 
-        {/* Market Stats — 设计稿 uItYJ: vertical stacked layout (value top, label bottom) */}
-        <div className="flex items-center gap-6">
-          {/* 标记价格 — 设计稿: JetBrains Mono 16px bold green, label Inter 9px #848E9C */}
-          <div className="flex flex-col gap-0.5">
-            {chartPrice ? (
-              <AnimatedNumber
-                value={chartPrice}
-                format={formatMemePriceNum}
-                className={`text-[16px] font-bold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}
-                showArrow={true}
-                highlightChange={true}
-              />
-            ) : (
-              <span className={`text-[16px] font-bold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
-                {marketInfo.currentPrice}
+          {/* Mark Price + 24h Change — always visible (compact on mobile) */}
+          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
+            <div className="flex flex-col gap-0.5">
+              {chartPrice ? (
+                <AnimatedNumber
+                  value={chartPrice}
+                  format={formatMemePriceNum}
+                  className={`text-[13px] md:text-[16px] font-bold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}
+                  showArrow={true}
+                  highlightChange={true}
+                />
+              ) : (
+                <span className={`text-[13px] md:text-[16px] font-bold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
+                  {marketInfo.currentPrice}
+                </span>
+              )}
+              <span className="text-[8px] md:text-[9px] text-okx-text-secondary">{t("markPrice")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className={`text-[11px] md:text-[12px] font-semibold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
+                {marketInfo.isPriceUp ? "+" : ""}{marketInfo.priceChange}
               </span>
+              <span className="text-[8px] md:text-[9px] text-okx-text-secondary">{t("change24h")}</span>
+            </div>
+          </div>
+
+          {/* Desktop-only stats (hidden on mobile, shown in Row 2) */}
+          <div className="hidden md:flex items-center gap-6">
+            <div className="h-6 w-px bg-okx-border-primary" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.high24h}</span>
+              <span className="text-[9px] text-okx-text-secondary">{t("high24h")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.low24h}</span>
+              <span className="text-[9px] text-okx-text-secondary">{t("low24h")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.volume24h}</span>
+              <span className="text-[9px] text-okx-text-secondary">{t("volume24h")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.openInterest}</span>
+              <span className="text-[9px] text-okx-text-secondary">{t("openInterest")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className={`text-[12px] font-mono ${isFundingPositive ? "text-okx-up" : "text-okx-down"}`}>
+                {marketInfo.fundingRate}
+              </span>
+              <span className="text-[9px] text-okx-text-secondary">
+                {t("fundingRate")} / {fundingCountdown}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[12px] font-mono text-okx-text-primary">
+                {marketInfo.marketCap >= 1000000
+                  ? `$${(marketInfo.marketCap / 1000000).toFixed(2)}M`
+                  : marketInfo.marketCap >= 1000
+                  ? `$${(marketInfo.marketCap / 1000).toFixed(2)}K`
+                  : `$${marketInfo.marketCap.toFixed(2)}`}
+              </span>
+              <span className="text-[9px] text-okx-text-secondary">市值</span>
+            </div>
+          </div>
+
+          {/* Account Balance & Risk (right side) */}
+          <div className="ml-auto flex items-center gap-1.5 md:gap-3">
+            {/* Risk Alert Badge */}
+            {riskAlerts.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setActiveBottomTab("risk")}
+                  className="p-1.5 md:p-2 rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors"
+                  title={`${riskAlerts.length} risk alerts`}
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+                  </svg>
+                </button>
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
+                  {riskAlerts.length > 9 ? "9+" : riskAlerts.length}
+                </span>
+              </div>
             )}
-            <span className="text-[9px] text-okx-text-secondary">{t("markPrice")}</span>
-          </div>
 
-          <div className="h-6 w-px bg-okx-border-primary" />
+            {/* Risk Level Indicator — hide on smallest screens */}
+            {positionRisks.length > 0 && (
+              <div className={`hidden sm:block px-2 py-1 rounded text-[10px] font-medium ${
+                overallRisk === "critical" ? "bg-red-900/50 text-red-400 animate-pulse" :
+                overallRisk === "high" ? "bg-orange-900/50 text-orange-400" :
+                overallRisk === "medium" ? "bg-yellow-900/50 text-yellow-400" :
+                "bg-green-900/50 text-green-400"
+              }`}>
+                Risk: {overallRisk.toUpperCase()}
+              </div>
+            )}
 
-          {/* 24h 涨跌 */}
-          <div className="flex flex-col gap-0.5">
-            <span className={`text-[12px] font-semibold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
-              {marketInfo.isPriceUp ? "+" : ""}{marketInfo.priceChange}
-            </span>
-            <span className="text-[9px] text-okx-text-secondary">{t("change24h")}</span>
-          </div>
+            {/* Insurance Fund — hide on mobile */}
+            {insuranceFund && (
+              <div className="hidden sm:flex items-center gap-1 text-xs text-okx-text-tertiary">
+                <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <span className="text-green-400 font-medium">
+                  {insuranceFund.display?.balance || "BNB 0"}
+                </span>
+                <span>IF</span>
+              </div>
+            )}
 
-          {/* 最高价 */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.high24h}</span>
-            <span className="text-[9px] text-okx-text-secondary">{t("high24h")}</span>
-          </div>
-
-          {/* 最低价 */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.low24h}</span>
-            <span className="text-[9px] text-okx-text-secondary">{t("low24h")}</span>
-          </div>
-
-          {/* 24h 成交量 */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.volume24h}</span>
-            <span className="text-[9px] text-okx-text-secondary">{t("volume24h")}</span>
-          </div>
-
-          {/* 持仓量 */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-mono text-okx-text-primary">{marketInfo.openInterest}</span>
-            <span className="text-[9px] text-okx-text-secondary">{t("openInterest")}</span>
-          </div>
-
-          {/* 资金费率 */}
-          <div className="flex flex-col gap-0.5">
-            <span className={`text-[12px] font-mono ${isFundingPositive ? "text-okx-up" : "text-okx-down"}`}>
-              {marketInfo.fundingRate}
-            </span>
-            <span className="text-[9px] text-okx-text-secondary">
-              {t("fundingRate")} / {fundingCountdown}
-            </span>
-          </div>
-
-          {/* 市值 */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[12px] font-mono text-okx-text-primary">
-              {marketInfo.marketCap >= 1000000
-                ? `$${(marketInfo.marketCap / 1000000).toFixed(2)}M`
-                : marketInfo.marketCap >= 1000
-                ? `$${(marketInfo.marketCap / 1000).toFixed(2)}K`
-                : `$${marketInfo.marketCap.toFixed(2)}`}
-            </span>
-            <span className="text-[9px] text-okx-text-secondary">市值</span>
+            {/* Account Balance Button — icon only on mobile */}
+            <button
+              onClick={() => setShowAccountPanel(true)}
+              className="flex items-center gap-2 px-2 md:px-4 py-1.5 md:py-2 bg-okx-brand/10 hover:bg-okx-brand/20 border border-okx-brand/30 rounded-lg transition-colors"
+            >
+              <svg className="w-4 h-4 text-okx-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+              <span className="hidden sm:inline text-okx-brand font-medium">{formattedAccountBalance}</span>
+            </button>
           </div>
         </div>
 
-        {/* Account Balance & Risk Indicator */}
-        <div className="ml-auto flex items-center gap-3">
-          {/* Risk Alert Badge */}
-          {riskAlerts.length > 0 && (
-            <div className="relative">
-              <button
-                onClick={() => setActiveBottomTab("risk")}
-                className="p-2 rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors"
-                title={`${riskAlerts.length} risk alerts`}
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                </svg>
-              </button>
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center animate-pulse">
-                {riskAlerts.length > 9 ? "9+" : riskAlerts.length}
+        {/* Row 2: Mobile-only scrollable stats strip */}
+        <div className="md:hidden overflow-x-auto border-t border-okx-border-primary/50">
+          <div className="flex items-center gap-4 px-3 py-1.5 min-w-max">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-mono text-okx-text-primary">{marketInfo.high24h}</span>
+              <span className="text-[8px] text-okx-text-secondary">{t("high24h")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-mono text-okx-text-primary">{marketInfo.low24h}</span>
+              <span className="text-[8px] text-okx-text-secondary">{t("low24h")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-mono text-okx-text-primary">{marketInfo.volume24h}</span>
+              <span className="text-[8px] text-okx-text-secondary">{t("volume24h")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-mono text-okx-text-primary">{marketInfo.openInterest}</span>
+              <span className="text-[8px] text-okx-text-secondary">{t("openInterest")}</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className={`text-[11px] font-mono ${isFundingPositive ? "text-okx-up" : "text-okx-down"}`}>
+                {marketInfo.fundingRate}
               </span>
+              <span className="text-[8px] text-okx-text-secondary">{t("fundingRate")}</span>
             </div>
-          )}
-
-          {/* Risk Level Indicator */}
-          {positionRisks.length > 0 && (
-            <div className={`px-2 py-1 rounded text-[10px] font-medium ${
-              overallRisk === "critical" ? "bg-red-900/50 text-red-400 animate-pulse" :
-              overallRisk === "high" ? "bg-orange-900/50 text-orange-400" :
-              overallRisk === "medium" ? "bg-yellow-900/50 text-yellow-400" :
-              "bg-green-900/50 text-green-400"
-            }`}>
-              Risk: {overallRisk.toUpperCase()}
-            </div>
-          )}
-
-          {/* Insurance Fund Mini Display */}
-          {insuranceFund && (
-            <div className="flex items-center gap-1 text-xs text-okx-text-tertiary">
-              <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span className="text-green-400 font-medium">
-                {insuranceFund.display?.balance || "BNB 0"}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-mono text-okx-text-primary">
+                {marketInfo.marketCap >= 1000000
+                  ? `$${(marketInfo.marketCap / 1000000).toFixed(2)}M`
+                  : marketInfo.marketCap >= 1000
+                  ? `$${(marketInfo.marketCap / 1000).toFixed(2)}K`
+                  : `$${marketInfo.marketCap.toFixed(2)}`}
               </span>
-              <span>IF</span>
+              <span className="text-[8px] text-okx-text-secondary">市值</span>
             </div>
-          )}
-
-          {/* Account Balance Button */}
-          <button
-            onClick={() => setShowAccountPanel(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-okx-brand/10 hover:bg-okx-brand/20 border border-okx-brand/30 rounded-lg transition-colors"
-          >
-            <svg className="w-4 h-4 text-okx-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-            </svg>
-            <span className="text-okx-brand font-medium">{formattedAccountBalance}</span>
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Content - 三列布局 */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: Order Book - 使用新的 OrderBook 组件 */}
-        <div className="w-[240px] border-r border-okx-border-primary overflow-hidden">
-          <TradingErrorBoundary module="OrderBook">
-            <OrderBook
-              data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : undefined}
-              onPriceClick={(price) => {
-                // 点击价格可以填入下单面板
-                console.log("Price clicked:", price);
-              }}
-              maxRows={12}
-            />
-          </TradingErrorBoundary>
+      {/* Main Content - Responsive: mobile=tabs, tablet=2col, desktop=3col */}
+      <div className="flex flex-col flex-1 overflow-hidden">
+
+        {/* Mobile Section Tabs (< md only) */}
+        <div className="md:hidden flex border-b border-okx-border-primary bg-okx-bg-secondary">
+          {([
+            { key: "chart" as const, label: "Chart" },
+            { key: "book" as const, label: "Book" },
+            { key: "trade" as const, label: "Trade" },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setMobileActiveSection(tab.key)}
+              className={`flex-1 py-2.5 text-[12px] font-medium transition-colors relative ${
+                mobileActiveSection === tab.key
+                  ? "text-okx-accent"
+                  : "text-okx-text-secondary"
+              }`}
+            >
+              {tab.label}
+              {mobileActiveSection === tab.key && (
+                <div className="absolute bottom-0 left-1/4 right-1/4 h-[2px] bg-okx-accent" />
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* Center: Chart + Bottom Panel */}
-        <div className="flex-1 border-r border-okx-border-primary flex flex-col overflow-hidden">
-          {/* Chart Area - 使用撮合引擎 K 线数据 */}
-          <div className="h-[400px] bg-[#131722]">
+        {/* ═══ DESKTOP / TABLET LAYOUT (≥ md) ═══ */}
+        <div className="hidden md:flex flex-1 overflow-hidden">
+          {/* Left: Order Book — desktop only (≥ lg) */}
+          <div className="hidden lg:block w-[240px] border-r border-okx-border-primary overflow-hidden">
+            <TradingErrorBoundary module="OrderBook">
+              <OrderBook
+                data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : undefined}
+                onPriceClick={(price) => {
+                  console.log("Price clicked:", price);
+                }}
+                maxRows={12}
+              />
+            </TradingErrorBoundary>
+          </div>
+
+          {/* Center: Chart + Bottom Panel */}
+          <div className="flex-1 border-r border-okx-border-primary flex flex-col overflow-hidden">
+            {/* Chart Area */}
+            <div className="h-[300px] lg:h-[400px] bg-[#131722]">
             <TradingErrorBoundary module="PerpChart">
               {tokenAddress && (
                 <MemoizedPriceChart
@@ -729,9 +787,10 @@ export function PerpetualTradingTerminal({
           </div>
 
           {/* Bottom Panel - Positions, Orders, History */}
-          <div className="h-[400px] border-t border-okx-border-primary flex flex-col bg-okx-bg-primary">
-            {/* Tabs */}
-            <div className="flex border-b border-okx-border-primary px-4">
+          <div className="h-[300px] lg:h-[400px] border-t border-okx-border-primary flex flex-col bg-okx-bg-primary">
+            {/* Tabs — horizontally scrollable on narrow viewports */}
+            <div className="overflow-x-auto border-b border-okx-border-primary">
+              <div className="flex px-2 md:px-4 min-w-max">
               {[
                 { key: "positions", label: t("positions") },
                 { key: "openOrders", label: t("openOrders") },
@@ -744,7 +803,7 @@ export function PerpetualTradingTerminal({
                 <button
                   key={tab.key}
                   onClick={() => setActiveBottomTab(tab.key as typeof activeBottomTab)}
-                  className={`py-2 px-4 text-[12px] transition-colors relative flex items-center gap-1 ${
+                  className={`py-2 px-3 md:px-4 text-[11px] md:text-[12px] transition-colors relative flex items-center gap-1 whitespace-nowrap flex-shrink-0 ${
                     activeBottomTab === tab.key
                       ? "text-okx-text-primary font-bold"
                       : "text-okx-text-secondary"
@@ -761,13 +820,14 @@ export function PerpetualTradingTerminal({
                   )}
                 </button>
               ))}
+              </div>
             </div>
 
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto">
               {/* Positions - 使用 WebSocket 实时推送数据 (行业标准 UI - 参考 OKX/Binance) */}
               {activeBottomTab === "positions" && (
-                <div className="p-2 overflow-x-auto">
+                <div className="p-2">
                   {!isConnected ? (
                     <div className="text-center text-okx-text-tertiary py-8">
                       {tc("connectWalletFirst")}
@@ -777,6 +837,9 @@ export function PerpetualTradingTerminal({
                       {t("noPosition")}
                     </div>
                   ) : (
+                    <>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-[11px] min-w-[1000px]">
                       <thead>
                         <tr className="text-okx-text-tertiary border-b border-okx-border-primary">
@@ -935,13 +998,69 @@ export function PerpetualTradingTerminal({
                         })}
                       </tbody>
                     </table>
+                    </div>
+                    {/* Mobile Position Cards */}
+                    <div className="md:hidden space-y-2">
+                      {currentPositionsForDisplay.map((pos) => {
+                        const sizeETH = parseFloat(String(pos.size)) / 1e18;
+                        const entryPrice = parseFloat(String(pos.entryPrice)) / 1e18;
+                        const markPrice = parseFloat(String(pos.markPrice || pos.entryPrice)) / 1e18;
+                        const liqPrice = parseFloat(String(pos.liquidationPrice || "0")) / 1e18;
+                        const marginETH = parseFloat(String(pos.collateral)) / 1e18;
+                        const leverage = parseFloat(String(pos.leverage));
+                        const unrealizedPnlETH = parseFloat(String(pos.unrealizedPnL)) / 1e18;
+                        const marginRatio = parseFloat(String(pos.marginRatio || "0")) / 100;
+                        const roe = parseFloat(String("roe" in pos ? pos.roe : "0") || "0") / 100;
+                        return (
+                          <div key={pos.pairId} className="bg-okx-bg-secondary rounded-lg p-3 border border-okx-border-primary">
+                            {/* Header: Direction + Symbol + Leverage + Close */}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${pos.isLong ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}>
+                                  {pos.isLong ? "多" : "空"}
+                                </span>
+                                <span className="text-okx-text-primary text-[12px] font-medium">{instId}</span>
+                                <span className="text-yellow-400 text-[11px]">{leverage}x</span>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  showToast(t("closingPosition") || "Closing position...", "info");
+                                  const result = await closePair(pos.pairId);
+                                  if (result.success) { showToast("Position closed!", "success"); refreshPositions(); loadHistoryData(); fetchBills(); }
+                                  else { showToast(result.error || "Failed to close", "error"); }
+                                }}
+                                className="px-2.5 py-1 bg-red-900/50 text-red-400 text-[10px] font-medium rounded"
+                              >平仓</button>
+                            </div>
+                            {/* Data Grid */}
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] mb-2">
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">仓位</span><span className="text-okx-text-primary">BNB {sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">保证金</span><span className="text-okx-text-primary">BNB {marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(6)}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">开仓价</span><span className="text-okx-text-primary font-mono">{formatSmallPrice(entryPrice)}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">标记价</span><span className="text-okx-text-secondary font-mono">{formatSmallPrice(markPrice)}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">强平价</span><span className={`font-mono ${pos.isLong ? "text-red-400" : "text-green-400"}`}>{formatSmallPrice(liqPrice)}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">保证金率</span><span className={`font-medium ${marginRatio > 80 ? "text-green-400" : marginRatio > 50 ? "text-yellow-400" : "text-red-400"}`}>{marginRatio.toFixed(2)}%</span></div>
+                            </div>
+                            {/* PnL Footer */}
+                            <div className="flex items-center justify-between pt-2 border-t border-okx-border-primary">
+                              <span className="text-okx-text-tertiary text-[11px]">未实现盈亏</span>
+                              <span className={`text-[12px] font-bold ${unrealizedPnlETH >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                {unrealizedPnlETH >= 0 ? "+" : ""}BNB {Math.abs(unrealizedPnlETH) >= 1 ? Math.abs(unrealizedPnlETH).toFixed(4) : Math.abs(unrealizedPnlETH).toFixed(6)}
+                                <span className="text-[10px] ml-1">({roe >= 0 ? "+" : ""}{roe.toFixed(2)}%)</span>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    </>
                   )}
                 </div>
               )}
 
               {/* Open Orders Table - V2 待处理订单 (行业标准 UI) */}
               {activeBottomTab === "openOrders" && (
-                <div className="p-4 overflow-x-auto">
+                <div className="p-2 md:p-4">
                   {!isConnected ? (
                     <div className="text-center text-okx-text-tertiary py-8">
                       {tc("connectWalletFirst")}
@@ -951,6 +1070,9 @@ export function PerpetualTradingTerminal({
                       {t("noOrders")}
                     </div>
                   ) : (
+                    <>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-[11px] min-w-[900px]">
                       <thead>
                         <tr className="text-okx-text-tertiary border-b border-okx-border-primary">
@@ -1104,13 +1226,58 @@ export function PerpetualTradingTerminal({
                         })}
                       </tbody>
                     </table>
+                    </div>
+                    {/* Mobile Open Order Cards */}
+                    <div className="md:hidden space-y-2">
+                      {v2PendingOrders.map((order) => {
+                        const sizeTokenRaw = Number(order.size) / 1e18;
+                        const sizeDisplay = sizeTokenRaw >= 1000000 ? `${(sizeTokenRaw / 1000000).toFixed(2)}M` : sizeTokenRaw >= 1000 ? `${(sizeTokenRaw / 1000).toFixed(2)}K` : sizeTokenRaw.toFixed(2);
+                        const priceRaw = Number(order.price) / 1e18;
+                        const priceDisplay = order.price === "0" ? "市价" : formatSmallPrice(priceRaw);
+                        const avgPriceRaw = Number(order.avgFillPrice) / 1e18;
+                        const avgPriceDisplay = order.avgFillPrice && order.avgFillPrice !== "0" ? formatSmallPrice(avgPriceRaw) : "--";
+                        const leverageDisplay = order.leverage ? `${Number(order.leverage) / 10000}x` : "--";
+                        const marginETH = order.margin ? Number(order.margin) / 1e18 : 0;
+                        const marginDisplay = order.margin ? `BNB ${marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(6)}` : "--";
+                        const orderTypeDisplay = order.orderType === "MARKET" ? "市价" : "限价";
+                        const fillPercent = Number(order.size) > 0 ? ((Number(order.filledSize) / Number(order.size)) * 100).toFixed(1) : "0";
+                        const timeDisplay = new Date(order.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                        return (
+                          <div key={order.id} className="bg-okx-bg-secondary rounded-lg p-3 border border-okx-border-primary">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${order.isLong ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}>
+                                  {order.isLong ? "多" : "空"}
+                                </span>
+                                <span className="bg-okx-bg-tertiary px-1.5 py-0.5 rounded text-[10px] text-okx-text-secondary">{orderTypeDisplay}</span>
+                                <span className="text-yellow-400 text-[11px]">{leverageDisplay}</span>
+                              </div>
+                              <button
+                                className={`text-[11px] px-2.5 py-1 rounded ${cancellingOrderId === order.id ? "text-okx-text-tertiary bg-okx-bg-tertiary cursor-not-allowed" : "text-red-400 bg-red-900/50"}`}
+                                disabled={cancellingOrderId === order.id}
+                                onClick={() => handleCancelOrder(order.id)}
+                              >{cancellingOrderId === order.id ? "撤销中..." : "撤单"}</button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">委托价</span><span className="text-okx-text-primary font-mono">{priceDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">均价</span><span className="text-okx-text-secondary font-mono">{avgPriceDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">数量</span><span className="text-okx-text-primary">{sizeDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">保证金</span><span className="text-okx-text-primary">{marginDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">成交</span><span className="text-okx-text-secondary">{fillPercent}%</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">时间</span><span className="text-okx-text-secondary">{timeDisplay}</span></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    </>
                   )}
                 </div>
               )}
 
               {/* Order History - 使用新的 API 获取历史订单 */}
               {activeBottomTab === "orderHistory" && (
-                <div className="p-4 overflow-x-auto">
+                <div className="p-2 md:p-4">
                   {!isConnected ? (
                     <div className="text-center text-okx-text-tertiary py-8">
                       {tc("connectWalletFirst")}
@@ -1125,6 +1292,9 @@ export function PerpetualTradingTerminal({
                       {t("noOrders")}
                     </div>
                   ) : (
+                    <>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-[11px] min-w-[800px]">
                       <thead>
                         <tr className="text-okx-text-tertiary border-b border-okx-border-primary">
@@ -1222,13 +1392,53 @@ export function PerpetualTradingTerminal({
                         })}
                       </tbody>
                     </table>
+                    </div>
+                    {/* Mobile Order History Cards */}
+                    <div className="md:hidden space-y-2">
+                      {orderHistoryData.map((order) => {
+                        const sizeTokenRaw = Number(order.size) / 1e18;
+                        const sizeDisplay = sizeTokenRaw >= 1000000 ? `${(sizeTokenRaw / 1000000).toFixed(2)}M` : sizeTokenRaw >= 1000 ? `${(sizeTokenRaw / 1000).toFixed(2)}K` : sizeTokenRaw.toFixed(2);
+                        const filledTokenRaw = Number(order.filledSize) / 1e18;
+                        const filledDisplay = filledTokenRaw >= 1000000 ? `${(filledTokenRaw / 1000000).toFixed(2)}M` : filledTokenRaw >= 1000 ? `${(filledTokenRaw / 1000).toFixed(2)}K` : filledTokenRaw.toFixed(2);
+                        const priceRaw = Number(order.price) / 1e18;
+                        const priceDisplay = order.price === "0" ? "市价" : formatSmallPrice(priceRaw);
+                        const avgPriceRaw = Number(order.avgFillPrice) / 1e18;
+                        const avgPriceDisplay = order.avgFillPrice && order.avgFillPrice !== "0" ? formatSmallPrice(avgPriceRaw) : "--";
+                        const leverageDisplay = order.leverage ? `${Number(order.leverage) / 10000}x` : "--";
+                        const orderTypeDisplay = order.orderType === "MARKET" ? "市价" : "限价";
+                        const statusDisplay = order.status === "FILLED" ? "已成交" : order.status === "CANCELLED" ? "已取消" : order.status === "EXPIRED" ? "已过期" : order.status === "LIQUIDATED" ? "已强平" : order.status === "ADL" ? "ADL减仓" : order.status === "CLOSED" ? "已平仓" : order.status;
+                        const statusColor = order.status === "FILLED" ? "text-green-400 bg-green-900/30" : order.status === "CANCELLED" ? "text-gray-400 bg-gray-900/30" : order.status === "LIQUIDATED" ? "text-red-400 bg-red-900/30" : order.status === "ADL" ? "text-orange-400 bg-orange-900/30" : order.status === "CLOSED" ? "text-blue-400 bg-blue-900/30" : "text-orange-400 bg-orange-900/30";
+                        const timeDisplay = new Date(order.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+                        return (
+                          <div key={order.id} className="bg-okx-bg-secondary rounded-lg p-3 border border-okx-border-primary">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${order.isLong ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}>
+                                  {order.isLong ? "多" : "空"}
+                                </span>
+                                <span className="bg-okx-bg-tertiary px-1.5 py-0.5 rounded text-[10px] text-okx-text-secondary">{orderTypeDisplay}</span>
+                                <span className="text-yellow-400 text-[11px]">{leverageDisplay}</span>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[10px] ${statusColor}`}>{statusDisplay}</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">委托价</span><span className="text-okx-text-primary font-mono">{priceDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">均价</span><span className="text-okx-text-secondary font-mono">{avgPriceDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">数量</span><span className="text-okx-text-primary">{filledDisplay}/{sizeDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">时间</span><span className="text-okx-text-secondary">{timeDisplay}</span></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    </>
                   )}
                 </div>
               )}
 
               {/* Trade History - 使用新的 API 获取成交记录 */}
               {activeBottomTab === "tradeHistory" && (
-                <div className="p-4 overflow-x-auto">
+                <div className="p-2 md:p-4">
                   {!isConnected ? (
                     <div className="text-center text-okx-text-tertiary py-8">
                       {tc("connectWalletFirst")}
@@ -1243,6 +1453,9 @@ export function PerpetualTradingTerminal({
                       暂无成交记录
                     </div>
                   ) : (
+                    <>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-[11px] min-w-[800px]">
                       <thead>
                         <tr className="text-okx-text-tertiary border-b border-okx-border-primary">
@@ -1330,6 +1543,44 @@ export function PerpetualTradingTerminal({
                         })}
                       </tbody>
                     </table>
+                    </div>
+                    {/* Mobile Trade History Cards */}
+                    <div className="md:hidden space-y-2">
+                      {tradeHistoryData.map((trade) => {
+                        const sizeTokenRaw = Number(trade.size) / 1e18;
+                        const sizeDisplay = sizeTokenRaw >= 1000000 ? `${(sizeTokenRaw / 1000000).toFixed(2)}M` : sizeTokenRaw >= 1000 ? `${(sizeTokenRaw / 1000).toFixed(2)}K` : sizeTokenRaw.toFixed(2);
+                        const priceRaw = Number(trade.price) / 1e18;
+                        const priceDisplay = formatSmallPrice(priceRaw);
+                        const feeETH = Number(trade.fee) / 1e18;
+                        const feeDisplay = `BNB ${feeETH >= 0.0001 ? feeETH.toFixed(6) : feeETH.toFixed(8)}`;
+                        const pnlETH = Number(trade.realizedPnL) / 1e18;
+                        const pnlDisplay = pnlETH !== 0 ? `${pnlETH >= 0 ? "+" : ""}BNB ${Math.abs(pnlETH) >= 1 ? Math.abs(pnlETH).toFixed(4) : Math.abs(pnlETH).toFixed(6)}` : "--";
+                        const typeDisplay = trade.type === "liquidation" ? "强平" : trade.type === "adl" ? "ADL" : trade.type === "close" ? "平仓" : "开仓";
+                        const typeColor = trade.type === "liquidation" ? "text-red-400 bg-red-900/30" : trade.type === "adl" ? "text-orange-400 bg-orange-900/30" : trade.type === "close" ? "text-blue-400 bg-blue-900/30" : "text-green-400 bg-green-900/30";
+                        const timeDisplay = new Date(trade.timestamp).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                        return (
+                          <div key={trade.id} className="bg-okx-bg-secondary rounded-lg p-3 border border-okx-border-primary">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${trade.isLong ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"}`}>
+                                  {trade.isLong ? "多" : "空"}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] ${typeColor}`}>{typeDisplay}</span>
+                                <span className={`text-[10px] ${trade.isMaker ? "text-purple-400" : "text-blue-400"}`}>{trade.isMaker ? "Maker" : "Taker"}</span>
+                              </div>
+                              <span className="text-okx-text-tertiary text-[10px]">{timeDisplay}</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">成交价</span><span className="text-okx-text-primary font-mono">{priceDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">数量</span><span className="text-okx-text-primary">{sizeDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">手续费</span><span className="text-okx-text-secondary">{feeDisplay}</span></div>
+                              <div className="flex justify-between"><span className="text-okx-text-tertiary">盈亏</span><span className={`font-medium ${pnlETH >= 0 ? "text-green-400" : "text-red-400"}`}>{pnlDisplay}</span></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    </>
                   )}
                 </div>
               )}
@@ -1337,10 +1588,10 @@ export function PerpetualTradingTerminal({
               {/* Hunting Arena - 猎杀场 */}
               {activeBottomTab === "hunting" && (
                 <div className="p-2 h-full overflow-y-auto">
-                  {/* 两列布局：左边热力图+排行榜，右边持仓列表 */}
-                  <div className="flex gap-3 h-full">
+                  {/* 两列布局：左边热力图+排行榜，右边持仓列表 (mobile: stacked) */}
+                  <div className="flex flex-col lg:flex-row gap-3 h-full">
                     {/* 左侧：热力图 + 猎手排行榜 */}
-                    <div className="w-[420px] flex-shrink-0 flex flex-col gap-3">
+                    <div className="w-full lg:w-[420px] flex-shrink-0 flex flex-col gap-3">
                       {/* 清算热力图 */}
                       <div className="flex-shrink-0">
                         <LiquidationHeatmap token={symbol} />
@@ -1467,17 +1718,155 @@ export function PerpetualTradingTerminal({
           </div>
         </div>
 
-        {/* Right: Order Panel (固定宽度) */}
-        <div className="w-[320px] bg-okx-bg-primary overflow-y-auto">
-          <TradingErrorBoundary module="OrderPanel">
-            {/* V2: 使用 Settlement 合约 + 撮合引擎 */}
-            <PerpetualOrderPanelV2
-              symbol={symbol}
-              displaySymbol={displaySymbol}
-              tokenAddress={symbol.startsWith("0x") ? symbol as Address : undefined}
-              isPerpEnabled={isPerpEnabled}
-            />
-          </TradingErrorBoundary>
+          {/* Right: Order Panel (tablet: 280px, desktop: 320px) */}
+          <div className="w-[280px] lg:w-[320px] bg-okx-bg-primary overflow-y-auto">
+            <TradingErrorBoundary module="OrderPanel">
+              <PerpetualOrderPanelV2
+                symbol={symbol}
+                displaySymbol={displaySymbol}
+                tokenAddress={symbol.startsWith("0x") ? symbol as Address : undefined}
+                isPerpEnabled={isPerpEnabled}
+              />
+            </TradingErrorBoundary>
+          </div>
+        </div>
+
+        {/* ═══ MOBILE LAYOUT (< md) ═══ */}
+        <div className="md:hidden flex-1 flex flex-col overflow-hidden">
+          {/* Chart section */}
+          {mobileActiveSection === "chart" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="h-[300px] bg-[#131722] flex-shrink-0">
+                <TradingErrorBoundary module="PerpChart">
+                  {tokenAddress && (
+                    <MemoizedPriceChart
+                      tokenAddress={tokenAddress}
+                      displaySymbol={displaySymbol}
+                      currentPrice={chartPrice}
+                    />
+                  )}
+                </TradingErrorBoundary>
+              </div>
+              {/* Mobile bottom panel (positions/orders) */}
+              <div className="flex-1 min-h-[200px] border-t border-okx-border-primary flex flex-col bg-okx-bg-primary">
+                {/* Scrollable tabs */}
+                <div className="overflow-x-auto border-b border-okx-border-primary">
+                  <div className="flex px-2 min-w-max">
+                    {[
+                      { key: "positions", label: t("positions") },
+                      { key: "openOrders", label: t("openOrders") },
+                      { key: "orderHistory", label: t("orderHistory") },
+                      { key: "tradeHistory", label: t("tradeHistory") },
+                      { key: "hunting", label: t("huntingArena") },
+                      { key: "risk", label: t("riskControl"), badge: riskAlerts.length > 0 ? riskAlerts.length : undefined },
+                      { key: "bills", label: t("bills") },
+                    ].map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveBottomTab(tab.key as typeof activeBottomTab)}
+                        className={`py-2 px-3 text-[11px] transition-colors relative flex items-center gap-1 whitespace-nowrap flex-shrink-0 ${
+                          activeBottomTab === tab.key
+                            ? "text-okx-text-primary font-bold"
+                            : "text-okx-text-secondary"
+                        }`}
+                      >
+                        {tab.label}
+                        {"badge" in tab && tab.badge && (
+                          <span className="bg-red-500 text-white text-[10px] rounded-full px-1.5 min-w-[16px] h-4 flex items-center justify-center">
+                            {tab.badge > 9 ? "9+" : tab.badge}
+                          </span>
+                        )}
+                        {activeBottomTab === tab.key && (
+                          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-okx-accent" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Tab Content (shared with desktop — rendered inline) */}
+                <div className="flex-1 overflow-y-auto">
+                  {/* Mobile: simplified positions view (cards rendered in Step 5) */}
+                  {activeBottomTab === "positions" && (
+                    <div className="p-2">
+                      {!isConnected ? (
+                        <div className="text-center text-okx-text-tertiary py-8 text-[12px]">{tc("connectWalletFirst")}</div>
+                      ) : currentPositionsForDisplay.length === 0 ? (
+                        <div className="text-center text-okx-text-tertiary py-8 text-[12px]">{t("noPosition")}</div>
+                      ) : (
+                        <div className="text-center text-okx-text-tertiary py-4 text-[11px]">
+                          {currentPositionsForDisplay.length} {t("positions")} — {t("openOrders")}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {activeBottomTab === "openOrders" && (
+                    <div className="p-2 text-center text-okx-text-tertiary py-8 text-[12px]">
+                      {!isConnected ? tc("connectWalletFirst") : t("noOpenOrder")}
+                    </div>
+                  )}
+                  {activeBottomTab === "orderHistory" && (
+                    <div className="p-2 text-center text-okx-text-tertiary py-8 text-[12px]">
+                      {!isConnected ? tc("connectWalletFirst") : isLoadingHistory ? "..." : t("noOrderHistory")}
+                    </div>
+                  )}
+                  {activeBottomTab === "tradeHistory" && (
+                    <div className="p-2 text-center text-okx-text-tertiary py-8 text-[12px]">
+                      {!isConnected ? tc("connectWalletFirst") : isLoadingHistory ? "..." : t("noTradeHistory")}
+                    </div>
+                  )}
+                  {activeBottomTab === "hunting" && (
+                    <div className="p-2">
+                      <div className="flex flex-col gap-3">
+                        <LiquidationHeatmap token={symbol} />
+                        <HunterLeaderboard token={symbol} />
+                        <AllPositions token={symbol} />
+                      </div>
+                    </div>
+                  )}
+                  {activeBottomTab === "risk" && (
+                    <div className="p-4">
+                      <RiskPanel trader={tradingWalletAddress || address} token={tokenAddress} />
+                    </div>
+                  )}
+                  {activeBottomTab === "bills" && (
+                    <div className="p-2 text-center text-okx-text-tertiary py-8 text-[12px]">
+                      {!isConnected ? tc("connectWalletFirst") : t("billEmpty")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* OrderBook section (full screen on mobile) */}
+          {mobileActiveSection === "book" && (
+            <div className="flex-1 overflow-hidden">
+              <TradingErrorBoundary module="OrderBook">
+                <OrderBook
+                  data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : undefined}
+                  onPriceClick={(price) => {
+                    setMobileActiveSection("trade");
+                    console.log("Price clicked:", price);
+                  }}
+                  maxRows={15}
+                />
+              </TradingErrorBoundary>
+            </div>
+          )}
+
+          {/* Trade / Order Panel section (full width on mobile) */}
+          {mobileActiveSection === "trade" && (
+            <div className="flex-1 overflow-y-auto">
+              <TradingErrorBoundary module="OrderPanel">
+                <PerpetualOrderPanelV2
+                  symbol={symbol}
+                  displaySymbol={displaySymbol}
+                  tokenAddress={symbol.startsWith("0x") ? symbol as Address : undefined}
+                  isPerpEnabled={isPerpEnabled}
+                />
+              </TradingErrorBoundary>
+            </div>
+          )}
         </div>
       </div>
 
