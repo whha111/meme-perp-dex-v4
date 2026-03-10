@@ -2,6 +2,9 @@
 
 > **强制执行**: 每次修改数据获取逻辑前必须先查阅此文件
 > **最后更新**: 2026-02-01
+>
+> **⚠️ 2026-03-01**: 撮合引擎 WebSocket/HTTP 返回的余额数据包含虚拟 mode2Adj，非链上真实值。
+> 详见 `docs/ISSUES_AUDIT_REPORT.md`
 > **来源**: PERP_PAGE_DATA_GUIDE.md 第七章
 
 ---

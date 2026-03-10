@@ -20,7 +20,7 @@ import {
   keccak256,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bsc } from "viem/chains";
 
 // ============================================================
 // Types
@@ -235,8 +235,9 @@ export class OrderBook {
       // 市价单优先
       if (a.price === 0n && b.price !== 0n) return -1;
       if (b.price === 0n && a.price !== 0n) return 1;
-      // 价格高的优先
-      if (a.price !== b.price) return Number(b.price - a.price);
+      // L-03 FIX: 使用 BigInt 比较替代 Number() 避免精度丢失
+      // 价格高的优先（买单：出价高的先成交）
+      if (a.price !== b.price) return a.price > b.price ? -1 : 1;
       // 时间早的优先
       return a.createdAt - b.createdAt;
     });
@@ -254,8 +255,9 @@ export class OrderBook {
       // 市价单优先
       if (a.price === 0n && b.price !== 0n) return -1;
       if (b.price === 0n && a.price !== 0n) return 1;
+      // L-03 FIX: 使用 BigInt 比较替代 Number() 避免精度丢失
       // 价格低的优先
-      if (a.price !== b.price) return Number(a.price - b.price);
+      if (a.price !== b.price) return a.price > b.price ? 1 : -1;
       // 时间早的优先
       return a.createdAt - b.createdAt;
     });
@@ -279,10 +281,12 @@ export class OrderBook {
       }
 
       const result = Array.from(priceMap.values());
+      // L-03 FIX: 使用 BigInt 比较替代 Number() 避免精度丢失
       if (isLong) {
-        result.sort((a, b) => Number(b.price - a.price));
+        // Longs: descending (highest bid first) — best price on top
+        result.sort((a, b) => a.price > b.price ? -1 : a.price < b.price ? 1 : 0);
       } else {
-        result.sort((a, b) => Number(a.price - b.price));
+        result.sort((a, b) => a.price > b.price ? 1 : a.price < b.price ? -1 : 0);
       }
       return result.slice(0, levels);
     };
@@ -415,7 +419,7 @@ export class MatchingEngine {
    */
   configurePriceSource(rpcUrl: string, tokenFactoryAddress: Address, priceFeedAddress?: Address): void {
     this.priceClient = createPublicClient({
-      chain: baseSepolia,
+      chain: bsc,
       transport: http(rpcUrl),
     });
     this.tokenFactoryAddress = tokenFactoryAddress;
@@ -430,7 +434,7 @@ export class MatchingEngine {
    * 旧方法兼容
    */
   configurePriceFeed(rpcUrl: string, priceFeedAddress: Address): void {
-    this.configurePriceSource(rpcUrl, "0x8de2Ce2a0f974b4CB00EC5B56BD89382690b5523" as Address, priceFeedAddress);
+    this.configurePriceSource(rpcUrl, "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8" as Address, priceFeedAddress);
   }
 
   // ETH 本位系统: 不再需要 ETH/USD 价格转换
@@ -658,6 +662,17 @@ export class MatchingEngine {
     // - 市价单: price=0, 使用 currentPrice (1e18 精度)
     // - 限价单: price>0, 前端发送 1e18 精度
     const isMarketOrder = price === 0n;
+
+    // M-29 FIX: 市价单在无历史价格时拒绝 (防止 0 价成交)
+    if (isMarketOrder && currentPrice === 0n) {
+      return {
+        order: { id: "", trader, token, isLong, size, price: 0n, leverage, filledSize: 0n, status: "REJECTED" as any, createdAt: now, updatedAt: now, margin: 0n, source: params.source || "api" },
+        matches: [],
+        rejected: true,
+        rejectReason: "Market orders require an established price. Submit a limit order first.",
+      };
+    }
+
     const priceETH = isMarketOrder ? currentPrice : price;  // 都是 1e18 精度
 
     // Step 2: 计算仓位的 ETH 价值 (名义价值)
@@ -965,6 +980,9 @@ export class MatchingEngine {
         // 计算成交价格（Maker价格优先：已在订单簿中的订单价格）
         const matchPrice = shortPrice;
 
+        // M-29 FIX: 绝不在 0 价成交
+        if (matchPrice === 0n) continue;
+
         // 创建配对
         const match: Match = {
           longOrder: incomingOrder,
@@ -1026,6 +1044,9 @@ export class MatchingEngine {
         const matchSize = remainingSize < longRemaining ? remainingSize : longRemaining;
         // Maker's price (existing order in book) determines match price
         const matchPrice = longPrice;
+
+        // M-29 FIX: 绝不在 0 价成交
+        if (matchPrice === 0n) continue;
 
         // 生成成交ID
         const tradeId = `trade_${Date.now()}_${this.tradeIdCounter + 1}`;
@@ -1557,14 +1578,14 @@ export class SettlementSubmitter {
 
   constructor(rpcUrl: string, matcherPrivateKey: Hex, settlementAddress: Address) {
     this.client = createPublicClient({
-      chain: baseSepolia,
+      chain: bsc,
       transport: http(rpcUrl),
     });
 
     const account = privateKeyToAccount(matcherPrivateKey);
     this.walletClient = createWalletClient({
       account,
-      chain: baseSepolia,
+      chain: bsc,
       transport: http(rpcUrl),
     });
 

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { useAccount } from "wagmi";
+import { useTranslations } from "next-intl";
 import { getWebSocketClient } from "@/lib/websocket/client";
 import { MessageType } from "@/lib/websocket/types";
 import { useWalletAuth } from "./useWalletAuth";
@@ -67,6 +68,7 @@ export interface UseTokenMetadataReturn {
 export function useTokenMetadata(): UseTokenMetadataReturn {
   const { address } = useAccount();
   const { authenticate, isAuthenticated } = useWalletAuth();
+  const t = useTranslations("hooks");
 
   const [metadata, setMetadata] = useState<TokenMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -105,14 +107,14 @@ export function useTokenMetadata(): UseTokenMetadataReturn {
       setMetadata(null);
       return null;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "获取元数据失败";
+      const errorMessage = err instanceof Error ? err.message : t("fetchMetadataFailed");
       setError(errorMessage);
       console.error("[useTokenMetadata] fetchMetadata error:", err);
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   /**
    * 保存代币元数据
@@ -121,12 +123,12 @@ export function useTokenMetadata(): UseTokenMetadataReturn {
     data: Omit<SaveMetadataReq, "creator_address">
   ): Promise<boolean> => {
     if (!address) {
-      setError("请先连接钱包");
+      setError(t("connectWalletFirst"));
       return false;
     }
 
     if (!data.inst_id) {
-      setError("交易对ID不能为空");
+      setError(t("tradingPairIdRequired"));
       return false;
     }
 
@@ -138,7 +140,7 @@ export function useTokenMetadata(): UseTokenMetadataReturn {
       if (!isAuthenticated) {
         const authOk = await authenticate();
         if (!authOk) {
-          setError("钱包认证失败");
+          setError(t("walletAuthFailed"));
           return false;
         }
       }
@@ -165,17 +167,17 @@ export function useTokenMetadata(): UseTokenMetadataReturn {
         return true;
       }
 
-      setError(response.message || "保存元数据失败");
+      setError(response.message || t("saveMetadataFailed"));
       return false;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "保存元数据失败";
+      const errorMessage = err instanceof Error ? err.message : t("saveMetadataFailed");
       setError(errorMessage);
       console.error("[useTokenMetadata] saveMetadata error:", err);
       return false;
     } finally {
       setIsSaving(false);
     }
-  }, [address, authenticate, isAuthenticated]);
+  }, [address, authenticate, isAuthenticated, t]);
 
   return {
     metadata,

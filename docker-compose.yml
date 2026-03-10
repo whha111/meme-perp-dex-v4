@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -21,17 +19,18 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis Cache
+  # Redis Cache — AUDIT-FIX DP-C03: require password authentication
   redis:
     image: redis:7-alpine
     container_name: memeperp-redis
     restart: unless-stopped
+    command: redis-server --requirepass ${MEMEPERP_REDIS_PASSWORD:?MEMEPERP_REDIS_PASSWORD is required} --appendonly yes
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${MEMEPERP_REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -47,19 +46,29 @@ services:
       - "8081:8081"
     environment:
       - PORT=8081
-      - RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://base-sepolia-rpc.publicnode.com}
+      - RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}
       - MATCHER_PRIVATE_KEY=${MEMEPERP_BLOCKCHAIN_PRIVATE_KEY:?MEMEPERP_BLOCKCHAIN_PRIVATE_KEY is required}
       - SETTLEMENT_ADDRESS=${MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS:?MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS is required}
-      - TOKEN_FACTORY_ADDRESS=${MEMEPERP_TOKEN_FACTORY_ADDRESS:-0x583d35e9d407Ea03dE5A2139e792841353CB67b1}
-      - PRICE_FEED_ADDRESS=${MEMEPERP_PRICE_FEED_ADDRESS:-0xa97a1E55cFfF5C1e45Ac2c1D882717cDD4F44e01}
+      - TOKEN_FACTORY_ADDRESS=${MEMEPERP_TOKEN_FACTORY_ADDRESS:?MEMEPERP_TOKEN_FACTORY_ADDRESS is required}
+      - PRICE_FEED_ADDRESS=${MEMEPERP_PRICE_FEED_ADDRESS:?MEMEPERP_PRICE_FEED_ADDRESS is required}
+      - SETTLEMENT_V2_ADDRESS=${MEMEPERP_SETTLEMENT_V2_ADDRESS:?MEMEPERP_SETTLEMENT_V2_ADDRESS is required}
+      - PERP_VAULT_ADDRESS=${MEMEPERP_PERP_VAULT_ADDRESS:?MEMEPERP_PERP_VAULT_ADDRESS is required}
+      - COLLATERAL_TOKEN_ADDRESS=${COLLATERAL_TOKEN_ADDRESS:?COLLATERAL_TOKEN_ADDRESS is required}
+      - INSURANCE_FUND_ADDRESS=${MEMEPERP_INSURANCE_FUND_ADDRESS:?MEMEPERP_INSURANCE_FUND_ADDRESS is required}
+      - VAULT_ADDRESS=${MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS:?MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS is required}
+      - POSITION_MANAGER_ADDRESS=${MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS:?MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS is required}
+      - FUNDING_RATE_ADDRESS=${MEMEPERP_FUNDING_RATE_ADDRESS:?MEMEPERP_FUNDING_RATE_ADDRESS is required}
+      - LIQUIDATION_ADDRESS=${MEMEPERP_LIQUIDATION_ADDRESS:?MEMEPERP_LIQUIDATION_ADDRESS is required}
+      - LENDING_POOL_ADDRESS=${MEMEPERP_LENDING_POOL_ADDRESS:?MEMEPERP_LENDING_POOL_ADDRESS is required}
       - BATCH_INTERVAL_MS=${MEMEPERP_BATCH_INTERVAL_MS:-30000}
-      - REDIS_URL=redis://redis:6379
+      - SKIP_SIGNATURE_VERIFY=${SKIP_SIGNATURE_VERIFY:-false}
+      - REDIS_URL=redis://:${MEMEPERP_REDIS_PASSWORD}@redis:6379
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
-      interval: 30s
+      test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:8081/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
+      interval: 15s
       timeout: 10s
       retries: 3
 
@@ -79,10 +88,10 @@ services:
       - MEMEPERP_DATABASE_PASSWORD=${MEMEPERP_DATABASE_PASSWORD:?MEMEPERP_DATABASE_PASSWORD is required}
       - MEMEPERP_DATABASE_DBNAME=${MEMEPERP_DATABASE_DBNAME:-memeperp}
       - MEMEPERP_REDIS_ADDR=redis:6379
-      - MEMEPERP_REDIS_PASSWORD=${MEMEPERP_REDIS_PASSWORD:-}
+      - MEMEPERP_REDIS_PASSWORD=${MEMEPERP_REDIS_PASSWORD:?MEMEPERP_REDIS_PASSWORD is required}
       - MEMEPERP_JWT_SECRET=${MEMEPERP_JWT_SECRET:?MEMEPERP_JWT_SECRET is required (min 32 chars)}
-      - MEMEPERP_BLOCKCHAIN_RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://base-sepolia-rpc.publicnode.com}
-      - MEMEPERP_BLOCKCHAIN_CHAIN_ID=${MEMEPERP_BLOCKCHAIN_CHAIN_ID:-84532}
+      - MEMEPERP_BLOCKCHAIN_RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}
+      - MEMEPERP_BLOCKCHAIN_CHAIN_ID=${MEMEPERP_BLOCKCHAIN_CHAIN_ID:-56}
       - MEMEPERP_BLOCKCHAIN_PRIVATE_KEY=${MEMEPERP_BLOCKCHAIN_PRIVATE_KEY:-}
       - MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS=${MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS:?MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS is required}
       - MEMEPERP_MATCHING_ENGINE_URL=${MEMEPERP_MATCHING_ENGINE_URL:-http://matching-engine:8081}
@@ -93,16 +102,30 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
-      interval: 30s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health > /dev/null 2>&1"]
+      interval: 15s
       timeout: 10s
       retries: 3
 
   # Frontend Next.js App
+  # NOTE: NEXT_PUBLIC_* vars are baked into the JS bundle at build time.
+  # The 'args' section below ensures correct values during 'docker-compose build'.
+  # The 'environment' section only affects server-side rendering, NOT client-side code.
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_MATCHING_ENGINE_URL=${NEXT_PUBLIC_MATCHING_ENGINE_URL:-http://localhost:8081}
+        - NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS=${MEMEPERP_TOKEN_FACTORY_ADDRESS:?MEMEPERP_TOKEN_FACTORY_ADDRESS is required}
+        - NEXT_PUBLIC_SETTLEMENT_ADDRESS=${MEMEPERP_SETTLEMENT_ADDRESS:?MEMEPERP_SETTLEMENT_ADDRESS is required}
+        - NEXT_PUBLIC_SETTLEMENT_V2_ADDRESS=${MEMEPERP_SETTLEMENT_V2_ADDRESS:?MEMEPERP_SETTLEMENT_V2_ADDRESS is required}
+        - NEXT_PUBLIC_VAULT_ADDRESS=${MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS:?MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS is required}
+        - NEXT_PUBLIC_PRICE_FEED_ADDRESS=${MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS:?MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS is required}
+        - NEXT_PUBLIC_PERP_VAULT_ADDRESS=${MEMEPERP_PERP_VAULT_ADDRESS:?MEMEPERP_PERP_VAULT_ADDRESS is required}
+        - NEXT_PUBLIC_CHAIN_ID=${MEMEPERP_BLOCKCHAIN_CHAIN_ID:-56}
+        - NEXT_PUBLIC_RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}
+        - NEXT_PUBLIC_BSC_RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}
     container_name: memeperp-frontend
     restart: unless-stopped
     ports:
@@ -112,8 +135,8 @@ services:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8080}
       - NEXT_PUBLIC_WS_PUBLIC_URL=${NEXT_PUBLIC_WS_PUBLIC_URL:-ws://localhost:8080/ws/public}
       - NEXT_PUBLIC_WS_PRIVATE_URL=${NEXT_PUBLIC_WS_PRIVATE_URL:-ws://localhost:8080/ws/private}
-      - NEXT_PUBLIC_CHAIN_ID=${NEXT_PUBLIC_CHAIN_ID:-84532}
-      - NEXT_PUBLIC_RPC_URL=${NEXT_PUBLIC_RPC_URL:-https://base-sepolia-rpc.publicnode.com}
+      - NEXT_PUBLIC_CHAIN_ID=${NEXT_PUBLIC_CHAIN_ID:-56}
+      - NEXT_PUBLIC_RPC_URL=${NEXT_PUBLIC_RPC_URL:-https://bsc-dataseed.binance.org/}
       - NEXT_PUBLIC_SETTLEMENT_ADDRESS=${NEXT_PUBLIC_SETTLEMENT_ADDRESS:?NEXT_PUBLIC_SETTLEMENT_ADDRESS is required}
     depends_on:
       backend:
@@ -133,19 +156,28 @@ services:
       - MEMEPERP_DATABASE_PASSWORD=${MEMEPERP_DATABASE_PASSWORD:?MEMEPERP_DATABASE_PASSWORD is required}
       - MEMEPERP_DATABASE_DBNAME=${MEMEPERP_DATABASE_DBNAME:-memeperp}
       - MEMEPERP_REDIS_ADDR=redis:6379
-      - MEMEPERP_REDIS_PASSWORD=${MEMEPERP_REDIS_PASSWORD:-}
-      - MEMEPERP_BLOCKCHAIN_RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://base-sepolia-rpc.publicnode.com}
-      - MEMEPERP_BLOCKCHAIN_CHAIN_ID=${MEMEPERP_BLOCKCHAIN_CHAIN_ID:-84532}
+      - MEMEPERP_REDIS_PASSWORD=${MEMEPERP_REDIS_PASSWORD:?MEMEPERP_REDIS_PASSWORD is required}
+      - MEMEPERP_BLOCKCHAIN_RPC_URL=${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}
+      - MEMEPERP_BLOCKCHAIN_CHAIN_ID=${MEMEPERP_BLOCKCHAIN_CHAIN_ID:-56}
       - MEMEPERP_BLOCKCHAIN_PRIVATE_KEY=${MEMEPERP_BLOCKCHAIN_PRIVATE_KEY:?MEMEPERP_BLOCKCHAIN_PRIVATE_KEY is required}
       - MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS=${MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS:-}
       - MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS=${MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS:?MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS is required}
       - MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS=${MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS:-}
+      - MEMEPERP_MATCHING_ENGINE_URL=${MEMEPERP_MATCHING_ENGINE_URL:-http://matching-engine:8081}
       - MEMEPERP_SERVER_MODE=debug
+      - HEALTH_PORT=8082
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      matching-engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:

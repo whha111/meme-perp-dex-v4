@@ -11,7 +11,7 @@ interface LiquidityPanelProps {
   virtualETHReserve: bigint;
   virtualTokenReserve: bigint;
   currentPrice: bigint;
-  ethPriceUsd: number;
+  bnbPriceUsd: number;
   className?: string;
 }
 
@@ -31,9 +31,9 @@ function fmtNum(n: number, decimals = 4): string {
  * 格式化 ETH 价格，小价格用下标: 0.0₈1695 ETH
  */
 function fmtEthPrice(eth: number): string {
-  if (eth <= 0) return "0 ETH";
-  if (eth >= 0.001) return `${eth.toFixed(6)} ETH`;
-  if (eth >= 0.0001) return `${eth.toFixed(8)} ETH`;
+  if (eth <= 0) return "0 BNB";
+  if (eth >= 0.001) return `${eth.toFixed(6)} BNB`;
+  if (eth >= 0.0001) return `${eth.toFixed(8)} BNB`;
 
   const s = eth.toFixed(18);
   const m = s.match(/^0\.(0*)([1-9]\d*)/);
@@ -42,9 +42,9 @@ function fmtEthPrice(eth: number): string {
     const digits = m[2].slice(0, 5);
     const subs = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
     const sub = zeros.toString().split("").map(d => subs[parseInt(d)]).join("");
-    return `0.0${sub}${digits} ETH`;
+    return `0.0${sub}${digits} BNB`;
   }
-  return `${eth.toFixed(10)} ETH`;
+  return `${eth.toFixed(10)} BNB`;
 }
 
 /**
@@ -73,7 +73,7 @@ export function LiquidityPanel({
   virtualETHReserve,
   virtualTokenReserve,
   currentPrice,
-  ethPriceUsd,
+  bnbPriceUsd,
   className,
 }: LiquidityPanelProps) {
   const t = useTranslations();
@@ -86,7 +86,7 @@ export function LiquidityPanel({
     );
   }
 
-  const realETH = Number(formatUnits(poolState.realETHReserve, 18));
+  const realBNB = Number(formatUnits(poolState.realETHReserve, 18));
   const realToken = Number(formatUnits(poolState.realTokenReserve, 18));
   const vETH = Number(formatUnits(virtualETHReserve, 18));
   const vToken = Number(formatUnits(virtualTokenReserve, 18));
@@ -94,7 +94,7 @@ export function LiquidityPanel({
   const totalSupply = Number(formatUnits(REAL_TOKEN_SUPPLY, 18));
   const graduationTarget = Number(formatUnits(SOLD_TOKENS_TARGET, 18));
   const priceEth = Number(formatUnits(currentPrice, 18));
-  const priceUsdVal = priceEth * ethPriceUsd;
+  const priceUsdVal = priceEth * bnbPriceUsd;
 
   // Graduation progress percentage
   const progressPct = Math.min((soldTokens / graduationTarget) * 100, 100);
@@ -115,8 +115,8 @@ export function LiquidityPanel({
           {poolState.isGraduated
             ? t("swap.tokenGraduated")
             : poolState.isActive
-              ? "Active"
-              : "Paused"}
+              ? t("trading.active")
+              : t("trading.paused")}
         </span>
         {poolState.creator && (
           <span className="text-okx-text-tertiary text-[10px]">
@@ -149,21 +149,21 @@ export function LiquidityPanel({
       <div className="grid grid-cols-2 gap-3">
         <StatCard
           label={t("trading.ethReserve")}
-          value={`${realETH.toFixed(4)} ETH`}
-          subValue={fmtUsd(realETH * ethPriceUsd)}
+          value={`${realBNB.toFixed(4)} BNB`}
+          subValue={fmtUsd(realBNB * bnbPriceUsd)}
         />
         <StatCard
           label={t("trading.tokenReserve")}
           value={fmtNum(realToken)}
-          subValue={`/ ${fmtNum(totalSupply)} total`}
+          subValue={`/ ${fmtNum(totalSupply)} ${t("trading.total")}`}
         />
         <StatCard
-          label="Virtual ETH"
-          value={`${vETH.toFixed(4)} ETH`}
-          subValue={fmtUsd(vETH * ethPriceUsd)}
+          label={t("trading.virtualBnb")}
+          value={`${vETH.toFixed(4)} BNB`}
+          subValue={fmtUsd(vETH * bnbPriceUsd)}
         />
         <StatCard
-          label="Virtual Token"
+          label={t("trading.virtualToken")}
           value={fmtNum(vToken)}
         />
       </div>

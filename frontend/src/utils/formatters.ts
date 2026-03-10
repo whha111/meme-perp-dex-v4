@@ -2,37 +2,54 @@
  * 通用格式化工具函数
  */
 
+// Static time-ago translations for all locales
+const timeAgoI18n: Record<string, { justNow: string; s: string; m: string; h: string; d: string }> = {
+  zh: { justNow: "刚刚", s: "秒前", m: "分钟前", h: "小时前", d: "天前" },
+  en: { justNow: "just now", s: "s ago", m: "m ago", h: "h ago", d: "d ago" },
+  ja: { justNow: "たった今", s: "秒前", m: "分前", h: "時間前", d: "日前" },
+  ko: { justNow: "방금", s: "초 전", m: "분 전", h: "시간 전", d: "일 전" },
+};
+
+function getLocale(): string {
+  if (typeof window === 'undefined') return 'zh';
+  try {
+    return localStorage.getItem('meme-perp-locale') || 'zh';
+  } catch {
+    return 'zh';
+  }
+}
+
 /**
  * 格式化时间为"多久之前"的形式
  * @param timestamp Unix 时间戳（秒或毫秒）或 bigint
- * @returns 格式化的时间字符串，如 "3分钟前"、"2小时前"
+ * @returns 格式化的时间字符串，如 "3m ago"、"2h ago"
  */
 export function formatTimeAgo(timestamp: bigint | number | undefined | null): string {
+  const t = timeAgoI18n[getLocale()] || timeAgoI18n.zh;
+
   if (timestamp === undefined || timestamp === null || timestamp === 0) {
-    return "刚刚";
+    return t.justNow;
   }
 
   // 自动检测: 如果时间戳大于 1e11，认为是毫秒；否则是秒
-  // 1e11 = 3001年1月1日 (如果是秒) 或 1973年 (如果是毫秒)
   let timestampMs = Number(timestamp);
   if (timestampMs < 1e11) {
-    timestampMs = timestampMs * 1000; // 秒转毫秒
+    timestampMs = timestampMs * 1000;
   }
 
   const seconds = Math.floor((Date.now() - timestampMs) / 1000);
 
-  // 防止负数（未来时间或时钟偏差）
-  if (seconds < 0) return "刚刚";
-  if (seconds < 60) return `${seconds}秒前`;
+  if (seconds < 0) return t.justNow;
+  if (seconds < 60) return `${seconds}${t.s}`;
 
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}分钟前`;
+  if (minutes < 60) return `${minutes}${t.m}`;
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}小时前`;
+  if (hours < 24) return `${hours}${t.h}`;
 
   const days = Math.floor(hours / 24);
-  return `${days}天前`;
+  return `${days}${t.d}`;
 }
 
 /**
@@ -120,13 +137,28 @@ export function formatTokenPrice(price: number): string {
   if (price >= 0.01) return price.toFixed(6);
   if (price >= 0.0001) return price.toFixed(8);
 
-  // 极小数使用下标格式: 0.0₈1016
+  // 极小数使用下标格式: 0.0₂₆9890
+  // 用 toExponential 解析，避免 toFixed(18) 对超小数丢失精度
+  const subscripts = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
+  const expStr = price.toExponential(4); // e.g. "9.8900e-27"
+  const expMatch = expStr.match(/^(\d+\.\d+)e([+-]\d+)$/);
+  if (expMatch) {
+    const coeff = expMatch[1].replace(".", ""); // "98900"
+    const exp = parseInt(expMatch[2]); // -27
+    if (exp < 0) {
+      const zeroCount = Math.abs(exp) - 1; // 26 zeros after "0."
+      const significantDigits = coeff.slice(0, 4); // "9890"
+      const subscriptNum = zeroCount.toString().split("").map((d) => subscripts[parseInt(d)]).join("");
+      return `0.0${subscriptNum}${significantDigits}`;
+    }
+  }
+
+  // Fallback for moderate small numbers (1e-4 to 1e-18)
   const priceStr = price.toFixed(18);
   const match = priceStr.match(/^0\.(0*)([1-9]\d*)/);
   if (match) {
     const zeroCount = match[1].length;
     const significantDigits = match[2].slice(0, 4);
-    const subscripts = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
     const subscriptNum = zeroCount.toString().split("").map((d) => subscripts[parseInt(d)]).join("");
     return `0.0${subscriptNum}${significantDigits}`;
   }
@@ -134,14 +166,14 @@ export function formatTokenPrice(price: number): string {
 }
 
 /**
- * 格式化 ETH 金额
- * @param amount ETH 金额
- * @returns 格式化的字符串，如 "Ξ0.0234" 或 "Ξ1.2345"
+ * 格式化 BNB 金额
+ * @param amount BNB 金额
+ * @returns 格式化的字符串，如 "BNB 0.0234" 或 "BNB 1.2345"
  */
 export function formatEthAmount(amount: number): string {
-  if (amount === 0 || isNaN(amount)) return "Ξ0";
-  if (amount >= 1) return `Ξ${amount.toFixed(4)}`;
-  if (amount >= 0.0001) return `Ξ${amount.toFixed(6)}`;
+  if (amount === 0 || isNaN(amount)) return "BNB 0";
+  if (amount >= 1) return `BNB ${amount.toFixed(4)}`;
+  if (amount >= 0.0001) return `BNB ${amount.toFixed(6)}`;
 
   // 极小数使用下标格式
   const amountStr = amount.toFixed(18);
@@ -151,7 +183,7 @@ export function formatEthAmount(amount: number): string {
     const significantDigits = match[2].slice(0, 4);
     const subscripts = ["₀", "₁", "₂", "₃", "₄", "₅", "₆", "₇", "₈", "₉"];
     const subscriptNum = zeroCount.toString().split("").map((d) => subscripts[parseInt(d)]).join("");
-    return `Ξ0.0${subscriptNum}${significantDigits}`;
+    return `BNB 0.0${subscriptNum}${significantDigits}`;
   }
-  return `Ξ${amount.toFixed(8)}`;
+  return `BNB ${amount.toFixed(8)}`;
 }

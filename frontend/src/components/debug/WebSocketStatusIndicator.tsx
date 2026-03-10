@@ -1,36 +1,31 @@
 /**
  * WebSocket Connection Status Indicator
  * Only displayed in development environment for debugging WebSocket connection status
+ *
+ * Reads from tradingDataStore.wsConnected (the real source of truth)
+ * which is set by WebSocketManager in useUnifiedWebSocket.ts
  */
 
 "use client";
 
-import { useEffect, useState } from "react";
-import { getWebSocketClient } from "@/lib/websocket/client";
+import { useState } from "react";
 import { ConnectionStatus } from "@/lib/websocket/types";
 import { useTranslations } from "next-intl";
+import { WS_URL } from "@/config/api";
+import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
 
 const isDev = process.env.NODE_ENV === "development";
 
 export function WebSocketStatusIndicator() {
-  const [status, setStatus] = useState<ConnectionStatus>(ConnectionStatus.DISCONNECTED);
+  const wsConnected = useTradingDataStore((s) => s.wsConnected);
+  const wsError = useTradingDataStore((s) => s.wsError);
+  const status: ConnectionStatus = wsError
+    ? ConnectionStatus.ERROR
+    : wsConnected
+      ? ConnectionStatus.CONNECTED
+      : ConnectionStatus.DISCONNECTED;
   const [isVisible, setIsVisible] = useState(false);
   const t = useTranslations("debug");
-
-  useEffect(() => {
-    if (!isDev) return;
-
-    const wsClient = getWebSocketClient();
-    
-    // Subscribe to connection status changes
-    const unsubscribe = wsClient.onConnectionChange((newStatus) => {
-      setStatus(newStatus);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   // Only display in development environment
   if (!isDev) return null;
@@ -43,12 +38,6 @@ export function WebSocketStatusIndicator() {
           bg: "bg-green-500",
           text: t("connected"),
           icon: "✓",
-        };
-      case ConnectionStatus.CONNECTING:
-        return {
-          bg: "bg-yellow-500",
-          text: t("connecting"),
-          icon: "⟳",
         };
       case ConnectionStatus.DISCONNECTED:
         return {
@@ -96,7 +85,7 @@ export function WebSocketStatusIndicator() {
               </span>
             </div>
             <div className="text-[#636366] text-[10px] space-y-1">
-              <div>URL: {process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:8081/ws'}</div>
+              <div>URL: {WS_URL}</div>
               <div className="pt-2 border-t border-[#222]">
                 <span className="text-[#8E8E93]">Note:</span> Dev only
               </div>

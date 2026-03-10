@@ -26,33 +26,32 @@ redis:
   pool_size: 10
 
 blockchain:
-  # Base Sepolia Testnet
-  rpc_url: "https://base-sepolia.g.alchemy.com/v2/Dr8sMe-1MYIF7jBYuZZj8PMOPAAeJ16d"
-  chain_id: 84532  # Base Sepolia
+  # BSC Mainnet
+  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://bsc-dataseed.binance.org/}"
+  chain_id: 56  # BSC Mainnet
 
-  # Settlement contract V4
-  position_address: "0x8dd0De655628c0E8255e3d6c38c3DF2BE36e4D8d"
+  # Contract addresses (Deployed 2026-03-03)
+  # AUDIT-FIX M-18: All contract addresses belong here, NOT under matching_engine
+  position_address: "0x04C515CcFac80BFFF27E0c5A9113e515171057b6"
+  router_address: "0xF15197BA411b578dafC7936C241bE9DD725c22BE"
+  vault_address: "0xACE7014F60eF9c367E7fA5Dd80601A9945E6F4d1"
+  amm_address: "0x2c23046DC1595754528a10b8340F2AD8fdE05112"
+  liquidation_address: "0x322AeeD67C12c10684B134e1727866425dc75F1c"
+  funding_rate_address: "0x0a513bf3DE079Bf2439A5884583712bD014487aa"
+  lending_pool_address: "0x98a7665301C0dB32ceff957e1A2c505dF8384CA4"
+  price_feed_address: "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48"
 
-matching_engine:
-  # Matching Engine (TypeScript service) URL
-  url: "http://localhost:8081"
+  # P0-1: Private key MUST come from env — set MEMEPERP_BLOCKCHAIN_PRIVATE_KEY in .env.local
+  private_key: "${MEMEPERP_BLOCKCHAIN_PRIVATE_KEY}"
 
-  # Contract addresses
-  router_address: ""
-  vault_address: ""
-  amm_address: ""
-  liquidation_address: ""
-  funding_rate_address: ""
-  lending_pool_address: ""
-  price_feed_address: "0x70dAC8f7338fFF15CAB9cE01e896e56a6C2FcF0A"
-
-  # Keeper/Matcher private key
-  private_key: "0xf9a07bb59ea400ef88bfbcf314d89f357c8580d1a4fb543e48cfb98b02b41d2c"
-
-  # Indexer settings
+  # Indexer settings (local dev: faster polling)
   start_block: 0
   confirm_blocks: 1
   poll_interval: 1s
+
+matching_engine:
+  # Matching Engine (TypeScript service) URL — the ONLY field MatchingEngineConfig reads
+  url: "http://localhost:8081"
 
 jwt:
   secret: "dev-jwt-secret-at-least-32-characters-long-for-testing"

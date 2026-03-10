@@ -17,7 +17,7 @@
  */
 
 import { createPublicClient, http, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bsc } from "viem/chains";
 import { RPC_URL, SETTLEMENT_ADDRESS } from "../config";
 import { BalanceRepo } from "../database/redis";
 import { logger } from "../utils/logger";
@@ -28,7 +28,7 @@ import type { UserBalance } from "../types";
 // ============================================================
 
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: bsc,
   transport: http(RPC_URL),
 });
 
@@ -57,9 +57,8 @@ const SETTLEMENT_ABI = [
   },
 ] as const;
 
-// WETH 地址 (Base Mainnet/Sepolia)
-// Base WETH: 0x4200000000000000000000000000000000000006
-const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0x4200000000000000000000000000000000000006") as Address;
+// WBNB 地址 (BSC Testnet)
+const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
 // ============================================================
 // Balance Functions
@@ -130,8 +129,10 @@ export async function syncBalanceFromChain(trader: Address): Promise<UserBalance
     const balance = await BalanceRepo.getOrCreate(trader);
     balance.walletBalance = walletBalance;           // 派生钱包中的 ETH + WETH (1e18)
     balance.availableBalance = contractAvailable;    // Settlement 中可用 ETH (1e18)
-    balance.usedMargin = 0n;                         // Mode 2: 仓位保证金由调用方从 Redis 计算
-    balance.frozenMargin = 0n;                       // Redis 中冻结 (待成交订单)
+    // AUDIT-FIX M-12: Do NOT reset usedMargin/frozenMargin to 0 — they are managed by
+    // the matching engine (position opens/closes and order freezes). Resetting here
+    // creates a race condition where equity is temporarily wrong until the engine re-sets them.
+    // balance.usedMargin and balance.frozenMargin are preserved from existing state.
 
     await BalanceRepo.update(trader, balance);
 

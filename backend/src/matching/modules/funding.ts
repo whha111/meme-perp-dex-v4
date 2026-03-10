@@ -179,9 +179,13 @@ export async function settleFunding(token: Address): Promise<FundingPayment[]> {
   // 更新保险基金累计
   insuranceFundAccumulated += totalFundingCollected;
 
-  // PerpVault: 资金费进入 LP 池子 (异步, 非阻塞)
+  // P0-2: PerpVault 资金费进入 LP 池子 — 必须 await（保险基金收入不可丢失）
   if (isPerpVaultEnabled() && totalFundingCollected > 0n) {
-    vaultCollectFee(totalFundingCollected).catch(() => {});
+    try {
+      await vaultCollectFee(totalFundingCollected);
+    } catch (err) {
+      logger.error("Funding", `PerpVault fee collection failed (${totalFundingCollected}): ${err}`);
+    }
   }
 
   // 记录历史

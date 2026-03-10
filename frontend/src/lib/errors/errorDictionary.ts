@@ -130,7 +130,7 @@ export const ERROR_MESSAGES: Record<string, Record<ErrorCode, ErrorMessage>> = {
     [ErrorCode.WALLET_NOT_CONNECTED]: { title: "钱包未连接", description: "请先连接您的钱包" },
     [ErrorCode.WALLET_WRONG_NETWORK]: { title: "网络错误", description: "请切换到正确的网络" },
     [ErrorCode.WALLET_INSUFFICIENT_BALANCE]: { title: "余额不足", description: "账户余额不足以完成交易" },
-    [ErrorCode.WALLET_INSUFFICIENT_GAS]: { title: "Gas 不足", description: "账户 ETH 不足以支付 Gas 费" },
+    [ErrorCode.WALLET_INSUFFICIENT_GAS]: { title: "Gas 不足", description: "账户 BNB 不足以支付 Gas 费" },
     [ErrorCode.WALLET_ADDRESS_INVALID]: { title: "地址无效", description: "钱包地址格式无效" },
     [ErrorCode.WALLET_LOCKED]: { title: "钱包已锁定", description: "请解锁您的钱包" },
     [ErrorCode.WALLET_CONNECTION_FAILED]: { title: "连接失败", description: "钱包连接失败，请重试" },
@@ -225,7 +225,7 @@ export const ERROR_MESSAGES: Record<string, Record<ErrorCode, ErrorMessage>> = {
     [ErrorCode.WALLET_NOT_CONNECTED]: { title: "Wallet Not Connected", description: "Please connect your wallet first." },
     [ErrorCode.WALLET_WRONG_NETWORK]: { title: "Wrong Network", description: "Please switch to the correct network." },
     [ErrorCode.WALLET_INSUFFICIENT_BALANCE]: { title: "Insufficient Balance", description: "Your account balance is insufficient for this transaction." },
-    [ErrorCode.WALLET_INSUFFICIENT_GAS]: { title: "Insufficient Gas", description: "Not enough ETH to pay for gas fees." },
+    [ErrorCode.WALLET_INSUFFICIENT_GAS]: { title: "Insufficient Gas", description: "Not enough BNB to pay for gas fees." },
     [ErrorCode.WALLET_ADDRESS_INVALID]: { title: "Invalid Address", description: "The wallet address is invalid." },
     [ErrorCode.WALLET_LOCKED]: { title: "Wallet Locked", description: "Please unlock your wallet." },
     [ErrorCode.WALLET_CONNECTION_FAILED]: { title: "Connection Failed", description: "Failed to connect wallet. Please try again." },
@@ -483,6 +483,36 @@ function parseErrorFromMessage(message: string): ErrorCode {
   }
 
   return ErrorCode.UNKNOWN;
+}
+
+/**
+ * 从 unknown 类型安全地提取错误信息
+ * 兼容 wagmi/viem BaseError (shortMessage) 和标准 Error
+ */
+export function extractErrorMessage(err: unknown, fallback = "操作失败"): string {
+  if (err && typeof err === "object") {
+    // wagmi/viem BaseError — shortMessage 是面向用户的简短提示
+    if ("shortMessage" in err && typeof (err as Record<string, unknown>).shortMessage === "string") {
+      return (err as Record<string, unknown>).shortMessage as string;
+    }
+    if (err instanceof Error) return err.message;
+    if ("message" in err && typeof (err as Record<string, unknown>).message === "string") {
+      return (err as Record<string, unknown>).message as string;
+    }
+  }
+  if (typeof err === "string") return err;
+  return fallback;
+}
+
+/**
+ * 判断错误是否为用户主动取消操作 (MetaMask / WalletConnect reject)
+ */
+export function isUserRejection(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as Record<string, unknown>;
+  if (e.code === 4001) return true;
+  const msg = typeof e.message === "string" ? e.message : "";
+  return msg.includes("rejected") || msg.includes("denied") || msg.includes("cancelled");
 }
 
 export default ErrorCode;

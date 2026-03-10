@@ -1,0 +1,34 @@
+# AUDIT-FIX M-17: Remove non-existent /metrics scrape targets.
+# Neither backend nor matching-engine expose /metrics endpoints.
+# Use /health endpoints for uptime monitoring until proper metrics are implemented.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Health checks (these endpoints actually exist)
+  - job_name: "backend-health"
+    metrics_path: /health
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["backend:8080"]
+        labels:
+          service: "go-backend"
+
+  - job_name: "matching-health"
+    metrics_path: /health
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["matching-engine:8081"]
+        labels:
+          service: "matching-engine"
+
+  # TODO: Add /metrics scrape targets once Prometheus exporters are implemented
+  # - job_name: "backend-metrics"
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ["backend:8080"]
+  # - job_name: "matching-metrics"
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ["matching-engine:8081"]

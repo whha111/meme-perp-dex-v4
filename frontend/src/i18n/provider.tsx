@@ -3,6 +3,8 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { ReactNode, useEffect, useState, useRef } from 'react';
 import { defaultLocale, type Locale } from './config';
+// Static import of default locale messages to prevent flash of raw keys
+import defaultMessages from '../../messages/zh.json';
 
 // 动态导入消息
 const loadMessages = async (locale: Locale) => {
@@ -48,9 +50,9 @@ interface I18nProviderProps {
 
 export function I18nProvider({ children }: I18nProviderProps) {
   const [locale, setLocale] = useState<Locale>(defaultLocale);
-  const [messages, setMessages] = useState<Record<string, any> | null>(null);
+  const [messages, setMessages] = useState<Record<string, any>>(defaultMessages);
   // Keep reference to previous messages to prevent flash during locale switch
-  const previousMessagesRef = useRef<Record<string, any> | null>(null);
+  const previousMessagesRef = useRef<Record<string, any>>(defaultMessages);
 
   // 初始化：从 localStorage 加载语言偏好
   useEffect(() => {
@@ -86,9 +88,8 @@ export function I18nProvider({ children }: I18nProviderProps) {
     };
   }, []);
 
-  // During initial load or locale switch, use previous messages to prevent flash
-  // Use empty object as fallback to ensure provider is always rendered
-  const currentMessages = messages || previousMessagesRef.current || {};
+  // During locale switch, use previous messages to prevent flash
+  const currentMessages = messages || previousMessagesRef.current;
 
   return (
     <NextIntlClientProvider

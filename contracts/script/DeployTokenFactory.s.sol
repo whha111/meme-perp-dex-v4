@@ -18,8 +18,8 @@ contract DeployTokenFactory is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // Base Sepolia Uniswap V2 Router
-        address uniswapRouter = 0x8cFe327CEc66d1C090Dd72bd0FF11d690C33a2Eb;
+        // BSC Mainnet PancakeSwap V2 Router
+        address uniswapRouter = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
 
         TokenFactory tokenFactory = new TokenFactory(deployer, deployer, uniswapRouter);
         console.log("TokenFactory deployed at:", address(tokenFactory));

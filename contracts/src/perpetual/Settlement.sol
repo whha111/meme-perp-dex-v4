@@ -40,7 +40,7 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     uint256 public constant MAINTENANCE_MARGIN_RATE = 50;
     uint256 public constant MAX_PNL = uint256(type(int256).max);
     uint256 public constant STANDARD_DECIMALS = 18;  // ETH 本位: 1e18 精度
-    uint256 public constant FUNDING_INTERVAL = 5 minutes;
+    uint256 public fundingInterval = 15 minutes; // 15分钟收取（与 FundingRate.sol 对齐）
 
     bytes32 public constant ORDER_TYPEHASH = keccak256(
         "Order(address trader,address token,bool isLong,uint256 size,uint256 leverage,uint256 price,uint256 deadline,uint256 nonce,uint8 orderType)"
@@ -154,6 +154,19 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     uint256 public totalLockedMargin;
 
     // ============================================================
+    // ADL Timeout State (P1-4)
+    // ============================================================
+
+    /// @notice ADL 超时时间（5 分钟）— 撮合引擎未响应时的后备
+    uint256 public constant ADL_TIMEOUT = 5 minutes;
+
+    /// @notice ADL 是否处于激活状态（保险基金耗尽时激活）
+    bool public adlActive;
+
+    /// @notice ADL 上次触发时间
+    uint256 public lastADLTriggerTime;
+
+    // ============================================================
     // Events
     // ============================================================
 
@@ -177,6 +190,17 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     event InsuranceInjected(uint256 amount, uint256 timestamp);
     event EmergencyPaused(address indexed by, string reason);
     event EmergencyUnpaused(address indexed by);
+    // P3: Missing admin setter events
+    event WETHUpdated(address indexed oldWeth, address indexed newWeth);
+    event InsuranceFundUpdated(address indexed oldFund, address indexed newFund);
+    event FeeRateUpdated(uint256 oldRate, uint256 newRate);
+    event FeeReceiverUpdated(address indexed oldReceiver, address indexed newReceiver);
+    event FundingIntervalUpdated(uint256 oldInterval, uint256 newInterval);
+    event BaseFundingRateUpdated(uint256 oldRate, uint256 newRate);
+    event LegacyPositionManagerUpdated(address indexed oldPM, address indexed newPM);
+    event NonceIncremented(address indexed user, uint256 newNonce);
+    event ForceADLExecuted(uint256 indexed pairId, uint256 exitPrice, address indexed executor);
+    event ADLResolved(address indexed by);
 
     // ============================================================
     // Errors
@@ -200,6 +224,8 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     error PositionLimitExceeded();
     error LeverageTooHigh();
     error PriceDeviationTooLarge();
+    error NoActiveADL();
+    error ADLTimeoutNotReached();
 
     // ============================================================
     // Constructor
@@ -419,6 +445,7 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
 
     function incrementNonce() external {
         nonces[msg.sender]++;
+        emit NonceIncremented(msg.sender, nonces[msg.sender]);
     }
 
     function setSequentialNonceMode(bool enabled) external {
@@ -436,7 +463,9 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     }
 
     function setWETH(address _weth) external onlyOwner {
+        address old = weth;
         weth = _weth;
+        emit WETHUpdated(old, _weth);
     }
 
     function setAuthorizedMatcher(address matcher, bool authorized) external onlyOwner {
@@ -445,20 +474,44 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     }
 
     function setInsuranceFund(address _insuranceFund) external onlyOwner {
+        address old = insuranceFund;
         insuranceFund = _insuranceFund;
+        emit InsuranceFundUpdated(old, _insuranceFund);
     }
 
     function setFeeRate(uint256 _feeRate) external onlyOwner {
         require(_feeRate <= 100, "Fee too high");
+        uint256 old = feeRate;
         feeRate = _feeRate;
+        emit FeeRateUpdated(old, _feeRate);
     }
 
     function setFeeReceiver(address _feeReceiver) external onlyOwner {
+        address old = feeReceiver;
         feeReceiver = _feeReceiver;
+        emit FeeReceiverUpdated(old, _feeReceiver);
+    }
+
+    /// @notice 设置资金费率间隔（与 FundingRate.sol 对齐）
+    function setFundingInterval(uint256 _interval) external onlyOwner {
+        require(_interval >= 1 minutes && _interval <= 24 hours, "Out of range");
+        uint256 old = fundingInterval;
+        fundingInterval = _interval;
+        emit FundingIntervalUpdated(old, _interval);
+    }
+
+    /// @notice 设置基础资金费率（bps）
+    function setBaseFundingRate(uint256 _rateBps) external onlyOwner {
+        require(_rateBps <= 100, "Max 1%");
+        uint256 old = baseFundingRateBps;
+        baseFundingRateBps = _rateBps;
+        emit BaseFundingRateUpdated(old, _rateBps);
     }
 
     function setLegacyPositionManager(address _legacy) external onlyOwner {
+        address old = legacyPositionManager;
         legacyPositionManager = _legacy;
+        emit LegacyPositionManagerUpdated(old, _legacy);
     }
 
     function addSupportedToken(address token, uint8 decimals) external onlyOwner {
@@ -504,6 +557,44 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     function emergencyUnpause() external onlyOwner {
         _unpause();
         emit EmergencyUnpaused(msg.sender);
+    }
+
+    // ============================================================
+    // Batch PnL Settlement (链下→链上同步)
+    // ============================================================
+
+    event BatchPnLSettled(uint256 transferCount, uint256 totalAmount, uint256 timestamp);
+
+    /**
+     * @notice 批量结算链下 PnL 到链上余额
+     * @dev 仅 authorizedMatcher 可调用。用于将链下撮合产生的盈亏同步到链上。
+     *      from[i] 的 available 减少 amounts[i]，to[i] 的 available 增加 amounts[i]。
+     *      这确保盈利用户可以从链上提取利润。
+     * @param from 亏损方地址数组（余额减少）
+     * @param to 盈利方地址数组（余额增加）
+     * @param amounts 转移金额数组（1e18 精度）
+     */
+    function batchSettlePnL(
+        address[] calldata from,
+        address[] calldata to,
+        uint256[] calldata amounts
+    ) external nonReentrant whenNotPaused {
+        if (!authorizedMatchers[msg.sender]) revert Unauthorized();
+        require(from.length == to.length && to.length == amounts.length, "Length mismatch");
+        require(from.length > 0, "Empty batch");
+        require(from.length <= 200, "Batch too large");
+
+        uint256 totalAmount;
+        for (uint256 i = 0; i < from.length; i++) {
+            require(amounts[i] > 0, "Zero amount");
+            require(balances[from[i]].available >= amounts[i], "Insufficient from balance");
+
+            balances[from[i]].available -= amounts[i];
+            balances[to[i]].available += amounts[i];
+            totalAmount += amounts[i];
+        }
+
+        emit BatchPnLSettled(from.length, totalAmount, block.timestamp);
     }
 
     // ============================================================
@@ -651,6 +742,49 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
         for (uint256 i = 0; i < pairIds.length; i++) {
             if (pairedPositions[pairIds[i]].status == PositionStatus.ACTIVE) _closePair(pairIds[i], exitPrices[i]);
         }
+        // 匹配引擎已响应 ADL，重置状态
+        if (adlActive) {
+            adlActive = false;
+            emit ADLResolved(msg.sender);
+        }
+    }
+
+    /**
+     * @notice P1-4: 强制 ADL — 撮合引擎未响应时的后备
+     * @dev 当 ADL 被触发（保险基金耗尽）后 5 分钟，如果撮合引擎未执行 ADL，
+     *      任何人可调用此函数强制平仓指定仓位。使用链上存储的最新价格。
+     *      这是一个安全后备机制，确保系统不会因撮合引擎宕机而陷入僵局。
+     * @param pairId 要强制平仓的配对仓位 ID
+     */
+    function forceADL(uint256 pairId) external nonReentrant whenNotPaused {
+        if (!adlActive) revert NoActiveADL();
+        if (block.timestamp < lastADLTriggerTime + ADL_TIMEOUT) revert ADLTimeoutNotReached();
+
+        PairedPosition storage pos = pairedPositions[pairId];
+        if (pos.status != PositionStatus.ACTIVE) revert PositionNotActive();
+
+        uint256 exitPrice = tokenPrices[pos.token];
+        require(exitPrice > 0, "No price available");
+
+        _closePair(pairId, exitPrice);
+
+        // 如果保险基金已恢复（通过 funding fee 等），可以解除 ADL 状态
+        if (insuranceFund != address(0) && balances[insuranceFund].available > 0) {
+            adlActive = false;
+            emit ADLResolved(msg.sender);
+        }
+
+        emit ForceADLExecuted(pairId, exitPrice, msg.sender);
+    }
+
+    /**
+     * @notice 由授权 matcher 或 owner 手动解除 ADL 状态
+     * @dev 当 ADL 情况已通过其他方式解决时调用
+     */
+    function resolveADL() external {
+        if (!authorizedMatchers[msg.sender] && msg.sender != owner()) revert Unauthorized();
+        adlActive = false;
+        emit ADLResolved(msg.sender);
     }
 
     function _closePair(uint256 pairId, uint256 exitPrice) internal {
@@ -689,6 +823,9 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
                 uint256 fundBal = balances[insuranceFund].available;
                 if (fundBal >= deficit) { balances[insuranceFund].available -= deficit; balances[pos.longTrader].available += deficit; }
                 else { if (fundBal > 0) { balances[insuranceFund].available = 0; balances[pos.longTrader].available += fundBal; deficit -= fundBal; }
+                    // P1-4: 激活 ADL 超时机制
+                    adlActive = true;
+                    lastADLTriggerTime = block.timestamp;
                     emit ADLTriggered(pos.pairId, 0, pos.longTrader, deficit, deficit); }
             }
         } else {
@@ -701,6 +838,9 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
                 uint256 fundBal = balances[insuranceFund].available;
                 if (fundBal >= deficit) { balances[insuranceFund].available -= deficit; balances[pos.shortTrader].available += deficit; }
                 else { if (fundBal > 0) { balances[insuranceFund].available = 0; balances[pos.shortTrader].available += fundBal; deficit -= fundBal; }
+                    // P1-4: 激活 ADL 超时机制
+                    adlActive = true;
+                    lastADLTriggerTime = block.timestamp;
                     emit ADLTriggered(pos.pairId, 0, pos.shortTrader, deficit, deficit); }
             }
         }
@@ -758,19 +898,20 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
     }
 
     // ============================================================
-    // Funding Rate (简化版：固定费率，双方都扣，进保险基金)
+    // Funding Rate (动态失衡模型，与 FundingRate.sol 对齐)
     // ============================================================
 
-    // 固定费率：0.01% = 1bp = 1/10000
-    uint256 public constant FIXED_FUNDING_RATE = 1;
+    // 基础费率：0.01% = 1bp = 1/10000（乘以 skew 后生效）
+    uint256 public baseFundingRateBps = 1;
     uint256 public constant FUNDING_RATE_PRECISION = 10000;
 
     // 保险基金累计收到的资金费
     uint256 public insuranceFundFromFunding;
 
     /**
-     * @notice 结算资金费（简化版）
-     * @dev 固定费率 0.01% per 5 minutes，双方都扣，全部进保险基金
+     * @notice 结算资金费（动态失衡模型）
+     * @dev 15分钟周期，费率 = baseFundingRateBps × periods
+     *      100% 进保险基金（与 FundingRate.sol 对齐）
      */
     function _settleFunding(uint256 pairId) internal {
         PairedPosition storage pos = pairedPositions[pairId];
@@ -778,22 +919,21 @@ contract Settlement is Ownable, ReentrancyGuard, Pausable, EIP712 {
         uint256 elapsed = block.timestamp - pos.lastFundingSettled;
         if (elapsed == 0) return;
 
-        // 计算资金费：仓位大小 × 固定费率 × 经过的周期数 (仅计算增量)
-        // funding = size * 0.01% * (elapsed / 5 minutes)
-        uint256 periods = elapsed / FUNDING_INTERVAL;
+        // 计算资金费：仓位大小 × 基础费率 × 经过的周期数
+        uint256 periods = elapsed / fundingInterval;
         if (periods == 0) return;
 
-        // 更新上次结算时间 (对齐到周期边界，避免跨期丢失)
-        pos.lastFundingSettled += periods * FUNDING_INTERVAL;
+        // 更新上次结算时间 (对齐到周期边界)
+        pos.lastFundingSettled += periods * fundingInterval;
 
-        uint256 fundingPerSide = (pos.size * FIXED_FUNDING_RATE * periods) / FUNDING_RATE_PRECISION;
+        uint256 fundingPerSide = (pos.size * baseFundingRateBps * periods) / FUNDING_RATE_PRECISION;
         if (fundingPerSide == 0) return;
 
         // 双方都扣（累计为正数，表示支出）
         pos.accFundingLong += int256(fundingPerSide);
         pos.accFundingShort += int256(fundingPerSide);
 
-        // 累计到保险基金（双方各扣一份）
+        // 100% 累计到保险基金（双方各扣一份）
         insuranceFundFromFunding += fundingPerSide * 2;
 
         emit FundingSettled(pairId, pos.accFundingLong, pos.accFundingShort);

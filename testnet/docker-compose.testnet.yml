@@ -1,0 +1,56 @@
+# ============================================================
+# MEME Perp DEX - Docker Compose for 24h Testnet Test
+# ============================================================
+# Usage:
+#   cd testnet
+#   docker compose -f docker-compose.testnet.yml --env-file .env.testnet up -d
+#
+# This runs ONLY infrastructure services (postgres + redis).
+# Application services (matching-engine, backend, keeper, frontend)
+# run natively for easier debugging during the 24h test.
+# ============================================================
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: memeperp-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-testnet24h}
+      POSTGRES_DB: ${POSTGRES_DB:-memeperp}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_testnet_data:/var/lib/postgresql/data
+      - ../backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: memeperp-redis-test
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_testnet_data:/data
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_testnet_data:
+    name: memeperp-postgres-testnet
+  redis_testnet_data:
+    name: memeperp-redis-testnet

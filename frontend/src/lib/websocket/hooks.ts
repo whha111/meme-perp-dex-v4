@@ -1,8 +1,11 @@
 /**
- * WebSocket React Hooks (未对接版本)
+ * WebSocket React Hooks — System A (WebSocketClient)
  *
- * 接口保留，返回未连接状态
- * TODO: 对接真实 WebSocket
+ * 这些 hooks 使用 lib/websocket/client.ts 的 WebSocketClient 单例。
+ * 主要用于 kline 和 spot trade 数据。
+ *
+ * 注意: balance/positions/orders 消息通过 System B (WebSocketManager → tradingDataStore) 接收,
+ * 不经过此处的 hooks。请直接从 tradingDataStore 读取。
  */
 
 import { useEffect, useState, useCallback, useRef } from "react";
@@ -115,8 +118,7 @@ export function useWebSocketConnection() {
     connect,
     disconnect,
     status,
-    // 未对接 - 始终返回 false
-    isConnected: false,
+    isConnected: status === ConnectionStatus.CONNECTED,
     isConnecting,
     connectionError,
   };
@@ -201,31 +203,5 @@ export function useWebSocketSubscription() {
     subscribedTopics: Array.from(subscribedTopics),
     isSubscribing,
     subscriptionError,
-  };
-}
-
-/**
- * 自动连接 WebSocket 的 Hook (未对接)
- */
-export function useAutoConnectWebSocket(_autoConnect = true) {
-  const {
-    connect,
-    disconnect,
-    status,
-    isConnected,
-    isConnecting,
-    connectionError,
-  } = useWebSocketConnection();
-
-  // 未对接 - 不自动连接
-
-  return {
-    connect,
-    disconnect,
-    status,
-    // 未对接 - 始终返回 false
-    isConnected,
-    isConnecting,
-    connectionError,
   };
 }

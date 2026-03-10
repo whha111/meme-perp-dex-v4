@@ -95,17 +95,21 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
     // H-017: 用户默认保证金模式
     mapping(address => MarginMode) public defaultMarginMode;
 
-    // 手续费配置 - Maker/Taker 差异化费率
-    uint256 public openFeeRate = 8;  // 0.08% Taker fee (8/10000) - 开仓即时成交
-    uint256 public closeFeeRate = 3; // 0.03% Maker fee (3/10000) - 平仓提供流动性
+    // 手续费配置 - Maker/Taker 差异化费率 (Meme 币风险补偿)
+    uint256 public openFeeRate = 10;  // 0.10% Taker fee (10/10000)
+    uint256 public closeFeeRate = 5;  // 0.05% Maker fee (5/10000)
 
-    // 手续费接收地址 (Legacy, 仅用于无代币创建者的情况)
-    address public feeReceiver;
+    // 手续费接收地址
+    address public feeReceiver;           // 平台手续费接收地址
+    address public insuranceFeeReceiver;  // 保险基金手续费接收地址
+    address public lpFeeReceiver;         // LP 池手续费接收地址
 
-    // 永续手续费分配比例 (基点，10000 = 100%)
-    uint256 public constant PERP_CREATOR_FEE_SHARE = 2000;   // 20%
-    uint256 public constant PERP_REFERRER_FEE_SHARE = 1000;  // 10%
-    uint256 public constant PERP_PLATFORM_FEE_SHARE = 7000;  // 70%
+    // 永续手续费分配比例 (基点，10000 = 100%) — 可配置
+    uint256 public perpCreatorFeeShare = 1500;     // 15% 代币创建者
+    uint256 public perpReferrerFeeShare = 1000;    // 10% 推荐人
+    uint256 public perpPlatformFeeShare = 5000;    // 50% 平台
+    uint256 public perpInsuranceFeeShare = 1500;   // 15% 保险基金
+    uint256 public perpLpFeeShare = 1000;          // 10% LP 池
 
     // TokenFactory 地址 (用于获取代币创建者和用户推荐人)
     address public tokenFactory;
@@ -183,9 +187,14 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         uint256 totalFee,
         uint256 toCreator,
         uint256 toReferrer,
-        uint256 toPlatform
+        uint256 toPlatform,
+        uint256 toInsurance,
+        uint256 toLP
     );
     event TokenFactorySet(address indexed tokenFactory);
+    event FeeSharesUpdated(uint256 creator, uint256 referrer, uint256 platform, uint256 insurance, uint256 lp);
+    event InsuranceFeeReceiverSet(address indexed receiver);
+    event LpFeeReceiverSet(address indexed receiver);
 
     // ============================================================
     // Errors
@@ -280,6 +289,37 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         if (_tokenFactory == address(0)) revert ZeroAddress();
         tokenFactory = _tokenFactory;
         emit TokenFactorySet(_tokenFactory);
+    }
+
+    /// @notice 设置保险基金手续费接收地址
+    function setInsuranceFeeReceiver(address _receiver) external onlyOwner {
+        if (_receiver == address(0)) revert ZeroAddress();
+        insuranceFeeReceiver = _receiver;
+        emit InsuranceFeeReceiverSet(_receiver);
+    }
+
+    /// @notice 设置 LP 池手续费接收地址
+    function setLpFeeReceiver(address _receiver) external onlyOwner {
+        if (_receiver == address(0)) revert ZeroAddress();
+        lpFeeReceiver = _receiver;
+        emit LpFeeReceiverSet(_receiver);
+    }
+
+    /// @notice 设置手续费分配比例（5路，总和必须 = 10000）
+    function setFeeShares(
+        uint256 _creator,
+        uint256 _referrer,
+        uint256 _platform,
+        uint256 _insurance,
+        uint256 _lp
+    ) external onlyOwner {
+        require(_creator + _referrer + _platform + _insurance + _lp == 10000, "Sum must be 10000");
+        perpCreatorFeeShare = _creator;
+        perpReferrerFeeShare = _referrer;
+        perpPlatformFeeShare = _platform;
+        perpInsuranceFeeShare = _insurance;
+        perpLpFeeShare = _lp;
+        emit FeeSharesUpdated(_creator, _referrer, _platform, _insurance, _lp);
     }
 
     // ============================================================
@@ -565,40 +605,12 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
      * @dev 按 Bybit 行业标准公式计算:
      *      多头: liqPrice = entryPrice * (1 - 1/leverage + MMR)
      *      空头: liqPrice = entryPrice * (1 + 1/leverage - MMR)
-     *      来源: https://www.bybit.com/en/help-center/article/Liquidation-Price-USDT-Contract/
      */
     function getLiquidationPrice(address user) external view returns (uint256) {
         PositionStorage storage pos = _positions[user];
-        if (pos.size == 0) return 0;
-        if (pos.entryPrice == 0) return 0;
-
-        // leverage 存储为 实际杠杆 * LEVERAGE_PRECISION (e.g., 10x = 100000)
-        // MMR 存储为 比率 * PRECISION (e.g., 0.5% = 0.005 * 1e18)
+        if (pos.size == 0 || pos.entryPrice == 0) return 0;
         uint256 mmr = riskManager.getMaintenanceMarginRate(pos.leverage);
-
-        // 1/leverage = LEVERAGE_PRECISION / leverage
-        // 转换为 PRECISION 精度: (PRECISION * LEVERAGE_PRECISION) / leverage
-        uint256 inverseLeveage = (PRECISION * LEVERAGE_PRECISION) / pos.leverage;
-
-        if (pos.isLong) {
-            // 多头: liqPrice = entryPrice * (1 - 1/leverage + MMR)
-            // = entryPrice * (PRECISION - inverseLeveage + mmr) / PRECISION
-            uint256 factor = PRECISION - inverseLeveage + mmr;
-            // 如果 factor >= PRECISION，强平价格为0（不会被清算）
-            if (factor >= PRECISION) return 0;
-            return (pos.entryPrice * factor) / PRECISION;
-        } else {
-            // 空头: liqPrice = entryPrice * (1 + 1/leverage - MMR)
-            // = entryPrice * (PRECISION + inverseLeveage - mmr) / PRECISION
-            // 注意：如果 mmr > inverseLeveage，结果可能 < 1，这是正常的（高杠杆低MMR）
-            uint256 factor;
-            if (mmr >= inverseLeveage) {
-                factor = PRECISION + inverseLeveage - mmr;
-            } else {
-                factor = PRECISION + inverseLeveage - mmr;
-            }
-            return (pos.entryPrice * factor) / PRECISION;
-        }
+        return _calcLiqPrice(pos.entryPrice, pos.leverage, pos.isLong, mmr);
     }
 
     function canLiquidate(address user) external view returns (bool) {
@@ -704,36 +716,12 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
 
     /**
      * @notice H-016: 获取代币仓位的强平价格
-     * @dev 使用 Bybit 标准公式:
-     *      多头: liqPrice = entryPrice * (1 - 1/leverage + MMR)
-     *      空头: liqPrice = entryPrice * (1 + 1/leverage - MMR)
-     * @param user 用户地址
-     * @param token 代币地址
-     * @return 强平价格
      */
     function getTokenLiquidationPrice(address user, address token) external view returns (uint256) {
         PositionInternal storage pos = tokenPositions[user][token];
-        if (pos.size == 0) return 0;
-        if (pos.entryPrice == 0) return 0;
-
-        // leverage 存储为 实际杠杆 * LEVERAGE_PRECISION (e.g., 10x = 100000)
-        // MMR 存储为 比率 * PRECISION (e.g., 0.5% = 0.005 * 1e18)
+        if (pos.size == 0 || pos.entryPrice == 0) return 0;
         uint256 mmr = riskManager.getMaintenanceMarginRate(pos.leverage);
-
-        // 1/leverage = LEVERAGE_PRECISION / leverage
-        // 转换为 PRECISION 精度: (PRECISION * LEVERAGE_PRECISION) / leverage
-        uint256 inverseLeverage = (PRECISION * LEVERAGE_PRECISION) / pos.leverage;
-
-        if (pos.isLong) {
-            // 多头: liqPrice = entryPrice * (1 - 1/leverage + MMR)
-            uint256 factor = PRECISION - inverseLeverage + mmr;
-            if (factor >= PRECISION) return 0;
-            return (pos.entryPrice * factor) / PRECISION;
-        } else {
-            // 空头: liqPrice = entryPrice * (1 + 1/leverage - MMR)
-            uint256 factor = PRECISION + inverseLeverage - mmr;
-            return (pos.entryPrice * factor) / PRECISION;
-        }
+        return _calcLiqPrice(pos.entryPrice, pos.leverage, pos.isLong, mmr);
     }
 
     /**
@@ -802,7 +790,7 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         if (fee > 0) {
             // Legacy 仓位使用 defaultToken
             address token = defaultToken != address(0) ? defaultToken : address(1);
-            _distributePerpFee(user, token, fee);
+            _distributeFee(user, token, fee, false);
         }
 
         // 然后锁定保证金
@@ -905,7 +893,7 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         if (fee > 0) {
             // 确保手续费不超过保证金
             uint256 actualFee = fee > collateral ? collateral : fee;
-            _distributePerpFeeFromLocked(user, token, actualFee);
+            _distributeFee(user, token, actualFee, true);
             collateral -= actualFee;
         }
 
@@ -928,6 +916,19 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
 
     function _calculatePnL(PositionStorage storage pos, uint256 currentPrice) internal view returns (int256) {
         return _calculatePnLForSize(pos.isLong, pos.size, pos.entryPrice, currentPrice);
+    }
+
+    /// @dev Shared liquidation price calculation (Bybit standard)
+    function _calcLiqPrice(uint256 entryPrice, uint256 leverage, bool isLong, uint256 mmr) internal pure returns (uint256) {
+        uint256 invLev = (PRECISION * LEVERAGE_PRECISION) / leverage;
+        if (isLong) {
+            uint256 factor = PRECISION - invLev + mmr;
+            if (factor >= PRECISION) return 0;
+            return (entryPrice * factor) / PRECISION;
+        } else {
+            uint256 factor = PRECISION + invLev - mmr;
+            return (entryPrice * factor) / PRECISION;
+        }
     }
 
     // M-003: Calculate PnL for a specific size to avoid precision loss in partial closes
@@ -1040,7 +1041,7 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         // 收取开仓手续费 (使用新的分配逻辑)
         uint256 fee = (totalRequired * openFeeRate) / (10000 + openFeeRate); // 反算手续费
         if (fee > 0) {
-            _distributePerpFee(user, token, fee);
+            _distributeFee(user, token, fee, false);
             collateral = totalRequired - fee;
         }
 
@@ -1051,7 +1052,7 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
     function _processIsolatedMargin(address user, address token, uint256 collateral, uint256 fee) internal {
         if (vault.getBalance(user) < collateral + fee) revert InsufficientMargin();
         if (fee > 0) {
-            _distributePerpFee(user, token, fee);
+            _distributeFee(user, token, fee, false);
         }
         vault.lockMargin(user, collateral);
     }
@@ -1105,12 +1106,8 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
             pos.accFundingFee = (pos.accFundingFee * int256(100 - percentage)) / 100;
         }
 
-        // 根据保证金模式结算
-        if (marginMode == MarginMode.CROSS) {
-            _settlePnLCross(user, token, closeCollateral, pnl, fee);
-        } else {
-            _settlePnL(user, token, closeCollateral, pnl, fee);
-        }
+        // 结算盈亏（全仓/逐仓使用相同的 Vault 结算路径）
+        _settlePnL(user, token, closeCollateral, pnl, fee);
 
         emit TokenPositionClosed(user, token, closeSize, pnl);
         emit PnLSettled(user, pnl, closeCollateral);
@@ -1135,50 +1132,6 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
 
     function _calculatePnLToken(PositionInternal storage pos, uint256 currentPrice) internal view returns (int256) {
         return _calculatePnLForSize(pos.isLong, pos.size, pos.entryPrice, currentPrice);
-    }
-
-    /**
-     * @notice H-017: 全仓模式盈亏结算
-     * @dev 修复版本：通过 Vault 进行实际 ETH 结算，确保盈亏有真实资金流动
-     *      盈利从保险基金支付，亏损转入保险基金
-     *      平仓手续费按比例分配给创建者/推荐人/平台
-     * @param user 用户地址
-     * @param token 代币地址
-     * @param collateral 平仓的保证金金额
-     * @param pnl 盈亏（正数盈利，负数亏损）
-     * @param fee 平仓手续费
-     */
-    function _settlePnLCross(address user, address token, uint256 collateral, int256 pnl, uint256 fee) internal {
-        // 先从锁定保证金收取平仓手续费 (使用新的分配逻辑)
-        if (fee > 0) {
-            // 确保手续费不超过保证金
-            uint256 actualFee = fee > collateral ? collateral : fee;
-            _distributePerpFeeFromLocked(user, token, actualFee);
-            collateral -= actualFee;
-        }
-
-        if (pnl >= 0) {
-            // 盈利：解锁保证金 + 从保险基金支付盈利
-            // vault.settleProfit 会：
-            // 1. 将 collateral 从 lockedBalances 转移到 balances
-            // 2. 调用 InsuranceFund.payProfit() 支付盈利给用户
-            vault.settleProfit(user, collateral, uint256(pnl));
-        } else {
-            uint256 loss = uint256(-pnl);
-
-            if (loss <= collateral) {
-                // 正常亏损：从保证金扣除，剩余返还
-                // vault.settleLoss 会：
-                // 1. 扣除亏损金额
-                // 2. 将剩余保证金转移到用户可用余额
-                // 3. 将亏损金额发送到保险基金
-                vault.settleLoss(user, collateral, loss);
-            } else {
-                // 穿仓：保证金全部损失 + 保险基金覆盖亏空
-                uint256 deficit = loss - collateral;
-                vault.settleBankruptcy(user, collateral, deficit);
-            }
-        }
     }
 
     // H-017: 计算用户全仓保证金需求
@@ -1239,13 +1192,15 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
     // ============================================================
 
     /**
-     * @notice 分配永续开仓手续费 (从用户可用余额)
-     * @dev 分配比例: 20% 创建者, 10% 推荐人, 70% 平台
+     * @notice 分配永续手续费 (统一函数，支持可用余额和锁定余额)
+     * @dev 5路分配: creator/referrer/platform/insurance/LP
+     *      无效接收方的份额回流到平台
      * @param user 用户地址
      * @param token 代币地址
      * @param fee 总手续费
+     * @param fromLocked true=从锁定余额收取(平仓), false=从可用余额收取(开仓)
      */
-    function _distributePerpFee(address user, address token, uint256 fee) internal {
+    function _distributeFee(address user, address token, uint256 fee, bool fromLocked) internal {
         if (fee == 0) return;
 
         address creator;
@@ -1262,83 +1217,57 @@ contract PositionManager is Ownable, ReentrancyGuard, IPositionManager {
         }
 
         // 计算分配金额
-        uint256 toCreator = (fee * PERP_CREATOR_FEE_SHARE) / 10000;
-        uint256 toReferrer = (fee * PERP_REFERRER_FEE_SHARE) / 10000;
-        uint256 toPlatform = fee - toCreator - toReferrer;
+        uint256 toCreator = (fee * perpCreatorFeeShare) / 10000;
+        uint256 toReferrer = (fee * perpReferrerFeeShare) / 10000;
+        uint256 toInsurance = (fee * perpInsuranceFeeShare) / 10000;
+        uint256 toLP = (fee * perpLpFeeShare) / 10000;
+        uint256 toPlatform = fee - toCreator - toReferrer - toInsurance - toLP;
 
-        // 分配给创建者
+        // 分配给创建者（无效则回流平台）
         if (toCreator > 0 && creator != address(0)) {
-            vault.collectFee(user, creator, toCreator);
+            _collectFee(user, creator, toCreator, fromLocked);
         } else {
             toPlatform += toCreator;
             toCreator = 0;
         }
 
-        // 分配给推荐人
+        // 分配给推荐人（无效则回流平台）
         if (toReferrer > 0 && referrer != address(0)) {
-            vault.collectFee(user, referrer, toReferrer);
+            _collectFee(user, referrer, toReferrer, fromLocked);
         } else {
             toPlatform += toReferrer;
             toReferrer = 0;
         }
 
-        // 分配给平台
-        if (toPlatform > 0 && feeReceiver != address(0)) {
-            vault.collectFee(user, feeReceiver, toPlatform);
+        // 分配给保险基金
+        if (toInsurance > 0 && insuranceFeeReceiver != address(0)) {
+            _collectFee(user, insuranceFeeReceiver, toInsurance, fromLocked);
+        } else {
+            toPlatform += toInsurance;
+            toInsurance = 0;
         }
 
-        emit PerpFeeDistributed(token, user, fee, toCreator, toReferrer, toPlatform);
+        // 分配给 LP 池
+        if (toLP > 0 && lpFeeReceiver != address(0)) {
+            _collectFee(user, lpFeeReceiver, toLP, fromLocked);
+        } else {
+            toPlatform += toLP;
+            toLP = 0;
+        }
+
+        // 分配给平台
+        if (toPlatform > 0 && feeReceiver != address(0)) {
+            _collectFee(user, feeReceiver, toPlatform, fromLocked);
+        }
+
+        emit PerpFeeDistributed(token, user, fee, toCreator, toReferrer, toPlatform, toInsurance, toLP);
     }
 
-    /**
-     * @notice 分配永续平仓手续费 (从用户锁定余额)
-     * @dev 分配比例: 20% 创建者, 10% 推荐人, 70% 平台
-     * @param user 用户地址
-     * @param token 代币地址
-     * @param fee 总手续费
-     */
-    function _distributePerpFeeFromLocked(address user, address token, uint256 fee) internal {
-        if (fee == 0) return;
-
-        address creator;
-        address referrer;
-
-        // 从 TokenFactory 获取创建者和推荐人
-        if (tokenFactory != address(0)) {
-            try ITokenFactoryFee(tokenFactory).getTokenCreator(token) returns (address _creator) {
-                creator = _creator;
-            } catch {}
-            try ITokenFactoryFee(tokenFactory).userReferrer(user) returns (address _referrer) {
-                referrer = _referrer;
-            } catch {}
-        }
-
-        // 计算分配金额
-        uint256 toCreator = (fee * PERP_CREATOR_FEE_SHARE) / 10000;
-        uint256 toReferrer = (fee * PERP_REFERRER_FEE_SHARE) / 10000;
-        uint256 toPlatform = fee - toCreator - toReferrer;
-
-        // 分配给创建者
-        if (toCreator > 0 && creator != address(0)) {
-            vault.collectFeeFromLocked(user, creator, toCreator);
+    function _collectFee(address from, address to, uint256 amount, bool fromLocked) internal {
+        if (fromLocked) {
+            vault.collectFeeFromLocked(from, to, amount);
         } else {
-            toPlatform += toCreator;
-            toCreator = 0;
+            vault.collectFee(from, to, amount);
         }
-
-        // 分配给推荐人
-        if (toReferrer > 0 && referrer != address(0)) {
-            vault.collectFeeFromLocked(user, referrer, toReferrer);
-        } else {
-            toPlatform += toReferrer;
-            toReferrer = 0;
-        }
-
-        // 分配给平台
-        if (toPlatform > 0 && feeReceiver != address(0)) {
-            vault.collectFeeFromLocked(user, feeReceiver, toPlatform);
-        }
-
-        emit PerpFeeDistributed(token, user, fee, toCreator, toReferrer, toPlatform);
     }
 }

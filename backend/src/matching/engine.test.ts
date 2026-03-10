@@ -52,7 +52,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n, // 10x leverage
         0n, // market price
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.MARKET,
         MOCK_SIGNATURE
@@ -70,7 +70,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         0n, // market price
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.MARKET,
         MOCK_SIGNATURE
@@ -102,7 +102,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         parseEther("0.9"), // limit price
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.LIMIT,
         MOCK_SIGNATURE
@@ -118,7 +118,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         parseEther("1.1"), // limit price
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.LIMIT,
         MOCK_SIGNATURE
@@ -150,9 +150,9 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
       console.log("\n=== Test: Order Waits for Counterparty ===");
 
       // Submit 3 long orders at different prices
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.95"), BigInt(Date.now() / 1000 + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.90"), BigInt(Date.now() / 1000 + 3600), 1n, OrderType.LIMIT, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.85"), BigInt(Date.now() / 1000 + 3600), 2n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.95"), BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.90"), BigInt(Math.floor(Date.now() / 1000) + 3600), 1n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.85"), BigInt(Math.floor(Date.now() / 1000) + 3600), 2n, OrderType.LIMIT, MOCK_SIGNATURE);
 
       const orderBook = engine.getOrderBook(TOKEN);
       let depth = orderBook.getDepth();
@@ -168,7 +168,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         parseEther("0.92"),
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.LIMIT,
         MOCK_SIGNATURE
@@ -190,7 +190,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
       console.log("\n=== Test: Partial Fill Continues Waiting ===");
 
       // Long order for 3 ETH
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("3.0"), 100000n, parseEther("1.0"), BigInt(Date.now() / 1000 + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("3.0"), 100000n, parseEther("1.0"), BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
 
       // Short order for 1 ETH - partial fill
       const { matches } = engine.submitOrder(
@@ -200,7 +200,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         parseEther("1.0"),
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.LIMIT,
         MOCK_SIGNATURE
@@ -231,9 +231,9 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
       console.log("\n=== Test: Price Priority ===");
 
       // Submit longs at different prices (lower nonce = earlier)
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.90"), BigInt(Date.now() / 1000 + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_B, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.95"), BigInt(Date.now() / 1000 + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_C, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.92"), BigInt(Date.now() / 1000 + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.90"), BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_B, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.95"), BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_C, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.92"), BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
 
       console.log("  Long orders: A@0.90, B@0.95, C@0.92");
 
@@ -245,7 +245,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         parseEther("0.90"),
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         1n,
         OrderType.LIMIT,
         MOCK_SIGNATURE
@@ -263,10 +263,10 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
       console.log("\n=== Test: Market Orders Priority ===");
 
       // Limit long at 1.0
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("1.0"), BigInt(Date.now() / 1000 + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("1.0"), BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
 
       // Market long (should have priority)
-      engine.submitOrder(TRADER_B, TOKEN, true, parseEther("1.0"), 100000n, 0n, BigInt(Date.now() / 1000 + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_B, TOKEN, true, parseEther("1.0"), 100000n, 0n, BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
 
       // Short comes in - should match market order first
       const { matches } = engine.submitOrder(
@@ -276,7 +276,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         parseEther("1.0"),
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.LIMIT,
         MOCK_SIGNATURE
@@ -299,11 +299,11 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
       console.log("\n=== Test: Pending Matches Queue ===");
 
       // Create multiple matches
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, 0n, BigInt(Date.now() / 1000 + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_B, TOKEN, false, parseEther("1.0"), 100000n, 0n, BigInt(Date.now() / 1000 + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, 0n, BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_B, TOKEN, false, parseEther("1.0"), 100000n, 0n, BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
 
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("2.0"), 100000n, 0n, BigInt(Date.now() / 1000 + 3600), 1n, OrderType.MARKET, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_B, TOKEN, false, parseEther("2.0"), 100000n, 0n, BigInt(Date.now() / 1000 + 3600), 1n, OrderType.MARKET, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("2.0"), 100000n, 0n, BigInt(Math.floor(Date.now() / 1000) + 3600), 1n, OrderType.MARKET, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_B, TOKEN, false, parseEther("2.0"), 100000n, 0n, BigInt(Math.floor(Date.now() / 1000) + 3600), 1n, OrderType.MARKET, MOCK_SIGNATURE);
 
       const pendingMatches = engine.getPendingMatches();
 
@@ -325,8 +325,8 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
       console.log("\n=== Test: Clear Queue After Batch ===");
 
       // Create a match
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, 0n, BigInt(Date.now() / 1000 + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_B, TOKEN, false, parseEther("1.0"), 100000n, 0n, BigInt(Date.now() / 1000 + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, 0n, BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_B, TOKEN, false, parseEther("1.0"), 100000n, 0n, BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.MARKET, MOCK_SIGNATURE);
 
       expect(engine.getPendingMatches().length).toBe(1);
 
@@ -355,7 +355,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
         parseEther("1.0"),
         100000n,
         parseEther("0.5"), // Low price, won't match
-        BigInt(Date.now() / 1000 + 3600),
+        BigInt(Math.floor(Date.now() / 1000) + 3600),
         0n,
         OrderType.LIMIT,
         MOCK_SIGNATURE
@@ -373,7 +373,7 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
       expect(depth.longs.length).toBe(0);
 
       // Other trader cannot cancel
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.5"), BigInt(Date.now() / 1000 + 3600), 1n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.5"), BigInt(Math.floor(Date.now() / 1000) + 3600), 1n, OrderType.LIMIT, MOCK_SIGNATURE);
       const orders = engine.getUserOrders(TRADER_A);
       const pendingOrder = orders.find(o => o.status === OrderStatus.PENDING);
 
@@ -386,8 +386,8 @@ describe("撮合引擎测试 - 4个核心需求点", () => {
     it("查询用户订单", () => {
       console.log("\n=== Test: User Orders Query ===");
 
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.9"), BigInt(Date.now() / 1000 + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
-      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("2.0"), 100000n, parseEther("0.8"), BigInt(Date.now() / 1000 + 3600), 1n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("1.0"), 100000n, parseEther("0.9"), BigInt(Math.floor(Date.now() / 1000) + 3600), 0n, OrderType.LIMIT, MOCK_SIGNATURE);
+      engine.submitOrder(TRADER_A, TOKEN, true, parseEther("2.0"), 100000n, parseEther("0.8"), BigInt(Math.floor(Date.now() / 1000) + 3600), 1n, OrderType.LIMIT, MOCK_SIGNATURE);
 
       const orders = engine.getUserOrders(TRADER_A);
       expect(orders.length).toBe(2);

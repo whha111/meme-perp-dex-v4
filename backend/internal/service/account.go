@@ -11,7 +11,12 @@ import (
 	"github.com/memeperp/backend/internal/repository"
 )
 
+// L-07 FIX: 可配置抵押币种（之前硬编码 "ETH"）
+// 未来可从 config 读取，根据链设置不同默认值 (BSC=BNB, ETH=ETH)
+const CollateralCurrency = "ETH"
+
 type AccountService struct {
+	db           *gorm.DB // AUDIT-FIX GO-C05: store DB reference for bill repo
 	userRepo     *repository.UserRepository
 	balanceRepo  *repository.BalanceRepository
 	positionRepo *repository.PositionRepository
@@ -19,12 +24,14 @@ type AccountService struct {
 }
 
 func NewAccountService(
+	db *gorm.DB, // AUDIT-FIX GO-C05: pass DB for bill repo
 	userRepo *repository.UserRepository,
 	balanceRepo *repository.BalanceRepository,
 	positionRepo *repository.PositionRepository,
 	cache *database.Cache,
 ) *AccountService {
 	return &AccountService{
+		db:           db,
 		userRepo:     userRepo,
 		balanceRepo:  balanceRepo,
 		positionRepo: positionRepo,
@@ -111,8 +118,9 @@ func (s *AccountService) GetPosition(userID int64, posID string) (*model.Positio
 }
 
 func (s *AccountService) SetLeverage(userID int64, instID string, lever int16, mgnMode, posSide string) error {
-	// Validate leverage
-	if lever < 1 || lever > 100 {
+	// AUDIT-FIX M-26: Align max leverage with matching engine (10x).
+	// Previously allowed 100x which mismatched the engine's 10x limit.
+	if lever < 1 || lever > 10 {
 		return errors.New(errors.CodeInvalidLeverage)
 	}
 
@@ -165,8 +173,8 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		return errors.New(errors.CodePositionNotFound)
 	}
 
-	// Get balance
-	balance, err := s.balanceRepo.GetByUserAndCcy(userID, "BNB")
+	// L-07 FIX: 使用可配置抵押币种常量
+	balance, err := s.balanceRepo.GetByUserAndCcy(userID, CollateralCurrency)
 	if err != nil {
 		return errors.New(errors.CodeInsufficientBalance)
 	}
@@ -178,7 +186,7 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		}
 
 		// Deduct from available balance
-		if err := s.balanceRepo.FreezeBalance(userID, "BNB", amount); err != nil {
+		if err := s.balanceRepo.FreezeBalance(userID, CollateralCurrency, amount); err != nil {
 			return err
 		}
 
@@ -195,7 +203,7 @@ func (s *AccountService) AdjustMargin(userID int64, instID, posSide, adjustType 
 		pos.Margin = pos.Margin.Sub(amount)
 
 		// Return to available balance
-		if err := s.balanceRepo.UnfreezeBalance(userID, "BNB", amount); err != nil {
+		if err := s.balanceRepo.UnfreezeBalance(userID, CollateralCurrency, amount); err != nil {
 			return err
 		}
 	} else {
@@ -214,7 +222,7 @@ func (s *AccountService) GetBills(userID int64, instType, ccy string, billType i
 		limit = 100
 	}
 
-	billRepo := repository.NewBillRepository(nil) // Need to inject this properly
+	billRepo := repository.NewBillRepository(s.db) // AUDIT-FIX GO-C05: use injected DB, not nil
 	return billRepo.GetByUser(userID, instType, ccy, billType, after, before, limit)
 }
 

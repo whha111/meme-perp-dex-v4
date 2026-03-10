@@ -125,11 +125,17 @@ export async function createPositionFromMatch(match: Match): Promise<{ longPosit
     2                 // 新增2个仓位
   );
 
-  // PerpVault OI 追踪 (异步, 非阻塞)
+  // P0-2: PerpVault OI 追踪 — 必须 await + 错误日志（不能 fire-and-forget）
+  // AUDIT-FIX ME-C12: 使用统一 token 变量，防止 longOrder.token !== shortOrder.token 时 OI 腐败
   if (isPerpVaultEnabled()) {
+    const matchToken = match.longOrder.token; // 撮合引擎保证 long/short 同 token
     const sizeETH = (match.matchSize * match.matchPrice) / (10n ** 18n);
-    vaultIncreaseOI(match.longOrder.token, true, sizeETH).catch(() => {});
-    vaultIncreaseOI(match.shortOrder.token, false, sizeETH).catch(() => {});
+    try {
+      await vaultIncreaseOI(matchToken, true, sizeETH);
+      await vaultIncreaseOI(matchToken, false, sizeETH);
+    } catch (err) {
+      logger.error("Position", `PerpVault OI increase failed for pair ${matchToken}: ${err}`);
+    }
   }
 
   // 记录FOMO事件（大额开仓）
@@ -192,7 +198,8 @@ export async function addToPosition(
 export async function closePosition(
   positionId: string,
   closePrice: bigint,
-  closeSize?: bigint
+  closeSize?: bigint,
+  skipPerpVault?: boolean  // AUDIT-FIX ME-C13: 强平路径自行处理 PerpVault，避免双重结算
 ): Promise<{ position: Position; realizedPnL: bigint } | null> {
   const position = await PositionRepo.get(positionId);
   if (!position) return null;
@@ -230,14 +237,20 @@ export async function closePosition(
       pnl
     );
 
-    // PerpVault: OI减少 + PnL结算 (异步, 非阻塞)
-    if (isPerpVaultEnabled()) {
+    // P0-2: PerpVault OI减少 + PnL结算 — 必须 await + 错误日志
+    // AUDIT-FIX ME-C13: 强平路径 (executeLiquidation) 设置 skipPerpVault=true
+    // 因为它自行调用 vaultDecreaseOI + vaultSettleLiquidation，避免 OI 双减 + PnL 双算
+    if (isPerpVaultEnabled() && !skipPerpVault) {
       const sizeETH = (position.size * position.entryPrice) / (10n ** 18n);
-      vaultDecreaseOI(position.token, position.isLong, sizeETH).catch(() => {});
-      if (pnl !== 0n) {
-        const isProfit = pnl > 0n;
-        const absAmount = isProfit ? pnl : -pnl;
-        vaultSettlePnL(position.trader, absAmount, isProfit).catch(() => {});
+      try {
+        await vaultDecreaseOI(position.token, position.isLong, sizeETH);
+        if (pnl !== 0n) {
+          const isProfit = pnl > 0n;
+          const absAmount = isProfit ? pnl : -pnl;
+          await vaultSettlePnL(position.trader, absAmount, isProfit);
+        }
+      } catch (err) {
+        logger.error("Position", `PerpVault close settlement failed for ${positionId}: ${err}`);
       }
     }
 
@@ -265,14 +278,18 @@ export async function closePosition(
       updateOpenInterest(position.token, 0n, oiDelta, 0);
     }
 
-    // PerpVault: OI减少 + PnL结算 (部分平仓)
+    // P0-2: PerpVault OI减少 + PnL结算 (部分平仓) — 必须 await
     if (isPerpVaultEnabled()) {
       const sizeETH = (actualCloseSize * position.entryPrice) / (10n ** 18n);
-      vaultDecreaseOI(position.token, position.isLong, sizeETH).catch(() => {});
-      if (pnl !== 0n) {
-        const isProfit = pnl > 0n;
-        const absAmount = isProfit ? pnl : -pnl;
-        vaultSettlePnL(position.trader, absAmount, isProfit).catch(() => {});
+      try {
+        await vaultDecreaseOI(position.token, position.isLong, sizeETH);
+        if (pnl !== 0n) {
+          const isProfit = pnl > 0n;
+          const absAmount = isProfit ? pnl : -pnl;
+          await vaultSettlePnL(position.trader, absAmount, isProfit);
+        }
+      } catch (err) {
+        logger.error("Position", `PerpVault partial close settlement failed for ${position.id}: ${err}`);
       }
     }
 

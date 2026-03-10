@@ -69,7 +69,7 @@ export interface AppState {
 }
 
 // 默认偏好设置
-const DEFAULT_PREFERENCES: UserPreferences = {
+export const DEFAULT_PREFERENCES: UserPreferences = {
   theme: 'dark',
   slippageTolerance: 0.5, // 0.5%
   transactionDeadline: 20, // 20分钟
@@ -186,11 +186,11 @@ export const useAppStore = create<AppState>()(
       }),
       // 正确恢复 Set 类型
       merge: (persistedState, currentState) => {
-        const persisted = persistedState as any;
+        const persisted = persistedState as Partial<{ favoriteInstruments: string[] } & Omit<typeof currentState, "favoriteInstruments">>;
         return {
           ...currentState,
           ...persisted,
-          // 确保 favoriteInstruments 是 Set
+          // 确保 favoriteInstruments 是 Set (localStorage 序列化为 Array)
           favoriteInstruments: new Set(persisted?.favoriteInstruments || []),
         };
       },
@@ -243,16 +243,16 @@ export const appStoreUtils = {
   },
 
   // 导入用户数据
-  importUserData: (data: any) => {
+  importUserData: (data: unknown) => {
     if (!data || typeof data !== 'object') {
       throw new Error('无效的用户数据格式');
     }
-
+    const d = data as Record<string, unknown>;
     useAppStore.setState({
-      preferences: data.preferences || DEFAULT_PREFERENCES,
-      recentInstruments: data.recentInstruments || [],
-      favoriteInstruments: new Set(data.favoriteInstruments || []),
-      transactions: data.transactions || [],
+      preferences: (d.preferences as typeof DEFAULT_PREFERENCES) || DEFAULT_PREFERENCES,
+      recentInstruments: (d.recentInstruments as string[]) || [],
+      favoriteInstruments: new Set((d.favoriteInstruments as string[]) || []),
+      transactions: (d.transactions as TransactionState[]) || [],
     });
   },
 };

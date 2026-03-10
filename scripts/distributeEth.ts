@@ -11,12 +11,14 @@ import {
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import * as fs from "fs";
 
-const RPC_URL = "https://base-sepolia.g.alchemy.com/v2/Dr8sMe-1MYIF7jBYuZZj8PMOPAAeJ16d";
+const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const WALLETS_PATH = "/Users/qinlinqiu/Desktop/Namespace/scripts/market-maker/wallets.json";
-const DEPLOYER_KEY = "0xf9a07bb59ea400ef88bfbcf314d89f357c8580d1a4fb543e48cfb98b02b41d2c" as Hex;
+// AUDIT-FIX DP-C01: Read key from env
+const DEPLOYER_KEY = (process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY) as Hex;
+if (!DEPLOYER_KEY) { console.error("Set DEPLOYER_PRIVATE_KEY env var"); process.exit(1); }
 
 // 保留一点 gas 给 deployer
 const RESERVE_FOR_DEPLOYER = parseEther("0.1");
@@ -27,14 +29,14 @@ function sleep(ms: number): Promise<void> {
 
 async function main() {
   const client = createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
 
   const deployerAccount = privateKeyToAccount(DEPLOYER_KEY);
   const deployerClient = createWalletClient({
     account: deployerAccount,
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
 

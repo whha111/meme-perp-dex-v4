@@ -27,12 +27,16 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Initialize logger
+	// Initialize logger — P2: check err instead of ignoring
 	var logger *zap.Logger
+	var logErr error
 	if cfg.Server.Mode == "debug" {
-		logger, _ = zap.NewDevelopment()
+		logger, logErr = zap.NewDevelopment()
 	} else {
-		logger, _ = zap.NewProduction()
+		logger, logErr = zap.NewProduction()
+	}
+	if logErr != nil {
+		log.Fatalf("Failed to initialize logger: %v", logErr)
 	}
 	defer logger.Sync()
 
@@ -103,8 +107,14 @@ func main() {
 	}
 
 	// Start server
+	// P1: TLS 由反向代理 (Nginx) 终止。生产部署必须配置 Nginx TLS → 此 HTTP 服务器。
 	go func() {
-		logger.Info("API Server starting", zap.String("addr", cfg.Server.Addr))
+		if cfg.Server.Mode != "debug" {
+			logger.Info("API Server starting (production — ensure Nginx TLS reverse proxy)",
+				zap.String("addr", cfg.Server.Addr))
+		} else {
+			logger.Info("API Server starting", zap.String("addr", cfg.Server.Addr))
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("Failed to start server", zap.Error(err))
 		}

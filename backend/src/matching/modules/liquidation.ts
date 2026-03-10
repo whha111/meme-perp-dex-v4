@@ -10,13 +10,11 @@
 import type { Address } from "viem";
 import { PositionRepo } from "../database/redis";
 import { logger } from "../utils/logger";
-// ✅ 修复：engine 现在在 server.ts 中定义
 import { engine } from "../server";
 import { closePosition } from "./position";
-// ❌ Mode 2: 移除链上强平调用
-// import { submitLiquidation } from "./settlement";
 import type { Position, LiquidationCandidate, ADLQueue, RiskLevel, HeatmapCell, LiquidationHeatmapResponse } from "../types";
 import { isPerpVaultEnabled, settleLiquidation as vaultSettleLiquidation, decreaseOI as vaultDecreaseOI } from "./perpVault";
+import { LIQUIDATOR_BOT_ADDRESS } from "../config";
 
 // ============================================================
 // State
@@ -99,7 +97,9 @@ export async function executeLiquidation(positionId: string): Promise<boolean> {
     }
 
     // 平仓
-    const result = await closePosition(positionId, currentPrice);
+    // AUDIT-FIX ME-C13: skipPerpVault=true — 强平路径在下方 L114-127 自行处理 PerpVault
+    // closePosition 内部的 vaultDecreaseOI + vaultSettlePnL 会被跳过，防止双重结算
+    const result = await closePosition(positionId, currentPrice, undefined, true);
     if (!result) {
       throw new Error("Failed to close position");
     }
@@ -113,15 +113,18 @@ export async function executeLiquidation(positionId: string): Promise<boolean> {
     // ✅ Mode 2: 纯链下强平，不调用链上合约
     // 用户 equity 已在 closePosition 中更新
 
-    // PerpVault: 清算结算 + OI减少 (异步, 非阻塞)
+    // PerpVault 清算结算 + OI 减少
     if (isPerpVaultEnabled()) {
       const sizeETH = (position.size * position.entryPrice) / (10n ** 18n);
-      vaultDecreaseOI(position.token, position.isLong, sizeETH).catch(() => {});
-      // 清算抵押品进入池子，5% 作为清算者奖励
-      const collateral = position.collateral > 0n ? position.collateral : 0n;
-      if (collateral > 0n) {
-        const liquidatorReward = collateral / 20n; // 5%
-        vaultSettleLiquidation(collateral, liquidatorReward, position.trader).catch(() => {});
+      try {
+        await vaultDecreaseOI(position.token, position.isLong, sizeETH);
+        const collateral = position.collateral > 0n ? position.collateral : 0n;
+        if (collateral > 0n) {
+          const liquidatorReward = (collateral * 75n) / 1000n; // 7.5% — 与 Liquidation.sol 对齐
+          await vaultSettleLiquidation(collateral, liquidatorReward, LIQUIDATOR_BOT_ADDRESS);
+        }
+      } catch (err) {
+        logger.error("Liquidation", `PerpVault liquidation settlement failed for ${positionId}: ${err}`);
       }
     }
 

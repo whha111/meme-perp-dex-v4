@@ -14,8 +14,8 @@ import dynamic from 'next/dynamic';
 import {
   getWebSocketServices,
   InstrumentAssetData,
-  adaptInstrumentAssetResponse,
 } from "@/lib/websocket";
+import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
 import { useAppStore } from "@/lib/stores/appStore";
 import { useETHPrice } from "@/hooks/common/useETHPrice";
 import { LiquidityPanel } from "@/components/spot/LiquidityPanel";
@@ -26,32 +26,49 @@ import { useTokenInfo, getTokenDisplayName } from "@/hooks/common/useTokenInfo";
 import { usePoolState, calculatePriceUsd, calculateMarketCapUsd } from "@/hooks/spot/usePoolState";
 import { useOnChainTrades, OnChainTrade } from "@/hooks/perpetual/useOnChainTrades";
 import { tradeEventEmitter } from "@/lib/tradeEvents";
+import { TradingErrorBoundary } from "@/components/shared/TradingErrorBoundary";
 
-// 格式化 ETH 本位价格，使用下标表示法 (e.g., 0.0₅62087 ETH)
-function formatSmallPriceETH(priceEth: number): string {
-  if (priceEth <= 0) return "0 ETH";
-  if (priceEth >= 0.01) return priceEth.toFixed(4) + " ETH";
-  if (priceEth >= 0.0001) return priceEth.toFixed(6) + " ETH";
+// 格式化 USD 市值（紧凑格式：K/M 后缀）
+function formatUsdCompact(usd: number): string {
+  if (usd <= 0) return "0.00";
+  if (usd >= 1_000_000) return (usd / 1_000_000).toFixed(2) + "M";
+  if (usd >= 1_000) return (usd / 1_000).toFixed(2) + "K";
+  if (usd >= 1) return usd.toFixed(2);
+  if (usd >= 0.01) return usd.toFixed(4);
+  return usd.toFixed(6);
+}
+
+// 格式化 BNB 本位价格，使用下标表示法 (e.g., 0.0₅62087 BNB)
+function formatSmallPriceBNB(priceBnb: number): string {
+  if (priceBnb <= 0) return "0 BNB";
+  if (priceBnb >= 0.01) return priceBnb.toFixed(4) + " BNB";
+  if (priceBnb >= 0.0001) return priceBnb.toFixed(6) + " BNB";
 
   // 对于非常小的价格，使用下标表示法
-  const priceStr = priceEth.toFixed(18);
+  const priceStr = priceBnb.toFixed(18);
   const match = priceStr.match(/^0\.(0*)([1-9]\d*)/);
   if (match) {
     const zeroCount = match[1].length;
     const significantDigits = match[2].slice(0, 5); // 保留5位有效数字
     const subscripts = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
     const subscriptNum = zeroCount.toString().split('').map(d => subscripts[parseInt(d)]).join('');
-    return `0.0${subscriptNum}${significantDigits} ETH`;
+    return `0.0${subscriptNum}${significantDigits} BNB`;
   }
 
-  return priceEth.toFixed(8) + " ETH";
+  return priceBnb.toFixed(8) + " BNB";
 }
 
-// 格式化 ETH 金额为显示值
-function formatETHValue(ethAmount: number): string {
-  if (ethAmount <= 0) return "0 ETH";
-  if (ethAmount >= 1) return ethAmount.toFixed(4) + " ETH";
-  return ethAmount.toFixed(5) + " ETH";
+// 测试代币常用的占位域名，跳过 fetch 避免 CORS 报错
+const BLOCKED_METADATA_DOMAINS = ['example.com', 'example.org', 'example.net'];
+
+// 模块级缓存 — 组件 remount 后不丢失，避免重复请求已失败的 URI
+const failedMetadataURIs = new Set<string>();
+
+// 格式化 BNB 金额为显示值
+function formatBNBValue(bnbAmount: number): string {
+  if (bnbAmount <= 0) return "0 BNB";
+  if (bnbAmount >= 1) return bnbAmount.toFixed(4) + " BNB";
+  return bnbAmount.toFixed(5) + " BNB";
 }
 
 // 动态导入图表组件以避免 SSR 问题并减小初始包体积
@@ -66,13 +83,11 @@ const TokenPriceChart = dynamic(
 interface TradingTerminalProps {
   symbol: string; // 交易对符号，如 "PEPE"
   className?: string;
+  /** 可选: 顶部 Token 选择器插槽 (替换默认面包屑) */
+  headerSlot?: React.ReactNode;
 }
 
-export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
-  // 最早的调试日志 - 如果这个都看不到，说明组件根本没有渲染
-  console.log("========== [TradingTerminal] COMPONENT MOUNTED ==========");
-  console.log("[TradingTerminal] Props received:", { symbol, className });
-
+export function TradingTerminal({ symbol, className, headerSlot }: TradingTerminalProps) {
   const t = useTranslations();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("tradeActivity");
@@ -81,22 +96,23 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
   // 构造 instId (用于API调用)
   const instId = symbol;
 
-  // 从链上获取代币名称和符号
-  const tokenInfo = useTokenInfo(symbol);
-  const displaySymbol = getTokenDisplayName(symbol, tokenInfo);
-
-  // 获取实时 ETH 价格
-  const { price: ethPriceUsd } = useETHPrice();
-
-  // 从 TokenFactory 合约直接获取池子状态和价格
-  // symbol 格式可能是 "0x..." 或 "0x...-USDT"
+  // 从 symbol 提取纯地址（去掉 -USDT 后缀 + 小写化）
+  // symbol 格式可能是 "0x...-USDT" 或 "0x..." 或 "BTC-USDT"
   const isTokenAddress = symbol?.startsWith("0x");
-  const pureTokenAddress = isTokenAddress ? symbol.split("-")[0] : null;
+  // ⚠️ 小写化！URL 中的 mixed-case 地址 checksum 可能不合法，viem 会拒绝
+  const pureTokenAddress = isTokenAddress ? symbol.split("-")[0].toLowerCase() : null;
   const isValidTokenAddress = pureTokenAddress && pureTokenAddress.length === 42;
+
+  // 从 matching engine 获取代币名称和符号
+  // ⚠️ 必须用 pureTokenAddress（纯地址），不能用 symbol（含 -USDT 后缀 → length≠42 → 查找失败）
+  const tokenInfo = useTokenInfo(pureTokenAddress || symbol);
+  const displaySymbol = getTokenDisplayName(pureTokenAddress || symbol, tokenInfo);
+
+  // 获取实时 BNB 价格
+  const { price: bnbPriceUsd } = useETHPrice();
   const poolData = usePoolState(isValidTokenAddress ? pureTokenAddress : undefined);
 
   // 获取链上交易记录
-  console.log(`[TradingTerminal] isTokenAddress: ${isTokenAddress}, symbol: ${symbol}, pureTokenAddress: ${pureTokenAddress}, isValidTokenAddress: ${isValidTokenAddress}`);
   const {
     trades: onChainTrades,
     refetch: refetchOnChainTrades,
@@ -104,23 +120,17 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
     enabled: !!isValidTokenAddress,
     resolutionSeconds: 60,
   });
-  console.log(`[TradingTerminal] onChainTrades count: ${onChainTrades?.length || 0}`);
 
   // 订阅交易事件，实现交易活动的实时更新
   useEffect(() => {
     if (!symbol) return;
 
-    console.log(`[TradingTerminal] Subscribing to trade events for symbol: ${symbol}`);
     const unsubscribe = tradeEventEmitter.subscribe((tradedToken, txHash) => {
-      console.log(`[TradingTerminal] Trade event received: tradedToken=${tradedToken}, symbol=${symbol}`);
       if (tradedToken.toLowerCase() === symbol.toLowerCase()) {
-        console.log(`[TradingTerminal] Token match! Refreshing trade data...`);
         // 刷新链上交易记录
         refetchOnChainTrades();
         // 刷新后端交易历史
         queryClient.invalidateQueries({ queryKey: ["tradeHistory", instId] });
-      } else {
-        console.log(`[TradingTerminal] Token mismatch: ${tradedToken.toLowerCase()} !== ${symbol.toLowerCase()}`);
       }
     });
 
@@ -136,12 +146,18 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
     return uri;
   };
 
-  // 验证 URI 是否为可获取的格式
+  // 验证 URI 是否为可获取的格式（排除占位域名）
   const isValidFetchableURI = (uri: string): boolean => {
     if (!uri) return false;
     if (uri.startsWith('data:')) return true;
     if (uri.startsWith('ipfs://')) return true;
-    if (uri.startsWith('http://') || uri.startsWith('https://')) return true;
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      try {
+        const url = new URL(uri);
+        if (BLOCKED_METADATA_DOMAINS.includes(url.hostname)) return false;
+      } catch { return false; }
+      return true;
+    }
     // 有效的 IPFS CID (Qm... 或 bafy...)
     if (uri.startsWith('Qm') && uri.length === 46) return true;
     if (uri.startsWith('bafy')) return true;
@@ -151,9 +167,6 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
   // 从 metadataURI 获取图片 URL
   // metadataURI 可能是：1. 直接的图片 URL/IPFS  2. JSON 元数据文件  3. base64 编码的 JSON
   const [tokenLogoUrl, setTokenLogoUrl] = useState<string | undefined>(undefined);
-
-  // 缓存已失败的 URI，避免重复请求
-  const failedURIsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchMetadataImage = async (uri: string | undefined) => {
@@ -168,7 +181,7 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
       }
 
       // 跳过已失败的 URI
-      if (failedURIsRef.current.has(uri)) {
+      if (failedMetadataURIs.has(uri)) {
         return;
       }
 
@@ -193,7 +206,7 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
           try {
             const headResponse = await fetch(fetchUrl, { method: 'HEAD' });
             if (!headResponse.ok) {
-              failedURIsRef.current.add(uri);
+              failedMetadataURIs.add(uri);
               return;
             }
             const contentType = headResponse.headers.get('content-type') || '';
@@ -218,7 +231,7 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
             }
           } catch {
             // HEAD 请求失败，记录并跳过
-            failedURIsRef.current.add(uri);
+            failedMetadataURIs.add(uri);
             return;
           }
         }
@@ -229,7 +242,7 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
         }
       } catch (e) {
         console.warn('Failed to fetch metadata image:', uri);
-        failedURIsRef.current.add(uri);
+        failedMetadataURIs.add(uri);
       }
     };
 
@@ -257,29 +270,30 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
   //   }
   // }, [instId, addRecentInstrument]);
 
-  // [DEBUG] 使用 ref 来存储 displaySymbol 和 ethPriceUsd，避免 callback 重建
+  // [DEBUG] 使用 ref 来存储 displaySymbol 和 bnbPriceUsd，避免 callback 重建
   const displaySymbolRef = React.useRef(displaySymbol);
-  const ethPriceUsdRef = React.useRef(ethPriceUsd);
+  const bnbPriceUsdRef = React.useRef(bnbPriceUsd);
 
   React.useEffect(() => {
     displaySymbolRef.current = displaySymbol;
-    ethPriceUsdRef.current = ethPriceUsd;
-  }, [displaySymbol, ethPriceUsd]);
+    bnbPriceUsdRef.current = bnbPriceUsd;
+  }, [displaySymbol, bnbPriceUsd]);
 
   // 实时交易流处理（带去重逻辑）- 使用 ref 避免重建
   const handleRealtimeTrade = useCallback((trade: TradeEvent) => {
     const currentDisplaySymbol = displaySymbolRef.current;
 
-    const priceEth = parseFloat(trade.newPrice) / 1e18;
-    const ethAmount = parseFloat(trade.ethAmount) / 1e18;
+    const priceBnb = parseFloat(trade.newPrice) / 1e18;
+    const bnbAmount = parseFloat(trade.ethAmount) / 1e18;
 
     const newTrade: Trade = {
       timestamp: trade.timestamp * 1000,
       type: trade.tradeType.toLowerCase() as "buy" | "sell",
-      totalValue: formatETHValue(ethAmount),
-      price: formatSmallPriceETH(priceEth),
-      quantity: (trade.tradeType === "BUY" ? "+" : "-") + (parseFloat(trade.tokenAmount) / 1e18).toFixed(2) + "M " + currentDisplaySymbol,
-      quantitySol: (trade.tradeType === "BUY" ? "-" : "+") + ethAmount.toFixed(5) + " ETH",
+      totalValue: formatBNBValue(bnbAmount),
+      price: formatSmallPriceBNB(priceBnb),
+      // AUDIT-FIX FC-C02: 与历史交易格式一致 — 先 /1e18 得到实际 token 数, 再 /1e6 + "M" 后缀
+      quantity: (trade.tradeType === "BUY" ? "+" : "-") + (parseFloat(trade.tokenAmount) / 1e18 / 1e6).toFixed(2) + "M " + currentDisplaySymbol,
+      quantitySol: (trade.tradeType === "BUY" ? "-" : "+") + bnbAmount.toFixed(5) + " BNB",
       address: trade.traderAddress.slice(0, 6) + "..." + trade.traderAddress.slice(-4),
       txHash: trade.txHash,
       isNew: true,
@@ -301,31 +315,11 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
   // const { latestTrade } = useInstrumentTradeStream(instId, { ... });
   const latestTrade = null;
 
-  // 从 WebSocket 获取资产信息
-  const { data: assetData, isLoading: isAssetLoading, isError: isAssetError } = useQuery({
-    queryKey: ["instrumentAsset", instId],
-    queryFn: async () => {
-      const wsServices = getWebSocketServices();
-      const response = await wsServices.getInstrumentAsset({
-        inst_id: instId,
-      });
-
-      const adapted = adaptInstrumentAssetResponse(response);
-      return {
-        ...adapted,
-        instId: adapted.instId || instId,
-        createdAt: adapted.createdAt || 0,
-      };
-    },
-    enabled: !!instId,
-    retry: 2,
-    retryDelay: 1000,
-    staleTime: 10000,
-    refetchInterval: false, // [DEBUG] 暂时禁用轮询
+  // 从 tradingDataStore 读取 WSS 推送的实时市场数据（由 useUnifiedWebSocket 填充）
+  const tokenAddress = pureTokenAddress?.toLowerCase() as `0x${string}` | undefined;
+  const tokenStats = useTradingDataStore(state => {
+    return tokenAddress ? state.tokenStats.get(tokenAddress) : null;
   });
-
-  // [DEBUG] 暂时移除 liveAssetData 同步
-  // useEffect(() => { ... }, [assetData]);
 
   // Fetch Trade History
   const { data: tradesData, isLoading: isTradesLoading, error: tradesError } = useQuery({
@@ -344,17 +338,17 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
       return response.transactions.map((tx) => {
         const isBuy = tx.transaction_type === "BUY";
         const trader = isBuy ? tx.buyer_wallet : tx.seller_wallet;
-        const priceEth = parseFloat(tx.price) / 1e18;
+        const priceBnb = parseFloat(tx.price) / 1e18;
         const tokenAmount = parseFloat(tx.token_amount) / 1e18;
-        const ethAmount = priceEth * tokenAmount;
+        const bnbAmount = priceBnb * tokenAmount;
 
         return {
           timestamp: Number(tx.transaction_timestamp) * 1000,
           type: isBuy ? "buy" : "sell",
-          totalValue: formatETHValue(ethAmount),
-          price: formatSmallPriceETH(priceEth),
+          totalValue: formatBNBValue(bnbAmount),
+          price: formatSmallPriceBNB(priceBnb),
           quantity: (isBuy ? "+" : "-") + (tokenAmount / 1e6).toFixed(2) + "M " + displaySymbol,
-          quantitySol: (isBuy ? "-" : "+") + ethAmount.toFixed(5) + " ETH",
+          quantitySol: (isBuy ? "-" : "+") + bnbAmount.toFixed(5) + " BNB",
           address: (trader || "0x0000...0000").slice(0, 6) + "..." + (trader || "0x0000").slice(-4),
           txHash: tx.tx_hash,
         };
@@ -366,14 +360,8 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
     retry: 2,
   });
 
-  // 安全地解析 securityStatus
-  const securityStatus = useMemo(() => {
-    const status = assetData?.securityStatus;
-    if (typeof status === 'string' && ['UNKNOWN', 'AUTHENTIC', 'MISMATCH', 'MISSING', 'TRANSFERRED', 'GRADUATED'].includes(status)) {
-      return status as SecurityStatus;
-    }
-    return 'AUTHENTIC' as SecurityStatus;
-  }, [assetData?.securityStatus]);
+  // 安全地解析 securityStatus (默认 AUTHENTIC)
+  const securityStatus = 'AUTHENTIC' as SecurityStatus;
 
   // 从合约数据获取供应量和状态（使用稳定的引用）
   const poolSoldSupply = poolData.poolState?.soldTokens?.toString();
@@ -389,36 +377,27 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
     };
   }, [tokenLogoUrl]);
 
-  // 从 assetData 或合约数据获取池子状态
-  const isPoolGraduated = poolIsGraduated ?? assetData?.isGraduated ?? false;
+  // 从合约数据获取池子状态
+  const isPoolGraduated = poolIsGraduated ?? false;
   const isPoolActive = poolIsActive ?? true;
   const poolTotalSupply = "1000000000000000000000000000"; // 1B tokens in wei
 
-  // [DEBUG] 简化 displayData - 直接使用 assetData
+  // 构建 displayData — 合约数据 + WSS 数据合并
   const displayData = useMemo(() => {
     const tokenAddressFromSymbol = isTokenAddress ? symbol : undefined;
-
-    if (assetData) {
-      return {
-        ...assetData,
-        tokenAddress: tokenAddressFromSymbol || assetData.tokenAddress,
-        creatorAddress: poolCreator || assetData.creatorAddress,
-        soldSupply: poolSoldSupply || assetData.soldSupply,
-        totalSupply: poolTotalSupply || assetData.totalSupply,
-      };
-    }
     return {
       instId,
-      currentPrice: "0",
+      currentPrice: tokenStats?.lastPrice || "0",
       fdv: "0",
-      volume24h: "0",
+      volume24h: tokenStats?.volume24h || "0",
+      priceChange24h: parseFloat(tokenStats?.priceChangePercent24h || "0"),
       securityStatus: 'AUTHENTIC' as SecurityStatus,
       tokenAddress: tokenAddressFromSymbol,
       creatorAddress: poolCreator,
       soldSupply: poolSoldSupply,
       totalSupply: poolTotalSupply,
     } as InstrumentAssetData;
-  }, [assetData, instId, isTokenAddress, symbol, poolSoldSupply, poolCreator]);
+  }, [tokenStats, instId, isTokenAddress, symbol, poolSoldSupply, poolCreator]);
 
   // 安全地将字符串转换为 BigInt
   const safeBigInt = (value: string | undefined): bigint => {
@@ -431,37 +410,42 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
     }
   };
 
-  // 优先使用 TokenFactory 合约数据，如果后端返回 0 或无数据
-  const backendPrice = safeBigInt(displayData?.currentPrice);
-  const backendMarketCap = safeBigInt(displayData?.fdv);
-  const backendVolume = safeBigInt(displayData?.volume24h);
-
-  // 如果后端数据为 0 且有合约数据，使用合约数据
-  const currentPrice = backendPrice === 0n && poolData.currentPrice > 0n
-    ? poolData.currentPrice
-    : backendPrice;
-  const marketCap = backendMarketCap === 0n && poolData.marketCap > 0n
-    ? poolData.marketCap
-    : backendMarketCap;
-  const volume24h = backendVolume; // Volume 只能从后端获取
+  // 价格优先级: WSS lastPrice > 合约 currentPrice
+  const wssPrice = safeBigInt(tokenStats?.lastPrice);
+  const currentPrice = wssPrice > 0n ? wssPrice
+    : poolData.currentPrice > 0n ? poolData.currentPrice
+    : 0n;
+  // 市值优先级: 合约 marketCap（链上数据）
+  const marketCap = poolData.marketCap > 0n ? poolData.marketCap : 0n;
+  // 成交量: 仅从 WSS 获取（后端撮合引擎统计）
+  const volume24h = safeBigInt(tokenStats?.volume24h);
 
   return (
     <div className={`flex flex-col bg-okx-bg-primary min-h-screen text-okx-text-primary ${className}`}>
-      {/* 顶部面包屑与标题栏 */}
-      <div className="h-8 bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-4 gap-2 text-[11px] text-okx-text-secondary">
-         <span>★</span>
-         <span className="text-okx-text-primary font-bold">{displaySymbol}</span>
-         <span className="mx-1">——</span>
-         <span>
-           ${(Number(formatUnits(marketCap, 18)) * ethPriceUsd).toLocaleString('en-US', { maximumFractionDigits: 2 })}
-         </span>
-      </div>
+      {/* 顶部面包屑与标题栏 — 支持外部 headerSlot 替换 */}
+      {headerSlot ? (
+        <div className="bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-2">
+          {headerSlot}
+          <span className="ml-2 text-[11px] text-okx-text-secondary">
+            ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * bnbPriceUsd)}
+          </span>
+        </div>
+      ) : (
+        <div className="h-8 bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-4 gap-2 text-[11px] text-okx-text-secondary">
+           <span>★</span>
+           <span className="text-okx-text-primary font-bold">{displaySymbol}</span>
+           <span className="mx-1">——</span>
+           <span>
+             ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * bnbPriceUsd)}
+           </span>
+        </div>
+      )}
 
       {/* 核心指标头 */}
       <PriceBoard
         symbol={symbol}
         displaySymbol={displaySymbol}
-        tokenAddress={(displayData as any)?.tokenAddress}
+        tokenAddress={displayData?.tokenAddress}
         currentPrice={currentPrice}
         price24hChange={displayData.priceChange24h || 0}
         marketCap={marketCap}
@@ -475,7 +459,9 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
         <div className="flex-[3] border-r border-okx-border-primary flex flex-col overflow-hidden">
            {/* K线图本体 - TradingView 官方 Lightweight Charts */}
            <div className="h-[400px] bg-[#131722]">
-              <TokenPriceChart symbol={symbol} displaySymbol={displaySymbol} latestTrade={latestTrade} />
+              <TradingErrorBoundary module="SpotChart">
+                <TokenPriceChart symbol={symbol} displaySymbol={displaySymbol} latestTrade={latestTrade} />
+              </TradingErrorBoundary>
            </div>
 
            {/* 底部详情选项卡 */}
@@ -521,26 +507,23 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
                        const seenTxHashes = new Set<string>();
                        const merged: Trade[] = [];
 
-                       console.log(`[TradingTerminal] Building trade list - onChainTrades: ${onChainTrades?.length || 0}, realtimeTrades: ${realtimeTrades.length}, historyTrades: ${tradesData?.length || 0}`);
-
                        // 首先添加链上交易（最准确的数据源）
                        if (Array.isArray(onChainTrades) && onChainTrades.length > 0) {
-                         console.log(`[TradingTerminal] Processing ${onChainTrades.length} on-chain trades`);
                          // 按时间倒序排列
                          const sortedOnChain = [...onChainTrades].sort((a, b) => b.timestamp - a.timestamp);
                          for (const trade of sortedOnChain) {
                            if (trade.transactionHash && !seenTxHashes.has(trade.transactionHash)) {
                              seenTxHashes.add(trade.transactionHash);
-                             const priceEth = trade.price; // TOKEN/ETH 价格
-                             const ethAmount = Number(trade.ethAmount) / 1e18;
+                             const priceBnb = trade.price; // TOKEN/BNB 价格
+                             const bnbAmount = Number(trade.ethAmount) / 1e18;
                              const tokenAmount = Number(trade.tokenAmount) / 1e18;
                              merged.push({
                                timestamp: trade.timestamp * 1000,
                                type: trade.isBuy ? "buy" : "sell",
-                               totalValue: formatETHValue(ethAmount),
-                               price: formatSmallPriceETH(priceEth),
+                               totalValue: formatBNBValue(bnbAmount),
+                               price: formatSmallPriceBNB(priceBnb),
                                quantity: (trade.isBuy ? "+" : "-") + (tokenAmount / 1e6).toFixed(2) + "M " + displaySymbol,
-                               quantitySol: (trade.isBuy ? "-" : "+") + ethAmount.toFixed(5) + " ETH",
+                               quantitySol: (trade.isBuy ? "-" : "+") + bnbAmount.toFixed(5) + " BNB",
                                address: trade.trader.slice(0, 6) + "..." + trade.trader.slice(-4),
                                txHash: trade.transactionHash,
                                isNew: Date.now() - trade.timestamp * 1000 < 30000, // 30秒内的交易标记为新
@@ -566,7 +549,6 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
                          }
                        }
 
-                       console.log(`[TradingTerminal] Final merged trades: ${merged.length}`);
                        // 按时间排序并限制数量
                        return merged.sort((a, b) => b.timestamp - a.timestamp).slice(0, 100);
                      })()} />
@@ -582,13 +564,13 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
                  {activeTab === "holdingAddresses" && (
                    <TopHolders
                      instId={instId}
-                     creatorAddress={(displayData as any)?.creatorAddress}
+                     creatorAddress={displayData?.creatorAddress}
                    />
                  )}
                  {activeTab === "profitAddresses" && (
                    <ProfitableAddresses
                      tokenAddress={pureTokenAddress ?? undefined}
-                     ethPriceUsd={ethPriceUsd}
+                     bnbPriceUsd={bnbPriceUsd}
                    />
                  )}
                  {activeTab === "watchedAddresses" && (
@@ -602,14 +584,14 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
                      virtualETHReserve={poolData.virtualETHReserve}
                      virtualTokenReserve={poolData.virtualTokenReserve}
                      currentPrice={currentPrice}
-                     ethPriceUsd={ethPriceUsd}
+                     bnbPriceUsd={bnbPriceUsd}
                    />
                  )}
                  {activeTab === "myPosition" && (
                    <MyHoldings
                      tokenAddress={pureTokenAddress ?? undefined}
                      currentPrice={currentPrice}
-                     ethPriceUsd={ethPriceUsd}
+                     bnbPriceUsd={bnbPriceUsd}
                      displaySymbol={displaySymbol}
                    />
                  )}
@@ -619,16 +601,18 @@ export function TradingTerminal({ symbol, className }: TradingTerminalProps) {
 
         {/* 右侧交易面板 (25%) */}
         <div className="flex-1 bg-okx-bg-primary p-2 overflow-y-auto">
-           <SwapPanelOKX
-             symbol={symbol}
-             displaySymbol={displaySymbol}
-             securityStatus={securityStatus}
-             tokenAddress={(displayData as any)?.tokenAddress as `0x${string}` | undefined}
-             soldSupply={displayData?.soldSupply}
-             totalSupply={displayData?.totalSupply}
-             isGraduated={isPoolGraduated}
-             isPoolActive={isPoolActive}
-           />
+          <TradingErrorBoundary module="SwapPanel">
+            <SwapPanelOKX
+              symbol={symbol}
+              displaySymbol={displaySymbol}
+              securityStatus={securityStatus}
+              tokenAddress={displayData?.tokenAddress as `0x${string}` | undefined}
+              soldSupply={displayData?.soldSupply}
+              totalSupply={displayData?.totalSupply}
+              isGraduated={isPoolGraduated}
+              isPoolActive={isPoolActive}
+            />
+          </TradingErrorBoundary>
         </div>
       </div>
 

@@ -356,12 +356,12 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
           </p>
           {isGraduated && (
             <a
-              href={`https://app.uniswap.org/swap?chain=base_sepolia&inputCurrency=ETH&outputCurrency=${tokenAddress}`}
+              href={`https://pancakeswap.finance/swap?chain=bsc&inputCurrency=BNB&outputCurrency=${tokenAddress}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 inline-block bg-[#FF007A] text-okx-text-primary px-3 py-1.5 rounded-lg text-[12px] font-bold hover:opacity-90"
+              className="mt-2 inline-block bg-[#1FC7D4] text-okx-text-primary px-3 py-1.5 rounded-lg text-[12px] font-bold hover:opacity-90"
             >
-              🦄 {t("tradeOnUniswap")}
+              🥞 {t("tradeOnUniswap")}
             </a>
           )}
         </div>
@@ -424,7 +424,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                   ? (ethBalance?.value ? parseFloat(formatUnits(ethBalance.value, 18)).toFixed(4) : "0.0000")
                   : (effectiveBalance?.value ? parseFloat(formatUnits(effectiveBalance.value, 18)).toFixed(2) : "0.00")
                 }
-              </span> {mode === "buy" ? "ETH" : tokenLabel}
+              </span> {mode === "buy" ? "BNB" : tokenLabel}
             </button>
           </div>
           <div className="bg-okx-bg-primary border border-okx-border-primary rounded-lg p-3 flex items-center focus-within:border-[#A3E635] transition-colors">
@@ -436,10 +436,10 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
               placeholder="0.00"
             />
             <div className="flex items-center gap-2">
-              <span className="text-okx-text-secondary text-[14px] font-bold">{mode === "buy" ? "ETH" : tokenLabel}</span>
+              <span className="text-okx-text-secondary text-[14px] font-bold">{mode === "buy" ? "BNB" : tokenLabel}</span>
               {mode === "buy" && (
-                <div className="w-5 h-5 rounded-full bg-[#627EEA] flex items-center justify-center">
-                  <span className="text-[10px]">Ξ</span>
+                <div className="w-5 h-5 rounded-full bg-[#F3BA2F] flex items-center justify-center">
+                  <span className="text-[10px] font-bold text-black">B</span>
                 </div>
               )}
             </div>
@@ -495,7 +495,6 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         {address && validation.results.length > 0 && (
           <PreValidationWarning
             validation={validation}
-            locale="zh"
             className="mb-3"
             maxItems={2}
           />
@@ -701,13 +700,13 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
             <div className="flex justify-between">
               <span>{t("expectedReceive")}</span>
               <span className="text-okx-text-primary font-mono">
-                {formatUnits(quote.amountOut, 18)} {mode === "buy" ? tokenLabel : "ETH"}
+                {formatUnits(quote.amountOut, 18)} {mode === "buy" ? tokenLabel : "BNB"}
               </span>
             </div>
             <div className="flex justify-between">
               <span>{t("minReceiveSlippage")}</span>
               <span className="text-okx-text-primary font-mono">
-                {formatUnits(quote.minimumReceived, 18)} {mode === "buy" ? tokenLabel : "ETH"}
+                {formatUnits(quote.minimumReceived, 18)} {mode === "buy" ? tokenLabel : "BNB"}
               </span>
             </div>
             <div className="flex justify-between">
@@ -721,7 +720,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
       {/* 内盘进度条 - Bonding Curve Progress */}
       <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-[10px] text-okx-text-tertiary">{t("bondingCurveProgress") || "bonding curve progress"}</span>
+          <span className="text-[10px] text-okx-text-tertiary">{t("bondingCurveProgress")}</span>
           <span className="text-[10px] text-okx-text-primary font-bold">{graduationProgress.toFixed(2)}%</span>
         </div>
         <div className="w-full h-2 bg-okx-bg-secondary rounded-full overflow-hidden relative">
@@ -734,12 +733,12 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
           </div>
         </div>
         <div className="flex justify-between text-[9px] mt-2 text-okx-text-tertiary">
-          <span>{t("sold") || "已售"}: {soldTokensM.toFixed(2)}M</span>
-          <span>{t("target") || "目标"}: 793M ({t("graduation") || "毕业"})</span>
+          <span>{t("sold")}: {soldTokensM.toFixed(2)}M</span>
+          <span>{t("target")}: 793M ({t("graduation")})</span>
         </div>
         {(graduationProgress >= 100 || isGraduated) && (
           <div className="mt-2 text-center text-[10px] text-[#FFB800] font-bold">
-            🎓 {t("graduatedMessage") || "已毕业！代币已上线 Uniswap"}
+            🎓 {t("graduatedMessage")}
           </div>
         )}
       </div>

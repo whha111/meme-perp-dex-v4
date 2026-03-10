@@ -2,13 +2,15 @@
  * 设置123token的合约规格
  */
 import { createPublicClient, createWalletClient, http } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bscTestnet } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
-const RPC_URL = "https://base-sepolia.g.alchemy.com/v2/Dr8sMe-1MYIF7jBYuZZj8PMOPAAeJ16d";
+const RPC_URL = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const REGISTRY = "0x8f6277275c4e11A42b3928B55e5653bB694D5A61";
 const TOKEN_123 = "0x01c6058175eda34fc8922eeae32bc383cb203211";
-const DEPLOYER_KEY = "0xf9a07bb59ea400ef88bfbcf314d89f357c8580d1a4fb543e48cfb98b02b41d2c";
+// AUDIT-FIX DP-C01: Read key from env
+const DEPLOYER_KEY = (process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY) as `0x${string}`;
+if (!DEPLOYER_KEY) { console.error("Set DEPLOYER_PRIVATE_KEY env var"); process.exit(1); }
 
 const REGISTRY_ABI = [
   {
@@ -45,13 +47,13 @@ async function main() {
   const account = privateKeyToAccount(DEPLOYER_KEY as `0x${string}`);
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
 
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: bscTestnet,
     transport: http(RPC_URL),
   });
 

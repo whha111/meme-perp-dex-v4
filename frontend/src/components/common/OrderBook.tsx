@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { AnimatedNumber } from "@/components/shared/AnimatedNumber";
 
 // 订单簿层级数据
 export interface OrderBookLevel {
@@ -248,7 +249,7 @@ export function OrderBook({
                 >
                   <div
                     className="absolute right-0 top-0 bottom-0 bg-okx-down/10"
-                    style={{ width: `${cumulativePercent}%` }}
+                    style={{ width: `${cumulativePercent}%`, transition: 'width 150ms ease-out', willChange: 'width' }}
                   />
                   <span className="flex-1 text-okx-down font-mono z-10 tabular-nums">{price}</span>
                   <span className="w-[60px] text-right text-okx-text-secondary font-mono z-10 tabular-nums">{size}</span>
@@ -265,27 +266,23 @@ export function OrderBook({
       <div className="py-1.5 px-3 bg-okx-bg-hover/50 border-y border-okx-border-primary/30 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className={`text-[15px] font-bold tabular-nums ${
-              priceDirection === "up" ? "text-okx-up" :
-              priceDirection === "down" ? "text-okx-down" :
-              "text-okx-text-primary"
-            }`}>
-              {lastPrice || "--"}
-            </span>
-            {priceDirection !== "neutral" && (
-              <svg
-                width="10" height="10" viewBox="0 0 10 10" fill="none"
-                className={priceDirection === "up" ? "text-okx-up" : "text-okx-down"}
-              >
-                {priceDirection === "up" ? (
-                  <path d="M5 1L9 7H1L5 1Z" fill="currentColor"/>
-                ) : (
-                  <path d="M5 9L1 3H9L5 9Z" fill="currentColor"/>
-                )}
-              </svg>
+            {lastPrice ? (
+              <AnimatedNumber
+                value={Number(lastPrice)}
+                format={(val) => val.toFixed(precision)}
+                className={`text-[15px] font-bold tabular-nums ${
+                  priceDirection === "up" ? "text-okx-up" :
+                  priceDirection === "down" ? "text-okx-down" :
+                  "text-okx-text-primary"
+                }`}
+                showArrow={true}
+                highlightChange={true}
+              />
+            ) : (
+              <span className="text-[15px] font-bold text-okx-text-primary">--</span>
             )}
           </div>
-          <span className="text-[10px] text-okx-text-tertiary">ETH</span>
+          <span className="text-[10px] text-okx-text-tertiary">BNB</span>
         </div>
       </div>
 
@@ -315,7 +312,7 @@ export function OrderBook({
                 >
                   <div
                     className="absolute right-0 top-0 bottom-0 bg-okx-up/10"
-                    style={{ width: `${cumulativePercent}%` }}
+                    style={{ width: `${cumulativePercent}%`, transition: 'width 150ms ease-out', willChange: 'width' }}
                   />
                   <span className="flex-1 text-okx-up font-mono z-10 tabular-nums">{price}</span>
                   <span className="w-[60px] text-right text-okx-text-secondary font-mono z-10 tabular-nums">{size}</span>
@@ -366,8 +363,8 @@ export function OrderBook({
               const isBuy = trade.side === "buy";
               return (
                 <div
-                  key={`trade-${index}`}
-                  className="flex items-center text-[11px] h-[20px] px-3 hover:bg-okx-bg-hover"
+                  key={`trade-${trade.timestamp}-${index}`}
+                  className="flex items-center text-[11px] h-[20px] px-3 hover:bg-okx-bg-hover animate-trade-flash"
                 >
                   <span className={`flex-1 font-mono tabular-nums ${isBuy ? "text-okx-up" : "text-okx-down"}`}>
                     {price}

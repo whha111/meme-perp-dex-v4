@@ -76,7 +76,7 @@ export async function signOrder(
     throw new Error("Wallet not connected");
   }
 
-  const chainId = walletClient.chain?.id || 84532;
+  const chainId = walletClient.chain?.id || 56;
   const domain = getEIP712Domain(settlementAddress, chainId);
 
   const message = {
@@ -173,7 +173,10 @@ const getApiUrl = (): string => MATCHING_ENGINE_URL;
 /**
  * 提交签名订单到撮合引擎
  */
-export async function submitOrder(signedOrder: SignedOrder): Promise<{
+export async function submitOrder(
+  signedOrder: SignedOrder,
+  options?: { takeProfit?: string; stopLoss?: string }
+): Promise<{
   success: boolean;
   orderId?: string;
   status?: string;
@@ -185,21 +188,27 @@ export async function submitOrder(signedOrder: SignedOrder): Promise<{
   error?: string;
 }> {
   try {
+    const body: Record<string, any> = {
+      trader: signedOrder.trader,
+      token: signedOrder.token,
+      isLong: signedOrder.isLong,
+      size: signedOrder.size.toString(),
+      leverage: signedOrder.leverage.toString(),
+      price: signedOrder.price.toString(),
+      deadline: signedOrder.deadline.toString(),
+      nonce: signedOrder.nonce.toString(),
+      orderType: signedOrder.orderType,
+      signature: signedOrder.signature,
+    };
+
+    // P2-2: 止盈止损参数
+    if (options?.takeProfit) body.takeProfit = options.takeProfit;
+    if (options?.stopLoss) body.stopLoss = options.stopLoss;
+
     const response = await fetch(`${getApiUrl()}/api/order/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        trader: signedOrder.trader,
-        token: signedOrder.token,
-        isLong: signedOrder.isLong,
-        size: signedOrder.size.toString(),
-        leverage: signedOrder.leverage.toString(),
-        price: signedOrder.price.toString(),
-        deadline: signedOrder.deadline.toString(),
-        nonce: signedOrder.nonce.toString(),
-        orderType: signedOrder.orderType,
-        signature: signedOrder.signature,
-      }),
+      body: JSON.stringify(body),
     });
 
     return await response.json();
@@ -472,7 +481,9 @@ export async function requestClosePair(
  * H-08: 用于签名平仓请求，防伪造
  */
 export function getClosePairMessage(pairId: string, trader: Address): string {
-  return `Close pair ${pairId} for ${trader}`;
+  // BUGFIX: Backend uses trader.toLowerCase() in expected message (server.ts L8049),
+  // so frontend must also lowercase to produce matching message for signature verification
+  return `Close pair ${pairId} for ${trader.toLowerCase()}`;
 }
 
 // ============================================================
@@ -587,6 +598,7 @@ export const SETTLEMENT_ABI = [
           { name: "longLeverage", type: "uint256" },
           { name: "shortLeverage", type: "uint256" },
           { name: "openTime", type: "uint256" },
+          { name: "lastFundingSettled", type: "uint256" },
           { name: "accFundingLong", type: "int256" },
           { name: "accFundingShort", type: "int256" },
           { name: "status", type: "uint8" },

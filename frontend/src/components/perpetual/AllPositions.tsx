@@ -14,14 +14,13 @@
  *
  * 数据更新策略：
  * - 首次加载时从 API 获取数据
- * - 后续更新由 WebSocket 推送（通过 tradingDataStore）
- * - 仅在 WebSocket 断开时启用备用轮询
+ * - 定期轮询刷新 (30s) — 此数据为全市场持仓, WSS 不推送此视图
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { RiskProgressBarCompact } from "./RiskProgressBar";
-import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
+import { MATCHING_ENGINE_URL } from "@/config/api";
 
 interface PositionData {
   trader: string;
@@ -52,15 +51,13 @@ interface Props {
   apiUrl?: string;
 }
 
-export function AllPositions({ token, apiUrl = "http://localhost:8081" }: Props) {
+export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
   const t = useTranslations("perp");
   const [data, setData] = useState<AllPositionsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "danger" | "warning" | "long" | "short">("all");
 
-  // WebSocket 连接状态 - 直接订阅单个字段避免对象引用变化
-  const wsConnected = useTradingDataStore((state) => state.wsConnected);
-  const fallbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 获取持仓数据
   const fetchData = useCallback(async () => {
@@ -86,33 +83,15 @@ export function AllPositions({ token, apiUrl = "http://localhost:8081" }: Props)
     }
   }, [token, apiUrl]);
 
-  // 初始加载 - 只依赖 token，不依赖 fetchData
+  // 初始加载 + 30s 定期轮询 (全市场持仓数据仅 HTTP 可获取)
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]); // 只在 token 变化时重新获取
-
-  // 备用轮询：仅在 WebSocket 断开时启用
-  useEffect(() => {
-    // 清除现有的轮询
-    if (fallbackIntervalRef.current) {
-      clearInterval(fallbackIntervalRef.current);
-      fallbackIntervalRef.current = null;
-    }
-
-    // 如果 WebSocket 断开，启用备用轮询（每30秒）
-    if (!wsConnected) {
-      console.log("[AllPositions] WebSocket disconnected, enabling fallback polling");
-      fallbackIntervalRef.current = setInterval(() => fetchData(), 30000); // 增加到30秒
-    }
-
+    pollIntervalRef.current = setInterval(() => fetchData(), 30000);
     return () => {
-      if (fallbackIntervalRef.current) {
-        clearInterval(fallbackIntervalRef.current);
-      }
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wsConnected]); // 只依赖 wsConnected，不依赖 fetchData
+  }, [token]);
 
   // 格式化价格 (Token/ETH, 1e18 精度) — 使用下标格式显示极小数
   const formatPrice = (price: string) => {
@@ -148,10 +127,10 @@ export function AllPositions({ token, apiUrl = "http://localhost:8081" }: Props)
   // 格式化 ETH 金额 (1e18 精度)
   const formatETH = (value: string) => {
     const v = Number(value) / 1e18;
-    if (v >= 1000) return `${(v / 1000).toFixed(2)}K Ξ`;
-    if (v >= 1) return `${v.toFixed(3)} Ξ`;
-    if (v >= 0.001) return `${v.toFixed(4)} Ξ`;
-    return `${v.toFixed(6)} Ξ`;
+    if (v >= 1000) return `${(v / 1000).toFixed(2)}K BNB `;
+    if (v >= 1) return `${v.toFixed(3)} BNB `;
+    if (v >= 0.001) return `${v.toFixed(4)} BNB `;
+    return `${v.toFixed(6)} BNB `;
   };
 
   // 格式化地址
@@ -161,10 +140,10 @@ export function AllPositions({ token, apiUrl = "http://localhost:8081" }: Props)
   const formatPnL = (pnl: string) => {
     const p = Number(pnl) / 1e18;
     const sign = p >= 0 ? "+" : "";
-    if (Math.abs(p) >= 100) return `${sign}${(p / 1000).toFixed(2)}K Ξ`;
-    if (Math.abs(p) >= 1) return `${sign}${p.toFixed(3)} Ξ`;
-    if (Math.abs(p) >= 0.001) return `${sign}${p.toFixed(4)} Ξ`;
-    return `${sign}${p.toFixed(6)} Ξ`;
+    if (Math.abs(p) >= 100) return `${sign}${(p / 1000).toFixed(2)}K BNB `;
+    if (Math.abs(p) >= 1) return `${sign}${p.toFixed(3)} BNB `;
+    if (Math.abs(p) >= 0.001) return `${sign}${p.toFixed(4)} BNB `;
+    return `${sign}${p.toFixed(6)} BNB `;
   };
 
   // 格式化百分比 (基点 -> %)
@@ -222,7 +201,7 @@ export function AllPositions({ token, apiUrl = "http://localhost:8081" }: Props)
         <div className="flex gap-1">
           {data.dangerCount > 0 && (
             <span className="px-1.5 py-0.5 bg-red-900/50 text-red-400 rounded text-[10px] font-bold animate-pulse">
-              {data.dangerCount} ⚠
+              {data.dangerCount} <svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
             </span>
           )}
           {data.warningCount > 0 && (
@@ -237,8 +216,8 @@ export function AllPositions({ token, apiUrl = "http://localhost:8081" }: Props)
       <div className="flex gap-1 mb-2 flex-shrink-0 overflow-x-auto">
         {[
           { key: "all", label: t("all") },
-          { key: "danger", label: "🔴", color: "text-red-400" },
-          { key: "warning", label: "🟡", color: "text-yellow-400" },
+          { key: "danger", label: "\u25CF", color: "text-red-400" },
+          { key: "warning", label: "\u25CF", color: "text-yellow-400" },
           { key: "long", label: t("longs"), color: "text-green-400" },
           { key: "short", label: t("shorts"), color: "text-red-400" },
         ].map(f => (

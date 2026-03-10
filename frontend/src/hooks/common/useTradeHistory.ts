@@ -53,22 +53,24 @@ export function useTradeHistory(options: UseTradeHistoryOptions = {}) {
   tokenRef.current = token;
 
   // 转换后端消息格式到前端格式
-  const formatTradeMessage = useCallback((message: any): SpotTradeRecord | null => {
+  const formatTradeMessage = useCallback((message: Record<string, unknown>): SpotTradeRecord | null => {
     try {
       // 后端 spot_trade 消息格式:
       // { type: "spot_trade", token, trader, isBuy, ethAmount, tokenAmount, price, txHash, timestamp }
-      const data = message.data || message;
+      const data = (message.data as Record<string, unknown> | undefined) ?? message;
+      const s = (key1: string, key2: string, fallback = ""): string =>
+        String(data[key1] ?? data[key2] ?? fallback);
 
       return {
-        id: data.txHash || data.tx_hash || `${Date.now()}-${Math.random()}`,
-        token: data.token || "",
-        trader: data.trader || "",
-        side: data.isBuy || data.is_buy ? "buy" : "sell",
-        size: data.tokenAmount || data.token_amount || "0",
-        value: data.ethAmount || data.eth_amount || "0",
-        price: data.price || "0",
-        txHash: data.txHash || data.tx_hash || "",
-        timestamp: data.timestamp || Date.now(),
+        id: s("txHash", "tx_hash") || `${Date.now()}-${Math.random()}`,
+        token: s("token", "token"),
+        trader: s("trader", "trader"),
+        side: (data.isBuy || data.is_buy) ? "buy" : "sell",
+        size: s("tokenAmount", "token_amount", "0"),
+        value: s("ethAmount", "eth_amount", "0"),
+        price: s("price", "price", "0"),
+        txHash: s("txHash", "tx_hash"),
+        timestamp: Number(data.timestamp) || Date.now(),
       };
     } catch (err) {
       console.error("[useTradeHistory] Failed to format trade message:", err);
@@ -96,7 +98,6 @@ export function useTradeHistory(options: UseTradeHistoryOptions = {}) {
         await ws.subscribe(topics);
         subscribedRef.current = true;
 
-        console.log(`[useTradeHistory] Subscribed to:`, topics);
       } catch (err) {
         console.error("[useTradeHistory] WebSocket setup failed:", err);
         setError(err instanceof Error ? err.message : "WebSocket connection failed");
@@ -130,8 +131,6 @@ export function useTradeHistory(options: UseTradeHistoryOptions = {}) {
 
         const newTrade = formatTradeMessage(message);
         if (!newTrade) return;
-
-        console.log(`[useTradeHistory] New trade received:`, newTrade);
 
         // 添加新交易到列表头部 (最新在前)
         setTrades(prev => {
@@ -176,7 +175,6 @@ export function useTradeHistory(options: UseTradeHistoryOptions = {}) {
         });
         subscribedRef.current = false;
 
-        console.log(`[useTradeHistory] Unsubscribed from:`, topics);
       }
     };
   }, [token, limit, formatTradeMessage]);

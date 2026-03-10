@@ -2,38 +2,44 @@
  * 测试配置文件
  */
 import { type Address, type Hex } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bsc, bscTestnet } from "viem/chains";
+
+// AUDIT-FIX DP-C01: Read key from env
+const DEPLOYER_KEY = (process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY) as Hex;
+if (!DEPLOYER_KEY) { console.error("Set DEPLOYER_PRIVATE_KEY env var"); process.exit(1); }
+
+const chainId = parseInt(process.env.CHAIN_ID || "56");
 
 export const CONFIG = {
   // RPC
-  RPC_URL: "https://base-sepolia.g.alchemy.com/v2/Dr8sMe-1MYIF7jBYuZZj8PMOPAAeJ16d",
-  CHAIN: baseSepolia,
+  RPC_URL: process.env.RPC_URL || "https://bsc-dataseed.binance.org/",
+  CHAIN: chainId === 56 ? bsc : bscTestnet,
 
-  // 合约地址 (V5 - 5分钟资金费)
-  SETTLEMENT: "0xB06C32C7536EC5EAD101fEe2AD4005a5eedcB258" as Address,
-  CONTRACT_REGISTRY: "0x8f6277275c4e11A42b3928B55e5653bB694D5A61" as Address,
-  USDT: "0x2251A4dD878a0AF6d18B5F0CAE7FDF9fe85D8324" as Address,
-  WETH: "0x4200000000000000000000000000000000000006" as Address,  // Base Sepolia WETH
-  TOKEN_FACTORY: "0xE0ddf67E89f5773c960Bc2329109815E8c66BAAe" as Address,
-  PRICE_FEED: "0x70dAC8f7338fFF15CAB9cE01e896e56a6C2FcF0A" as Address,
+  // 合约地址 (from env vars — no hardcoded fallbacks)
+  SETTLEMENT: (process.env.SETTLEMENT_ADDRESS || "") as Address,
+  CONTRACT_REGISTRY: (process.env.CONTRACT_REGISTRY_ADDRESS || "") as Address,
+  USDT: (process.env.USDT_ADDRESS || "") as Address,
+  WETH: (process.env.WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address,  // WBNB
+  TOKEN_FACTORY: (process.env.TOKEN_FACTORY_ADDRESS || "") as Address,
+  PRICE_FEED: (process.env.PRICE_FEED_ADDRESS || "") as Address,
 
   // 测试钱包
-  WALLETS_PATH: "/Users/qinlinqiu/Desktop/Namespace/scripts/market-maker/wallets.json",
+  WALLETS_PATH: process.env.WALLETS_PATH || "",
 
   // Deployer (用作 Matcher)
-  DEPLOYER_KEY: "0xf9a07bb59ea400ef88bfbcf314d89f357c8580d1a4fb543e48cfb98b02b41d2c" as Hex,
-  DEPLOYER_ADDRESS: "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE" as Address,
+  DEPLOYER_KEY,
+  DEPLOYER_ADDRESS: (process.env.DEPLOYER_ADDRESS || "") as Address,
 
   // 后端 API
-  API_URL: "http://localhost:8080",
-  MATCHING_ENGINE_URL: "http://localhost:8081",
+  API_URL: process.env.API_URL || "http://localhost:8080",
+  MATCHING_ENGINE_URL: process.env.MATCHING_ENGINE_URL || "http://localhost:8081",
 
   // EIP-712 Domain
   EIP712_DOMAIN: {
     name: "MemePerp",
     version: "1",
-    chainId: 84532,
-    verifyingContract: "0xB06C32C7536EC5EAD101fEe2AD4005a5eedcB258" as Address,
+    chainId,
+    verifyingContract: (process.env.SETTLEMENT_ADDRESS || "") as Address,
   },
 
   // 精度

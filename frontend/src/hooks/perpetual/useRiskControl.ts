@@ -173,11 +173,10 @@ export function useRiskControl(_options: UseRiskControlOptions = {}): UseRiskCon
   const storePositions = useTradingDataStore((state) => state.positions);
 
   // 将 PairedPosition[] 映射为 PositionRisk[] (字段兼容)
-  // 后端推送的数据包含 trader 字段，但 PairedPosition 类型未声明
   const positionRisks: PositionRisk[] = useMemo(() => {
     return storePositions.map((pos) => ({
       pairId: pos.pairId,
-      trader: ((pos as any).trader || pos.counterparty) as Address,
+      trader: (pos.trader || pos.counterparty) as Address,
       token: pos.token,
       isLong: pos.isLong,
       size: pos.size,
@@ -189,9 +188,9 @@ export function useRiskControl(_options: UseRiskControlOptions = {}): UseRiskCon
       markPrice: pos.markPrice || "0",
       unrealizedPnL: pos.unrealizedPnL || "0",
       collateral: pos.collateral,
-      adlScore: typeof (pos as any).adlScore === "number" ? (pos as any).adlScore : parseFloat((pos as any).adlScore || "0"),
-      adlRanking: (pos as any).adlRanking || 1,
-      riskLevel: ((pos as any).riskLevel || "low") as PositionRisk["riskLevel"],
+      adlScore: typeof pos.adlScore === "number" ? Number(pos.adlScore) : parseFloat(pos.adlScore || "0"),
+      adlRanking: pos.adlRanking || 1,
+      riskLevel: (pos.riskLevel || "low") as PositionRisk["riskLevel"],
     }));
   }, [storePositions]);
 
@@ -269,8 +268,11 @@ export function usePositionRisk(
   const size = BigInt(position.size || "0");
   const unrealizedPnL = BigInt(position.unrealizedPnL || "0");
 
+  // AUDIT-FIX FE-C03: size 是 ETH 名义价值 (1e18)，markPrice 是 1e18
+  // size * markPrice 产生 1e36 量级，需除以 1e18 得到 ETH 值
+  // 之前除以 1e24 导致 positionValue 缩小 1e6 倍 → 所有仓位永远显示低风险
   const positionValue = size > 0n && markPrice > 0n
-    ? (size * markPrice) / (10n ** 24n)
+    ? (size * markPrice) / (10n ** 18n)
     : 0n;
 
   const equity = collateral + unrealizedPnL;

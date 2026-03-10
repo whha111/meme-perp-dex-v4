@@ -17,6 +17,7 @@
 import {
   type Address,
   type Hex,
+  type PublicClient,
   keccak256,
   encodePacked,
   encodeAbiParameters,
@@ -34,7 +35,7 @@ import { type MerkleProof } from "./merkle";
 const EIP712_DOMAIN = {
   name: "SettlementV2",
   version: "1",
-  chainId: 84532, // Base Sepolia
+  chainId: parseInt(process.env.CHAIN_ID || "56"),
   verifyingContract: "0x0000000000000000000000000000000000000000" as Address, // Will be set on init
 };
 
@@ -118,6 +119,55 @@ export function initializeWithdrawModule(config: {
 }
 
 /**
+ * Sync withdrawal nonces from on-chain SettlementV2 contract.
+ * Call this on engine restart to prevent nonce reuse / replay attacks.
+ *
+ * @param publicClient - viem PublicClient connected to the correct chain
+ * @param users - list of known user addresses to sync
+ */
+export async function syncNoncesFromChain(
+  publicClient: PublicClient,
+  users: Address[],
+): Promise<number> {
+  if (!state.contractAddress) {
+    console.warn("[Withdraw] Cannot sync nonces: module not initialized");
+    return 0;
+  }
+
+  const NONCE_ABI = [
+    {
+      inputs: [{ name: "user", type: "address" }],
+      name: "withdrawalNonces",
+      outputs: [{ type: "uint256" }],
+      stateMutability: "view",
+      type: "function",
+    },
+  ] as const;
+
+  let synced = 0;
+  for (const user of users) {
+    try {
+      const nonce = await publicClient.readContract({
+        address: state.contractAddress,
+        abi: NONCE_ABI,
+        functionName: "withdrawalNonces",
+        args: [user],
+      }) as bigint;
+
+      if (nonce > 0n) {
+        state.nonces.set(user.toLowerCase(), nonce);
+        synced++;
+      }
+    } catch {
+      // Skip users that fail (e.g., contract not deployed on this chain)
+    }
+  }
+
+  console.log(`[Withdraw] Synced ${synced}/${users.length} nonces from chain`);
+  return synced;
+}
+
+/**
  * Get current nonce for a user
  */
 export function getUserNonce(user: Address): bigint {
@@ -138,8 +188,9 @@ export function incrementNonce(user: Address): bigint {
 
 /**
  * Check if user can withdraw amount
+ * M-07 FIX: 现在同时检查链上 totalWithdrawn，防止已提款金额超过存款
  */
-export function canWithdraw(user: Address, amount: bigint): { canWithdraw: boolean; reason?: string; availableEquity?: bigint } {
+export async function canWithdraw(user: Address, amount: bigint): Promise<{ canWithdraw: boolean; reason?: string; availableEquity?: bigint }> {
   // Get Merkle proof (contains user's equity)
   const proof = getUserProof(user);
 
@@ -166,6 +217,24 @@ export function canWithdraw(user: Address, amount: bigint): { canWithdraw: boole
     };
   }
 
+  // M-07 FIX: 检查链上可用余额 (deposits - totalWithdrawn)
+  try {
+    const { getUserDeposits, getUserTotalWithdrawn } = await import("./relay");
+    const deposits = await getUserDeposits(user);
+    const totalWithdrawn = await getUserTotalWithdrawn(user);
+    const onChainAvailable = deposits > totalWithdrawn ? deposits - totalWithdrawn : 0n;
+
+    if (amount > onChainAvailable) {
+      return {
+        canWithdraw: false,
+        reason: `On-chain available insufficient: deposits=${deposits}, withdrawn=${totalWithdrawn}, available=${onChainAvailable} < ${amount}`,
+        availableEquity: onChainAvailable,
+      };
+    }
+  } catch (e) {
+    console.warn(`[Withdraw] Failed to check on-chain balance for ${user.slice(0, 10)}, proceeding with equity check only:`, e);
+  }
+
   return {
     canWithdraw: true,
     availableEquity: proof.equity,
@@ -185,8 +254,8 @@ export async function generateWithdrawalAuthorization(
     };
   }
 
-  // 1. Check if user can withdraw
-  const checkResult = canWithdraw(request.user, request.amount);
+  // 1. Check if user can withdraw (M-07: now async — checks on-chain totalWithdrawn)
+  const checkResult = await canWithdraw(request.user, request.amount);
   if (!checkResult.canWithdraw) {
     return {
       success: false,
@@ -213,7 +282,9 @@ export async function generateWithdrawalAuthorization(
   }
 
   // 4. Check deadline
-  if (request.deadline < Date.now()) {
+  // AUDIT-FIX ME-C02: deadline 是 Unix 秒 (L358 createWithdrawalRequest)，Date.now() 是毫秒
+  // 旧代码 `deadline < Date.now()` 导致所有提款立即过期 (秒 ~1.7M < 毫秒 ~1.7T)
+  if (request.deadline < Math.floor(Date.now() / 1000)) {
     return {
       success: false,
       error: "Withdrawal deadline has passed",
@@ -256,7 +327,13 @@ export async function generateWithdrawalAuthorization(
     );
     state.pendingWithdrawals.set(hash, authorization);
 
-    console.log(`[Withdraw] Generated authorization for ${request.user.slice(0, 10)}, amount=$${Number(request.amount) / 1e6}`);
+    // AUDIT-FIX H-04: Increment nonce IMMEDIATELY after signing to prevent
+    // multiple authorizations with the same nonce. Previously, nonce was only
+    // incremented in markWithdrawalCompleted() (after on-chain confirmation),
+    // allowing users to request unlimited signatures with the same nonce.
+    incrementNonce(request.user);
+
+    console.log(`[Withdraw] Generated authorization for ${request.user.slice(0, 10)}, amount=$${Number(request.amount) / 1e6}, nonce=${request.nonce}→${getUserNonce(request.user)}`);
 
     return {
       success: true,
@@ -275,8 +352,35 @@ export async function generateWithdrawalAuthorization(
  * Mark withdrawal as completed (after on-chain confirmation)
  */
 export function markWithdrawalCompleted(user: Address, nonce: bigint): void {
-  incrementNonce(user);
-  console.log(`[Withdraw] Marked withdrawal completed for ${user.slice(0, 10)}, new nonce=${getUserNonce(user)}`);
+  // AUDIT-FIX H-04: Nonce is now incremented in generateWithdrawalAuthorization() immediately
+  // after signing. Do NOT increment again here — only clean up pending withdrawals.
+  // Old code: incrementNonce(user); // caused double-increment
+  // AUDIT-FIX ME-H01: 清理已完成的 pendingWithdrawals 条目（旧代码只 set 不 delete，导致内存泄漏）
+  for (const [hash, auth] of state.pendingWithdrawals.entries()) {
+    if (auth.user.toLowerCase() === user.toLowerCase() && auth.nonce === nonce) {
+      state.pendingWithdrawals.delete(hash);
+      break;
+    }
+  }
+  console.log(`[Withdraw] Marked withdrawal completed for ${user.slice(0, 10)}, new nonce=${getUserNonce(user)}, pending=${state.pendingWithdrawals.size}`);
+}
+
+/**
+ * Clean up expired pending withdrawals (call periodically from server.ts)
+ * AUDIT-FIX ME-H01: 防止长期运行时 pendingWithdrawals Map 无限增长
+ */
+export function cleanupExpiredWithdrawals(): void {
+  const now = Math.floor(Date.now() / 1000);
+  let cleaned = 0;
+  for (const [hash, auth] of state.pendingWithdrawals.entries()) {
+    if (auth.deadline < now) {
+      state.pendingWithdrawals.delete(hash);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[Withdraw] Cleaned ${cleaned} expired pending withdrawals, remaining=${state.pendingWithdrawals.size}`);
+  }
 }
 
 /**
@@ -304,7 +408,8 @@ export function createWithdrawalRequest(
     user,
     amount,
     nonce: getUserNonce(user),
-    deadline: Date.now() + deadlineMinutes * 60 * 1000,
+    // AUDIT-FIX ME-C06: EIP-712 deadline 必须是 Unix 秒而非毫秒
+    deadline: Math.floor(Date.now() / 1000) + deadlineMinutes * 60,
   };
 }
 
@@ -318,6 +423,21 @@ export async function requestWithdrawal(
 ): Promise<WithdrawalResult> {
   const request = createWithdrawalRequest(user, amount, deadlineMinutes);
   return generateWithdrawalAuthorization(request);
+}
+
+/**
+ * M-08 FIX: Get total pending withdrawal amount for a user
+ * Used by snapshot.ts to deduct pending withdrawals from equity
+ */
+export function getPendingWithdrawalAmount(user: Address): bigint {
+  const normalizedUser = user.toLowerCase();
+  let total = 0n;
+  for (const auth of state.pendingWithdrawals.values()) {
+    if (auth.user.toLowerCase() === normalizedUser) {
+      total += BigInt(auth.amount);
+    }
+  }
+  return total;
 }
 
 /**

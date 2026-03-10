@@ -299,19 +299,22 @@ func (c *Client) handleMessage(message []byte) {
 
 	switch msg.Op {
 	case OpSubscribe:
+		// P0-1: 预检所有 channel — 如果任何 private channel 未认证，拒绝整个请求
+		// 防止混合 ["trades","account"] 绕过 auth
 		for _, arg := range msg.Args {
-			// Check if channel requires authentication
 			if isPrivateChannel(arg.Channel) {
 				c.mu.RLock()
 				isAuth := c.isAuth
 				c.mu.RUnlock()
 
 				if !isAuth {
-					c.sendError("Authentication required for channel: " + arg.Channel)
-					continue
+					c.sendError("Authentication required for private channel: " + arg.Channel + ". Entire subscribe request rejected.")
+					return
 				}
 			}
-
+		}
+		// 全部通过检查后，才执行订阅
+		for _, arg := range msg.Args {
 			c.hub.Subscribe(c, arg.Channel, arg.InstID)
 		}
 		c.sendResponse(msg.Op, msg.Args)

@@ -211,20 +211,27 @@ export interface WebSocketConfig {
 
 /**
  * 获取安全的 WebSocket URL
+ * P1: 使用集中配置，避免硬编码 localhost — config/api.ts 已有生产环境 HTTPS 自动升级
  */
 function getSecureWebSocketUrl(): string {
-  const url = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:8081/ws';
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1');
-
-  if (isProduction && url.startsWith('ws://') && !isLocalhost) {
-    console.error(
-      '[WebSocket Security] 生产环境不允许使用非加密 WebSocket (ws://)。'
-    );
-    return url.replace('ws://', 'wss://');
+  // 优先使用独立 WS env，否则从 config/api.ts 的 MATCHING_ENGINE_URL 派生
+  const explicitWsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL;
+  if (explicitWsUrl) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isLocalhost = explicitWsUrl.includes('localhost') || explicitWsUrl.includes('127.0.0.1');
+    if (isProduction && explicitWsUrl.startsWith('ws://') && !isLocalhost) {
+      console.error('[WebSocket Security] 生产环境不允许使用非加密 WebSocket (ws://)。');
+      return explicitWsUrl.replace('ws://', 'wss://');
+    }
+    return explicitWsUrl;
   }
 
-  return url;
+  // 从 MATCHING_ENGINE_URL 派生（与 config/api.ts 的 WS_URL 逻辑一致）
+  const httpUrl =
+    process.env.NEXT_PUBLIC_MATCHING_ENGINE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8081';
+  return httpUrl.replace(/^http/, 'ws') + '/ws';
 }
 
 /** 默认配置 */

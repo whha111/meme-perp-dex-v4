@@ -1,0 +1,5 @@
+{
+  "detectors_to_exclude": [],
+  "filter_paths": "lib/,node_modules/,test/",
+  "solc_remaps": "@openzeppelin/=lib/openzeppelin-contracts/"
+}

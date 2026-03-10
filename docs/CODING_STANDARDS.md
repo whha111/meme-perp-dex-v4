@@ -1,6 +1,10 @@
 # 开发标准 - 强制阅读
 
 > **警告**: 每次写代码或修改代码之前，必须先阅读此文档！
+>
+> **⚠️ 2026-03-01 新增核心规范**: 所有资金流必须走链上合约 (SettlementV2/PerpVault)。
+> 禁止使用 `mode2PnLAdjustments` 虚拟余额建设新功能。
+> 禁止调用 `POST /api/user/:trader/deposit` 虚假充值接口。
 
 ---
 

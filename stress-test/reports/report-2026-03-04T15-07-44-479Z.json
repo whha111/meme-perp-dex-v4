@@ -1,0 +1,1022 @@
+{
+  "meta": {
+    "startTime": 1772633183470,
+    "endTime": 1772636864476,
+    "durationHours": 1.0225016666666666,
+    "totalWallets": 300,
+    "spotWallets": 200,
+    "perpWallets": 100,
+    "mode": "full"
+  },
+  "spot": {
+    "totalRounds": 64,
+    "buys": 270,
+    "sells": 3,
+    "creates": 86,
+    "graduations": 0,
+    "priceFeedSyncs": 86,
+    "priceVerifications": 269,
+    "priceVerificationFailures": 0,
+    "failures": 3,
+    "startTime": 1772633194484
+  },
+  "perp": {
+    "totalRounds": 22,
+    "ordersSubmitted": 352,
+    "ordersMatched": 71,
+    "deposits": 96,
+    "withdrawals": 0,
+    "withdrawalFailures": 0,
+    "lifecycleChecks": 1,
+    "lifecycleFailures": 0,
+    "failures": 111,
+    "startTime": 1772633194484
+  },
+  "audit": {
+    "totalAudits": 13,
+    "passedAudits": 12,
+    "failedAudits": 1,
+    "maxDeviation": "1504500000000000000",
+    "perpVaultHealthChecks": 13,
+    "perpVaultHealthPasses": 0,
+    "perpVaultPoolValueMin": "498131683332355169",
+    "perpVaultPoolValueMax": "498139262439779238",
+    "oiConsistencyChecks": 0,
+    "oiMismatches": 0,
+    "engineStateChecks": 259,
+    "engineStateDriftMax": "49500000000000000",
+    "snapshots": [
+      {
+        "timestamp": 1772633383687,
+        "settlementWethBalance": "1253500000000000000",
+        "totalUserDeposits": "939000000000000000",
+        "perpVaultPoolValue": "498131683332355169",
+        "perpVaultTotalOI": "11883850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "49500000000000000",
+        "engineChainDriftAvg": "22500000000000000",
+        "deviation": "314500000000000000",
+        "deviationEth": "0.3145",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498131683332355169 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x32ab49d1: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA8e0eF21: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x00C3E19A: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0x401C5E71: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x66644369: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5A627C76: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x93217bF9: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0xdADa0E3A: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x46fdC501: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1Ae5D112: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE62794f3: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7bC73Dc2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7300b736: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA71Db86A: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE3f53881: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x03BAdf8e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x049d8A6e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x38e59B7D: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xb223d7c2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x60711b7c: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772633753729,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498131683332355169",
+        "perpVaultTotalOI": "19397850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "19500000000000000",
+        "engineChainDriftAvg": "19500000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498131683332355169 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0xA71Db86A: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x23FF42FA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xb223d7c2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x725c0259: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x049d8A6e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x3fAb5836: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xa16bd839: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1Ff78595: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x297C57E5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xDf828296: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xb5c3dC62: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6531f790: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1E8f73b9: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x03BAdf8e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x0C99D839: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78df2Df8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF376eBD0: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xDF130Bf2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9ed9CD02: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xed4fFaa0: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772634122181,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498131683332355169",
+        "perpVaultTotalOI": "62677850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "49500000000000000",
+        "engineChainDriftAvg": "22500000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498131683332355169 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x3fAb5836: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7f25494D: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x04125041: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xDF930D24: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xb5c3dC62: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6fc0Ef3e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x32ab49d1: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5472bbE4: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7bC73Dc2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5A627C76: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x23FF42FA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x60711b7c: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xee7fcF58: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xDf828296: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x122aE022: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF730D9c7: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x00C3E19A: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0x72D5232d: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4091a227: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78017feB: engine=0 chain=0.0495 drift=0.0495"
+        ]
+      },
+      {
+        "timestamp": 1772634510303,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498132714626451920",
+        "perpVaultTotalOI": "105625850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "19500000000000000",
+        "engineChainDriftAvg": "19500000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.49813271462645192 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x4091a227: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x22AF8EB5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x23FF42FA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9067af37: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7EA33302: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x04125041: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA53A5BeD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x03E120B8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x32ab49d1: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE62794f3: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x38e59B7D: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x401C5E71: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6fc0Ef3e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x45511356: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x3A0b035f: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x297C57E5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xcA388DD8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xe7D7E3C9: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x60711b7c: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x2e24153C: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772634910354,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498134003626451920",
+        "perpVaultTotalOI": "175967850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "19500000000000000",
+        "engineChainDriftAvg": "19500000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.49813400362645192 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x2F82f562: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9a374d40: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE3f53881: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA71Db86A: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x23FF42FA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xc03B94d5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78Fe9A41: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78df2Df8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7300b736: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xf898dab8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7eD674B8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4031E56B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5A627C76: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7b6546b6: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF250CB64: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6fc0Ef3e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x45511356: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xADbB0517: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x04125041: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x2e24153C: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772635058262,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498134003626451920",
+        "perpVaultTotalOI": "192215850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "19500000000000000",
+        "engineChainDriftAvg": "19500000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.49813400362645192 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x297C57E5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78df2Df8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6955226b: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7bC73Dc2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF339fCf7: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4091a227: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF730D9c7: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9AeE64cD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x122aE022: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9A3d6d91: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x45511356: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5472bbE4: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA53A5BeD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7EA33302: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x3A0b035f: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9ed9CD02: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7fc5358B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF250CB64: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x03E120B8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF376eBD0: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772635273434,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498135529976119141",
+        "perpVaultTotalOI": "209133850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "49500000000000000",
+        "engineChainDriftAvg": "21000000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498135529976119141 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x03E120B8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x401C5E71: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1E8f73b9: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xD4dAa064: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x45511356: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4D9D4E6a: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE62794f3: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x3A0b035f: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7DFee98F: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9AeE64cD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x0C99D839: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x2F82f562: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x46fdC501: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xee7fcF58: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x37AB654B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1D120cE3: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5A627C76: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA53A5BeD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4091a227: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x37e19C39: engine=0 chain=0.0495 drift=0.0495"
+        ]
+      },
+      {
+        "timestamp": 1772635425226,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498135529976119141",
+        "perpVaultTotalOI": "244969850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "49500000000000000",
+        "engineChainDriftAvg": "21000000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498135529976119141 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x23FF42FA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x00C3E19A: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0xD4dAa064: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xb223d7c2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7f25494D: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1Ff78595: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x37AB654B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7bC73Dc2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1bAEDfd6: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x8c09ED3f: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x2F82f562: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF376eBD0: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x297C57E5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6531f790: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x725c0259: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4D9D4E6a: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7300b736: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x439cB425: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5472bbE4: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF250CB64: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772635692548,
+        "settlementWethBalance": "0",
+        "totalUserDeposits": "1504500000000000000",
+        "perpVaultPoolValue": "498136623976119141",
+        "perpVaultTotalOI": "244969850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "49500000000000000",
+        "engineChainDriftAvg": "22500000000000000",
+        "deviation": "1504500000000000000",
+        "deviationEth": "1.5045",
+        "pass": false,
+        "issues": [
+          "Failed to read SettlementV2 WETH balance: The request took too long to respond.\n\nURL: https://data-see",
+          "⚠️ PerpVault poolValue LOW: 0.498136623976119141 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x9ed9CD02: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7b6546b6: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1bAEDfd6: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xed4fFaa0: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5472bbE4: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78017feB: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0xDF930D24: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x23f4b672: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9AeE64cD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7bC73Dc2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x37AB654B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x2F82f562: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5A627C76: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x401C5E71: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x00C3E19A: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0x7f25494D: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xcA388DD8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xf898dab8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9a374d40: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x32ab49d1: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772636062089,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498137518976119141",
+        "perpVaultTotalOI": "247584850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "19500000000000000",
+        "engineChainDriftAvg": "19500000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498137518976119141 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0xDF930D24: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xc03B94d5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xD42e3CEf: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x122aE022: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6531f790: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x03E120B8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4974ac7e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5472bbE4: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4D9D4E6a: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF339fCf7: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x439cB425: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x0C99D839: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x45511356: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xf318a4A5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE45410CA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7fc5358B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7300b736: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x297C57E5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9067af37: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4091a227: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772636445115,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498138117140990982",
+        "perpVaultTotalOI": "247584850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "19500000000000000",
+        "engineChainDriftAvg": "19500000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498138117140990982 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0x72D5232d: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x37AB654B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5A627C76: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF250CB64: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x4031E56B: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x60711b7c: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7b6546b6: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x5472bbE4: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA53A5BeD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9a374d40: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x049d8A6e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xB6fdb960: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xDF930D24: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF730D9c7: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xDf828296: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6fc0Ef3e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xed4fFaa0: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x23FF42FA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xD5Fa5A41: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7f25494D: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772636836531,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498139262439779238",
+        "perpVaultTotalOI": "249013850000000000",
+        "engineBalanceSamples": 20,
+        "engineChainDriftMax": "49500000000000000",
+        "engineChainDriftAvg": "21000000000000000",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498139262439779238 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0xe7D7E3C9: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x22AF8EB5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xADbB0517: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA53A5BeD: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78017feB: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0xDF930D24: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xA8e0eF21: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xe31bf3f5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x03E120B8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x2F82f562: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x9a374d40: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF730D9c7: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7964174f: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x7bC73Dc2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xc3076717: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xcA388DD8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x297C57E5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x122aE022: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xD5Fa5A41: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xF250CB64: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      },
+      {
+        "timestamp": 1772636859258,
+        "settlementWethBalance": "2560000000000000000",
+        "totalUserDeposits": "2070000000000000000",
+        "perpVaultPoolValue": "498139262439779238",
+        "perpVaultTotalOI": "249013850000000000",
+        "engineBalanceSamples": 19,
+        "engineChainDriftMax": "49500000000000000",
+        "engineChainDriftAvg": "22657894736842105",
+        "deviation": "490000000000000000",
+        "deviationEth": "0.49",
+        "pass": true,
+        "issues": [
+          "⚠️ PerpVault poolValue LOW: 0.498139262439779238 ETH (threshold: 0.5)",
+          "Engine-chain drift for 0xed4fFaa0: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x78017feB: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0x03E120B8: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x00C3E19A: engine=0 chain=0.0495 drift=0.0495",
+          "Engine-chain drift for 0x4D9D4E6a: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xb223d7c2: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x6fc0Ef3e: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x1Ae5D112: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x8c09ED3f: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xe31bf3f5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x22AF8EB5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE45410CA: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xc3076717: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xa16bd839: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xb5c3dC62: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xa4Ec04Eb: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xc03B94d5: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0xE3f53881: engine=0 chain=0.0195 drift=0.0195",
+          "Engine-chain drift for 0x0F706cfE: engine=0 chain=0.0195 drift=0.0195"
+        ]
+      }
+    ]
+  },
+  "pnl": {
+    "totalSamples": 29,
+    "maxProfit": "0",
+    "maxLoss": "0",
+    "samples": [
+      {
+        "timestamp": 1772633197461,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772633323182,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772633446223,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772633572855,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772633697739,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772633819189,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772633941391,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634062920,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634184837,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634306421,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634431306,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634553208,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634675209,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634803592,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772634925691,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635048852,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635188997,
+        "walletPnls": [],
+        "vaultBalance": "0",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635311130,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635432587,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635554534,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635678127,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635800075,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772635926315,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772636048008,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772636177297,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772636303118,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772636429059,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772636551412,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      },
+      {
+        "timestamp": 1772636677841,
+        "walletPnls": [],
+        "vaultBalance": "10863145117872210540113",
+        "perpVaultBalance": "0",
+        "totalUnrealizedPnl": "0"
+      }
+    ]
+  },
+  "insurance": {
+    "totalSamples": 29,
+    "peakInsuranceFund": "10863145117872210540113",
+    "minInsuranceFund": "10863145117872210540113",
+    "samples": [
+      {
+        "timestamp": 1772633200312,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772633324147,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772633446692,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772633569230,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772633692242,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772633814778,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772633937719,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634061226,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634183724,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634306797,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634430505,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634553013,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634678341,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634814558,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772634939580,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635066851,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635198446,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635322756,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635446662,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635609637,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635732574,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635857007,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772635989020,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772636116542,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772636239111,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772636362655,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772636532619,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772636655154,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      },
+      {
+        "timestamp": 1772636779068,
+        "insuranceFundBalance": "10863145117872210540113",
+        "fundingRates": [],
+        "vaultBalance": "10863145117872210540113",
+        "settlementBalance": "0"
+      }
+    ]
+  },
+  "liquidation": {
+    "totalScans": 60,
+    "liquidationsTriggered": 0,
+    "liquidationsSucceeded": 0,
+    "positionsAtRisk": 0,
+    "profitWithdrawals": 4,
+    "profitWithdrawalsFailed": 0,
+    "events": [],
+    "withdrawalEvents": [
+      {
+        "timestamp": 1772634420956,
+        "wallet": "0x7fc5358BC0e895Af694ed08e7BA7a1e785Eda20d",
+        "pairId": "5ddc4772-3e69-474f-95ae-ef6080859f9c",
+        "balanceBefore": "18330625000000000",
+        "balanceAfter": "18587092505903249",
+        "profitRealized": "256467505903249",
+        "success": true
+      },
+      {
+        "timestamp": 1772635027506,
+        "wallet": "0xF730D9c779812f87674eBC3c32b327864dFa750B",
+        "pairId": "117a3dca-9fd1-4b1b-9400-c3d7f0f904e8",
+        "balanceBefore": "17950465000000000",
+        "balanceAfter": "19498938650332779",
+        "profitRealized": "1548473650332779",
+        "success": true
+      },
+      {
+        "timestamp": 1772635643715,
+        "wallet": "0x3A0b035fF4A6541a5431C4937e673F687bDDAAA1",
+        "pairId": "4ac96cad-47b5-4fc8-ac51-1664cf70682a",
+        "balanceBefore": "18224726000000000",
+        "balanceAfter": "18403019250180106",
+        "profitRealized": "178293250180106",
+        "success": true
+      },
+      {
+        "timestamp": 1772636248652,
+        "wallet": "0x2e24153C5796141C67C59013a51463f347EF99E1",
+        "pairId": "48af2ac8-352c-453c-8022-d564501f6d9a",
+        "balanceBefore": "14430820253968256",
+        "balanceAfter": "15715722089096415",
+        "profitRealized": "1284901835128159",
+        "success": true
+      }
+    ]
+  },
+  "scenarios": {
+    "executedScenarios": [
+      {
+        "type": "pump",
+        "startTime": 1772635088264,
+        "endTime": 1772635279159,
+        "pricesBefore": {},
+        "pricesAfter": {},
+        "success": true
+      }
+    ],
+    "scenarioCounts": {
+      "flash_crash": 0,
+      "pump": 1,
+      "dump": 0,
+      "whipsaw": 0,
+      "slow_bleed": 0,
+      "near_zero": 0
+    },
+    "nextScheduled": 1772657325228
+  },
+  "rpc": {
+    "totalRequests": 10532,
+    "retries": 0,
+    "failures": 3126,
+    "availableTokens": 90
+  },
+  "chainHealth": {
+    "settlementWeth": "2560000000000000000",
+    "perpVaultPool": "498139262439779238",
+    "perpVaultOI": "249013850000000000",
+    "pass": false,
+    "issues": [
+      "PerpVault poolValue LOW: 0.498139262439779238"
+    ]
+  }
+}

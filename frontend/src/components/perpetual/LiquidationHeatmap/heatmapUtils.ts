@@ -101,8 +101,8 @@ export function formatPrice(price: string | number): string {
  */
 export function formatEthAmount(amount: string | number): string {
   const a = typeof amount === "string" ? Number(amount) / 1e18 : amount;
-  if (a >= 1) return `Ξ${a.toFixed(4)}`;
-  return `Ξ${a.toFixed(6)}`;
+  if (a >= 1) return `BNB ${a.toFixed(4)}`;
+  return `BNB ${a.toFixed(6)}`;
 }
 
 // Backwards compatibility alias

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -134,6 +135,10 @@ func Load() (*Config, error) {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
+	// AUDIT-FIX H-13: Expand ${VAR} and ${VAR:-default} shell syntax in all string values
+	// Viper does NOT expand these natively — it loads them as literal strings
+	expandShellVarsInViper()
+
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
@@ -145,6 +150,46 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// AUDIT-FIX H-13: Expand ${VAR} and ${VAR:-default} shell-style syntax in Viper string values.
+// Viper's AutomaticEnv only maps flat env keys to config keys — it does NOT expand shell syntax
+// embedded in YAML values like: password: "${MEMEPERP_REDIS_PASSWORD}"
+var shellVarRe = regexp.MustCompile(`\$\{([^}]+)\}`)
+
+func expandShellVarsInViper() {
+	for _, key := range viper.AllKeys() {
+		val := viper.GetString(key)
+		if !strings.Contains(val, "${") {
+			continue
+		}
+		expanded := shellVarRe.ReplaceAllStringFunc(val, func(match string) string {
+			// Extract VAR or VAR:-default from ${...}
+			inner := match[2 : len(match)-1] // strip ${ and }
+			if idx := strings.Index(inner, ":-"); idx >= 0 {
+				// ${VAR:-default} syntax
+				envName := inner[:idx]
+				defaultVal := inner[idx+2:]
+				if envVal := os.Getenv(envName); envVal != "" {
+					return envVal
+				}
+				return defaultVal
+			}
+			if idx := strings.Index(inner, ":?"); idx >= 0 {
+				// ${VAR:?error} syntax — required variable
+				envName := inner[:idx]
+				if envVal := os.Getenv(envName); envVal != "" {
+					return envVal
+				}
+				return "" // will be caught by validation later
+			}
+			// Plain ${VAR} syntax
+			return os.Getenv(inner)
+		})
+		if expanded != val {
+			viper.Set(key, expanded)
+		}
+	}
 }
 
 func setDefaults() {
@@ -226,6 +271,18 @@ func validateConfig(cfg *Config) error {
 
 		if len(cfg.Security.AllowedOrigins) == 0 || (len(cfg.Security.AllowedOrigins) == 1 && cfg.Security.AllowedOrigins[0] == "*") {
 			errors = append(errors, "security.allowed_origins must be explicitly configured in production (not '*')")
+		}
+
+		// P2-59: Reject localhost defaults in production
+		for _, origin := range cfg.Security.AllowedOrigins {
+			if strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") {
+				errors = append(errors, "security.allowed_origins must not contain localhost in production")
+				break
+			}
+		}
+
+		if strings.Contains(cfg.MatchingEngine.URL, "localhost") || strings.Contains(cfg.MatchingEngine.URL, "127.0.0.1") {
+			errors = append(errors, "matching_engine.url must not be localhost in production")
 		}
 	}
 

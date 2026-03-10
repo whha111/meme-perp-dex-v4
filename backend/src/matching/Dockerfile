@@ -20,9 +20,16 @@ EXPOSE 8081
 
 ENV PORT=8081
 
+# Create non-root user (Debian-based image uses groupadd/useradd)
+RUN groupadd --system --gid 1001 appgroup && \
+    useradd --system --uid 1001 --gid appgroup --no-create-home appuser
+RUN chown -R appuser:appgroup /app
+USER appuser
+
 # Health check
+# Health check (use bun fetch since wget may not be available in Debian slim)
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD wget -q --spider http://localhost:8081/health || exit 1
+  CMD bun -e "fetch('http://localhost:8081/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
 # Run the application from matching directory
 WORKDIR /app/matching

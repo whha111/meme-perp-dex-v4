@@ -3,13 +3,14 @@
  */
 
 import { WebSocket } from "ws";
-import type { Address } from "viem";
+import { verifyMessage, type Address, type Hex } from "viem";
 import { logger } from "../utils/logger";
 import { engine } from "../modules/matching";
 import { getUserPositions } from "../modules/position";
 import { getBalance } from "../modules/balance";
 import { getFundingRateInfo } from "../modules/funding";
 import { getUserRiskData } from "../modules/risk";
+import { getRedisClient } from "../database/redis";
 import type { WSMessage, WSMessageType, Position, Trade, OrderBookSnapshot, RiskData, Order, OrderStatus } from "../types";
 
 // ============================================================
@@ -20,6 +21,8 @@ interface ClientState {
   subscribedTokens: Set<Address>;
   subscribedTrader: Address | null;
   subscribedRisk: boolean;
+  // P0-1: 认证状态 — subscribe_trader 必须先通过签名认证
+  authenticatedTrader: Address | null;
 }
 
 // ============================================================
@@ -34,6 +37,7 @@ export function initClient(ws: WebSocket): void {
     subscribedTokens: new Set(),
     subscribedTrader: null,
     subscribedRisk: false,
+    authenticatedTrader: null,
   });
 }
 
@@ -81,6 +85,11 @@ export async function handleMessage(ws: WebSocket, message: string): Promise<voi
         handleUnsubscribeToken(ws, params.token as Address);
         break;
 
+      case "auth":
+        // P0-1: 客户端必须先发送 auth 消息认证身份（EIP-191 签名验证）
+        await handleAuth(ws, params.trader as Address, params.signature as string, params.timestamp as number);
+        break;
+
       case "subscribe_trader":
         handleSubscribeTrader(ws, params.trader as Address);
         break;
@@ -112,6 +121,12 @@ export async function handleMessage(ws: WebSocket, message: string): Promise<voi
       case "get_funding":
         await sendFunding(ws, params.token as Address);
         break;
+
+      case "get_kline_history":
+        await sendKlineHistory(ws, params.token as Address, params.from as number, params.to as number);
+        break;
+
+
 
       case "ping":
         sendMessage(ws, { type: "pong", data: { time: Date.now() }, timestamp: Date.now() });
@@ -209,11 +224,75 @@ function broadcastMarketDataToClient(ws: WebSocket, token: Address): void {
   ws.send(JSON.stringify({ type: "orderbook", data: serializeOrderbook(depth), timestamp: now }));
 }
 
+/**
+ * P0-1: 认证处理 — EIP-191 签名验证
+ * 格式: { type: "auth", trader: "0x...", signature: "0x...", timestamp: 1234567890 }
+ * 签名消息: "MemePerp WS Auth: {trader} at {timestamp}"
+ *
+ * 前端签名方式: wallet.signMessage(`MemePerp WS Auth: ${address} at ${unixSeconds}`)
+ */
+async function handleAuth(ws: WebSocket, trader: Address, signature: string, timestamp: number): Promise<void> {
+  const state = wsClients.get(ws);
+  if (!state) return;
+
+  if (!trader || !signature) {
+    sendError(ws, "Auth requires trader address and signature");
+    return;
+  }
+
+  // 检查 timestamp 有效性（5分钟内）
+  const now = Math.floor(Date.now() / 1000);
+  if (!timestamp || Math.abs(now - timestamp) > 300) {
+    sendError(ws, "Auth timestamp expired (must be within 5 minutes)");
+    return;
+  }
+
+  // EIP-191 签名验证
+  const message = `MemePerp WS Auth: ${trader.toLowerCase()} at ${timestamp}`;
+  try {
+    const isValid = await verifyMessage({
+      address: trader,
+      message,
+      signature: signature as Hex,
+    });
+
+    if (!isValid) {
+      logger.warn("WSHandler", `Auth failed: invalid signature for ${trader}`);
+      sendError(ws, "Invalid signature");
+      return;
+    }
+  } catch (err) {
+    logger.warn("WSHandler", `Auth failed: signature verification error for ${trader}:`, err);
+    sendError(ws, "Signature verification failed");
+    return;
+  }
+
+  const normalizedTrader = trader.toLowerCase() as Address;
+  state.authenticatedTrader = normalizedTrader;
+
+  sendMessage(ws, {
+    type: "auth_success" as WSMessageType,
+    data: { trader: normalizedTrader },
+    timestamp: Date.now(),
+  });
+  logger.info("WSHandler", `Client authenticated as: ${trader}`);
+}
+
 function handleSubscribeTrader(ws: WebSocket, trader: Address): void {
   const state = wsClients.get(ws);
   if (!state) return;
 
   const normalizedTrader = trader.toLowerCase() as Address;
+
+  // P0-1: 必须先通过 auth 认证，且只能订阅自己的 private channel
+  if (!state.authenticatedTrader) {
+    sendError(ws, "Authentication required. Send 'auth' message first.");
+    return;
+  }
+  if (state.authenticatedTrader !== normalizedTrader) {
+    sendError(ws, "Cannot subscribe to another trader's private channel");
+    return;
+  }
 
   // 移除旧的订阅
   if (state.subscribedTrader) {
@@ -269,11 +348,23 @@ async function sendOrderbook(ws: WebSocket, token: Address): Promise<void> {
 }
 
 async function sendPositions(ws: WebSocket, trader: Address): Promise<void> {
+  // P3-P1: 私有数据需鉴权 — 与 subscribe_trader (L288-295) 保持一致
+  const state = wsClients.get(ws);
+  if (!state?.authenticatedTrader || state.authenticatedTrader !== trader.toLowerCase()) {
+    sendError(ws, "Authentication required. Send 'auth' message first to access private data.");
+    return;
+  }
   const positions = await getUserPositions(trader);
   sendMessage(ws, { type: "position", data: serializePositions(positions), timestamp: Date.now() });
 }
 
 async function sendBalance(ws: WebSocket, trader: Address): Promise<void> {
+  // P3-P1: 私有数据需鉴权
+  const bState = wsClients.get(ws);
+  if (!bState?.authenticatedTrader || bState.authenticatedTrader !== trader.toLowerCase()) {
+    sendError(ws, "Authentication required. Send 'auth' message first to access private data.");
+    return;
+  }
   const balance = await getBalance(trader);
   sendMessage(ws, {
     type: "balance",
@@ -301,6 +392,61 @@ async function sendFunding(ws: WebSocket, token: Address): Promise<void> {
       indexPrice: funding.indexPrice.toString(),
       nextSettlementTime: funding.nextSettlementTime,
     },
+    timestamp: Date.now(),
+  });
+}
+
+/**
+ * Load K-line history from Redis and send to client
+ * Supports range query: from/to are unix millisecond timestamps (minute-aligned)
+ */
+async function sendKlineHistory(ws: WebSocket, token: Address, from?: number, to?: number): Promise<void> {
+  const normalizedToken = token?.toLowerCase() as Address;
+  if (!normalizedToken) {
+    sendError(ws, "token is required for get_kline_history");
+    return;
+  }
+
+  const now = Date.now();
+  const toMs = to || now;
+  const fromMs = from || (toMs - 24 * 60 * 60 * 1000); // default: last 24h
+  const bars: { timestamp: number; open: string; high: string; low: string; close: string; volume: string }[] = [];
+
+  try {
+    const redis = getRedisClient();
+    // Scan minute-by-minute within the range
+    const startMinute = Math.floor(fromMs / 60000) * 60000;
+    const endMinute = Math.floor(toMs / 60000) * 60000;
+    const maxBars = 1440; // cap at 24h (1440 minutes)
+
+    const keys: string[] = [];
+    for (let t = startMinute; t <= endMinute && keys.length < maxBars; t += 60000) {
+      keys.push(klineRedisKey(normalizedToken, t));
+    }
+
+    if (keys.length > 0) {
+      const values = await redis.mget(...keys);
+      for (const val of values) {
+        if (!val) continue;
+        const bar = deserializeKlineBar(val);
+        if (!bar) continue;
+        bars.push({
+          timestamp: bar.lastMinute,
+          open: (Number(bar.open) / 1e18).toString(),
+          high: (Number(bar.high) / 1e18).toString(),
+          low: (Number(bar.low) / 1e18).toString(),
+          close: (Number(bar.close) / 1e18).toString(),
+          volume: (Number(bar.volume) / 1e18).toString(),
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn("KlineRedis", `Failed to load kline history for ${normalizedToken}: ${err}`);
+  }
+
+  sendMessage(ws, {
+    type: "kline_history" as WSMessageType,
+    data: { token: normalizedToken, bars, from: fromMs, to: toMs },
     timestamp: Date.now(),
   });
 }
@@ -617,9 +763,86 @@ export async function broadcastFundingRate(token: Address): Promise<void> {
       }
     }
   } catch (error) {
-    // 忽略错误
+    logger.warn("WSHandler", `broadcastFundingRate failed for ${normalizedToken}: ${error}`);
   }
 }
+
+// ============================================================
+// K-line Redis Persistence
+// ============================================================
+
+interface KlineBar {
+  lastMinute: number;
+  open: bigint;
+  high: bigint;
+  low: bigint;
+  close: bigint;
+  volume: bigint;
+}
+
+const KLINE_TTL_SECONDS = 24 * 60 * 60; // 24h — auto-expire old bars
+const KLINE_SAVE_INTERVAL = 10; // persist current bar every 10 ticks (~10s)
+
+function klineRedisKey(token: string, minuteTs: number): string {
+  // Note: Redis client has keyPrefix "memeperp:" already configured
+  return `kline:1m:${token}:${minuteTs}`;
+}
+
+function serializeKlineBar(bar: KlineBar): string {
+  return JSON.stringify({
+    t: bar.lastMinute,
+    o: bar.open.toString(),
+    h: bar.high.toString(),
+    l: bar.low.toString(),
+    c: bar.close.toString(),
+    v: bar.volume.toString(),
+  });
+}
+
+function deserializeKlineBar(json: string): KlineBar | null {
+  try {
+    const d = JSON.parse(json);
+    return {
+      lastMinute: d.t,
+      open: BigInt(d.o),
+      high: BigInt(d.h),
+      low: BigInt(d.l),
+      close: BigInt(d.c),
+      volume: BigInt(d.v),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Save a completed K-line bar to Redis */
+async function saveKlineToRedis(token: string, bar: KlineBar): Promise<void> {
+  try {
+    const redis = getRedisClient();
+    const key = klineRedisKey(token, bar.lastMinute);
+    await redis.set(key, serializeKlineBar(bar), "EX", KLINE_TTL_SECONDS);
+  } catch (err) {
+    logger.warn("KlineRedis", `Failed to save kline for ${token}@${bar.lastMinute}: ${err}`);
+  }
+}
+
+/** Load the current in-progress K-line bar from Redis (for recovery after restart) */
+async function loadCurrentKlineFromRedis(token: string, currentMinute: number): Promise<KlineBar | null> {
+  try {
+    const redis = getRedisClient();
+    const key = klineRedisKey(token, currentMinute);
+    const data = await redis.get(key);
+    if (!data) return null;
+    return deserializeKlineBar(data);
+  } catch (err) {
+    logger.warn("KlineRedis", `Failed to load kline for ${token}@${currentMinute}: ${err}`);
+    return null;
+  }
+}
+
+// In-memory cache (write-through to Redis)
+const klineState = new Map<string, KlineBar>();
+let klineSaveCounter = 0;
 
 /**
  * 启动市场数据定时推送
@@ -627,12 +850,22 @@ export async function broadcastFundingRate(token: Address): Promise<void> {
 export function startMarketDataPush(tokens: Address[], intervalMs = 1000): void {
   if (marketDataInterval) return;
 
-  // K线状态追踪
-  const klineState = new Map<string, { lastMinute: number; open: bigint; high: bigint; low: bigint; close: bigint; volume: bigint }>();
+  // Restore current-minute K-line bars from Redis on startup
+  const currentMinute = Math.floor(Date.now() / 60000) * 60000;
+  for (const token of tokens) {
+    const normalizedToken = token.toLowerCase() as Address;
+    loadCurrentKlineFromRedis(normalizedToken, currentMinute).then((bar) => {
+      if (bar) {
+        klineState.set(normalizedToken, bar);
+        logger.info("KlineRedis", `Restored kline for ${normalizedToken} @ ${new Date(currentMinute).toISOString()}`);
+      }
+    }).catch(() => { /* startup recovery is best-effort */ });
+  }
 
   marketDataInterval = setInterval(async () => {
     const now = Date.now();
     const currentMinute = Math.floor(now / 60000) * 60000;
+    klineSaveCounter++;
 
     for (const token of tokens) {
       const normalizedToken = token.toLowerCase() as Address;
@@ -662,18 +895,19 @@ export function startMarketDataPush(tokens: Address[], intervalMs = 1000): void 
       let kline = klineState.get(stateKey);
 
       if (!kline || kline.lastMinute !== currentMinute) {
-        // 新的一分钟，推送上一根K线并创建新K线
+        // 新的一分钟 — 持久化上一根完成的 K 线，创建新棒
         if (kline && kline.lastMinute !== currentMinute) {
-          // 价格: 1e12 精度 bigint → 小数字符串
-          // 交易量: 1e18 精度 bigint → 小数字符串
+          // 推送上一根已完成的 K 线
           broadcastKline(normalizedToken, {
             timestamp: kline.lastMinute,
-            open: (Number(kline.open) / 1e12).toString(),
-            high: (Number(kline.high) / 1e12).toString(),
-            low: (Number(kline.low) / 1e12).toString(),
-            close: (Number(kline.close) / 1e12).toString(),
+            open: (Number(kline.open) / 1e18).toString(),
+            high: (Number(kline.high) / 1e18).toString(),
+            low: (Number(kline.low) / 1e18).toString(),
+            close: (Number(kline.close) / 1e18).toString(),
             volume: (Number(kline.volume) / 1e18).toString(),
           });
+          // 持久化已完成的 K 线到 Redis
+          saveKlineToRedis(normalizedToken, kline);
         }
 
         kline = {
@@ -692,15 +926,20 @@ export function startMarketDataPush(tokens: Address[], intervalMs = 1000): void 
         if (price < kline.low) kline.low = price;
       }
 
-      // 推送当前K线 (价格: 1e12 → 小数, 交易量: 1e18 → 小数)
+      // 推送当前K线 (价格: 1e18 → 小数, 交易量: 1e18 → 小数)
       broadcastKline(normalizedToken, {
         timestamp: kline.lastMinute,
-        open: (Number(kline.open) / 1e12).toString(),
-        high: (Number(kline.high) / 1e12).toString(),
-        low: (Number(kline.low) / 1e12).toString(),
-        close: (Number(kline.close) / 1e12).toString(),
+        open: (Number(kline.open) / 1e18).toString(),
+        high: (Number(kline.high) / 1e18).toString(),
+        low: (Number(kline.low) / 1e18).toString(),
+        close: (Number(kline.close) / 1e18).toString(),
         volume: (Number(kline.volume) / 1e18).toString(),
       });
+
+      // 定期持久化当前进行中的 K 线 (每 ~10s)
+      if (klineSaveCounter % KLINE_SAVE_INTERVAL === 0) {
+        saveKlineToRedis(normalizedToken, kline);
+      }
     }
 
     // 每5秒推送一次资金费率
@@ -722,6 +961,26 @@ export function stopMarketDataPush(): void {
     clearInterval(marketDataInterval);
     marketDataInterval = null;
     logger.info("WSHandler", "Stopped market data push");
+  }
+}
+
+/**
+ * Flush all in-progress K-line bars to Redis before shutdown.
+ * Called during graceful shutdown to avoid losing the current minute's data.
+ */
+export async function flushKlineState(): Promise<void> {
+  const entries = Array.from(klineState.entries());
+  if (entries.length === 0) return;
+
+  logger.info("KlineRedis", `Flushing ${entries.length} in-progress kline bars to Redis...`);
+  const results = await Promise.allSettled(
+    entries.map(([token, bar]) => saveKlineToRedis(token, bar))
+  );
+  const failed = results.filter(r => r.status === "rejected").length;
+  if (failed > 0) {
+    logger.warn("KlineRedis", `${failed}/${entries.length} kline flushes failed during shutdown`);
+  } else {
+    logger.info("KlineRedis", `All ${entries.length} kline bars flushed successfully`);
   }
 }
 

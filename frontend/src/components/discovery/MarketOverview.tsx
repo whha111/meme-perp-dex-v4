@@ -1,43 +1,23 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { TokenCard } from "./TokenCard";
 import { Navbar } from "@/components/layout/Navbar";
 import { SOLD_TOKENS_TARGET } from "@/lib/protocol-constants";
-import {
-  InstrumentAssetData,
-  getWebSocketClient,
-  getWebSocketServices,
-  ConnectionStatus,
-  MessageType,
-  useWebSocketMessage,
-  adaptTokenAssetList,
-} from "@/lib/websocket";
+import { InstrumentAssetData } from "@/lib/websocket";
 import { formatTimeAgo } from "@/utils/formatters";
 import { FilterPanel, FilterState, defaultFilterState } from "./FilterPanel";
 import { FAQPanel } from "./FAQPanel";
-import { useOnChainTokenList, OnChainToken } from "@/hooks/common/useTokenList";
 import { useETHPrice } from "@/hooks/common/useETHPrice";
 import { trackRender } from "@/lib/debug-render";
+import { useTradingDataStore, type TokenStats, type WssOnChainToken } from "@/lib/stores/tradingDataStore";
+import { useUnifiedWebSocket } from "@/hooks/common/useUnifiedWebSocket";
+import { type Address } from "viem";
+// HTTP ticker fallback removed — all data via WSS
 
-// [FIX F-H-01] 非阻塞连接检查 - 立即返回连接状态，不等待
-function checkConnection(): boolean {
-  const wsClient = getWebSocketClient();
-  return wsClient.isConnected();
-}
 
-// [FIX F-H-01] 触发连接但不阻塞
-function triggerConnection(): void {
-  const wsClient = getWebSocketClient();
-  const status = wsClient.getStatus();
-  if (status === ConnectionStatus.DISCONNECTED || status === ConnectionStatus.ERROR) {
-    wsClient.connect().catch(() => {});
-  }
-}
-
-function Column({ title, assets, noTokensText, ethPrice }: { title: string; assets: any[]; noTokensText: string; ethPrice: number }) {
+function Column({ title, assets, noTokensText, ethPrice }: { title: string; assets: InstrumentAssetData[]; noTokensText: string; ethPrice: number }) {
   return (
     <div className="flex-1 min-w-[320px] bg-okx-bg-primary">
       <div className="flex items-center justify-between mb-4 sticky top-[64px] bg-okx-bg-primary py-2 z-10">
@@ -100,7 +80,7 @@ function Column({ title, assets, noTokensText, ethPrice }: { title: string; asse
               symbol={instId}
               logo={asset.logo || asset.imageUrl}
               timeAgo={formatTimeAgo(asset.createdAt)}
-              address={asset.creatorAddress?.slice(0, 4) + "..." + asset.creatorAddress?.slice(-4)}
+              address={asset.creatorAddress ? (asset.creatorAddress.slice(0, 4) + "..." + asset.creatorAddress.slice(-4)) : ""}
               marketCap={marketCapDisplay}
               volume={volumeDisplay}
               traders={asset.uniqueTraders || 0}
@@ -207,13 +187,10 @@ export function MarketOverview() {
   // 调试：追踪渲染次数 (仅 console 警告，不 throw)
   trackRender("MarketOverview");
 
-  const [wsConnected, setWsConnected] = useState(false);
-  const [minLoadingDone, setMinLoadingDone] = useState(false); // 最小加载时间标记
+  const [minLoadingDone, setMinLoadingDone] = useState(false);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [faqPanelOpen, setFaqPanelOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState>(defaultFilterState);
-  const queryClient = useQueryClient();
-  const lastRefetchTime = useRef<number>(0);
 
   // 获取实时 ETH 价格
   const { price: ethPrice } = useETHPrice();
@@ -226,74 +203,42 @@ export function MarketOverview() {
     return () => clearTimeout(timer);
   }, []);
 
-  // 监听 WebSocket 连接状态
+  // 通过 useUnifiedWebSocket 建立 WSS 连接
+  // all_market_stats 在 onopen 时自动订阅，无需逐个 token 订阅
+  const { isConnected: wsConnected } = useUnifiedWebSocket({ enabled: true });
+
+  // 从 WSS 获取代币列表 (替代 useOnChainTokenList 的 400+ RPC 调用)
+  const onChainTokens = useTradingDataStore(state => state.allTokens);
+  const isLoadingOnChain = !useTradingDataStore(state => state.allTokensLoaded);
+
+  // 从 tradingDataStore 读取 WSS 推送的实时市场数据
+  // ⚠️ 不能直接用 useTradingDataStore(s => s.tokenStats)：
+  // 66 个 token 每秒都有 WS 更新 → Map 引用每秒变 60+ 次 → 无限重渲染
+  // 解决方案：手动订阅 + 2 秒节流，首页列表不需要毫秒级实时更新
+  const tokenStatsMapRef = useRef<Map<Address, TokenStats>>(useTradingDataStore.getState().tokenStats);
+  const [statsVersion, setStatsVersion] = useState(0);
+
   useEffect(() => {
-    const wsClient = getWebSocketClient();
-    const unsubscribe = wsClient.onConnectionChange((status) => {
-      setWsConnected(status === ConnectionStatus.CONNECTED);
+    let dirty = false;
+
+    const unsubscribe = useTradingDataStore.subscribe((state) => {
+      tokenStatsMapRef.current = state.tokenStats;
+      dirty = true;
     });
-    // 初始状态
-    setWsConnected(wsClient.isConnected());
-    return () => unsubscribe();
-  }, []);
 
-  // 订阅实时交易事件，当有新交易时刷新列表
-  useEffect(() => {
-    const wsServices = getWebSocketServices();
-
-    // Subscribe to trade events and invalidate cache for real-time updates
-    const unsubscribeTrade = wsServices.onTradeEvent((event) => {
-      // Throttle refetches to max once per 2 seconds to avoid overwhelming
-      const now = Date.now();
-      if (now - lastRefetchTime.current > 2000) {
-        lastRefetchTime.current = now;
-        // Invalidate domain assets cache to trigger refetch
-        queryClient.invalidateQueries({ queryKey: ["tokenAssets"] });
+    // 每 2 秒检查一次是否有新数据，有则触发一次 re-render
+    const interval = setInterval(() => {
+      if (dirty) {
+        dirty = false;
+        setStatsVersion(v => v + 1);
       }
-    });
+    }, 2000);
 
     return () => {
-      unsubscribeTrade();
+      unsubscribe();
+      clearInterval(interval);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // queryClient 是稳定的，不需要作为依赖
-
-  // [FIX F-H-01] 非阻塞数据获取 - 立即触发连接，不等待
-  // 使用 useEffect 在组件挂载时触发连接
-  useEffect(() => {
-    triggerConnection();
   }, []);
-
-  // 直接从链上获取代币列表（当后端没有数据时使用）
-  const { tokens: onChainTokens, isLoading: isLoadingOnChain } = useOnChainTokenList();
-
-  const { data: assetsResponse, isLoading: isLoadingBackend, error, refetch } = useQuery<{ tokenAssets: InstrumentAssetData[] }>({
-    queryKey: ["tokenAssets"],
-    queryFn: async () => {
-      // 直接通过 REST API 获取数据，不依赖 WebSocket
-      const services = getWebSocketServices();
-      const response = await services.getTokenList({
-        page_size: 50,
-        sort_by: 'created_at',
-        sort_order: 'desc',
-        filter_by: 'all',
-      });
-
-      if (response.success && response.tokens) {
-        return { tokenAssets: adaptTokenAssetList(response.tokens) };
-      }
-
-      return { tokenAssets: [] };
-    },
-    enabled: true,
-    staleTime: 10000, // 10s - data considered fresh
-    retry: 5, // [FIX F-H-01] 增加重试次数，因为首次可能连接未就绪
-    retryDelay: (attemptIndex) => Math.min(500 * 2 ** attemptIndex, 3000), // [FIX F-H-01] 更快的重试间隔
-    refetchInterval: 15000, // Always poll every 15s as fallback for real-time
-  });
-
-  // 合并后端数据和链上数据：优先使用后端数据，如果后端没有数据则使用链上数据
-  const backendAssets = assetsResponse?.tokenAssets || [];
 
   // 解析 metadataURI 获取 logo
   // metadataURI 格式可能是：
@@ -348,7 +293,7 @@ export function MarketOverview() {
 
   // 将链上代币转换为 InstrumentAssetData 格式
   const onChainAssetsConverted: InstrumentAssetData[] = useMemo(() => {
-    return onChainTokens.map((token: OnChainToken) => {
+    return onChainTokens.map((token: WssOnChainToken) => {
       const priceFloat = parseFloat(token.price) || 0;
       const marketCapFloat = parseFloat(token.marketCap) || 0;
       const logoUrl = parseMetadataURI(token.metadataURI);
@@ -373,26 +318,42 @@ export function MarketOverview() {
     });
   }, [onChainTokens]);
 
-  // 合并后端数据和链上数据：
-  // 1. 链上数据优先（用户创建的新 token）
-  // 2. 后端数据作为补充（预设的 meme token）
-  // 3. 去重：如果 instId 相同，使用链上数据（更新更及时）
+  // 合并链上数据 + WSS 实时市场数据 + HTTP fallback：
+  // 优先级: WS 实时数据 > HTTP ticker 数据 > 链上默认值
   const assets = useMemo(() => {
-    const merged: InstrumentAssetData[] = [...onChainAssetsConverted];
-    const onChainInstIds = new Set(onChainAssetsConverted.map(a => a.instId.toLowerCase()));
+    const merged: InstrumentAssetData[] = onChainAssetsConverted.map(onChain => {
+      const addr = (onChain.instId || "").toLowerCase() as Address;
 
-    // 添加后端中不存在于链上的 token
-    for (const backendAsset of backendAssets) {
-      if (!onChainInstIds.has(backendAsset.instId.toLowerCase())) {
-        merged.push(backendAsset);
+      // 1. 优先: WS 实时数据 (来自 Matching Engine 的 market_data)
+      const stats = tokenStatsMapRef.current.get(addr);
+      if (stats && (stats.volume24h !== "0" || stats.lastPrice !== "0")) {
+        return {
+          ...onChain,
+          volume24h: stats.volume24h || onChain.volume24h,
+          priceChange24h: parseFloat(stats.priceChangePercent24h || "0") || onChain.priceChange24h,
+          uniqueTraders: stats.trades24h || onChain.uniqueTraders, // trades24h 作为交易笔数近似值
+        };
       }
-    }
 
-    // 按创建时间排序（最新的在前）
-    return merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  }, [backendAssets, onChainAssetsConverted]);
+      return onChain;
+    });
 
-  const isLoading = isLoadingBackend && isLoadingOnChain;
+    // 排序: 有成交量的优先，其次按创建时间（最新的在前）
+    return merged.sort((a, b) => {
+      const aVol = parseFloat(a.volume24h || "0");
+      const bVol = parseFloat(b.volume24h || "0");
+      // 有成交量的排在前面
+      if (aVol > 0 && bVol === 0) return -1;
+      if (bVol > 0 && aVol === 0) return 1;
+      // 都有成交量时按成交量降序
+      if (aVol > 0 && bVol > 0) return bVol - aVol;
+      // 都无成交量时按创建时间降序
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- statsVersion 作为节流后的依赖代替 tokenStatsMap
+  }, [onChainAssetsConverted, statsVersion]);
+
+  const isLoading = isLoadingOnChain;
 
   // 应用筛选
   const filteredAssets = useMemo(() => {
@@ -440,7 +401,7 @@ export function MarketOverview() {
                    : 'bg-okx-bg-hover border-okx-border-primary text-okx-text-secondary hover:border-okx-border-secondary'
                }`}
              >
-               <span>⚙</span>
+               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
                <span>{t('filter')}</span>
                {isFilterActive && <span className="w-1.5 h-1.5 bg-okx-up rounded-full"></span>}
              </button>
@@ -497,10 +458,10 @@ export function MarketOverview() {
             onClick={() => setFaqPanelOpen(true)}
             className="flex items-center gap-1 hover:text-okx-text-primary transition-colors"
           >
-            ❓ {tFooter('faq')}
+            <svg className="w-3.5 h-3.5 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg> {tFooter('faq')}
           </button>
           <span className={`flex items-center gap-1 ${wsConnected ? 'text-okx-up' : 'text-okx-warning'}`}>
-            {wsConnected ? `🟢 ${tFooter('liveUpdates')}` : `🟡 ${tFooter('connecting')}`}
+            {wsConnected ? (<><span className="w-2 h-2 bg-okx-up rounded-full inline-block"></span> {tFooter('liveUpdates')}</>) : (<><span className="w-2 h-2 bg-okx-warning rounded-full inline-block"></span> {tFooter('connecting')}</>)}
           </span>
         </div>
       </div>

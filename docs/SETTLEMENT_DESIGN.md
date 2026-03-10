@@ -1,217 +1,113 @@
 # 永续合约结算机制设计
 
-## 当前问题
+> **最后更新**: 2026-03-01
+> **当前状态**: ⚠️ 设计已确定，实现严重不完整（见 ISSUES_AUDIT_REPORT.md）
 
-当前系统是 vAMM 模型，存在以下问题：
+---
 
-1. **没有真正的对手方配对** - 多空用户不直接对冲
-2. **盈利完全依赖保险基金** - 基金不足时无法支付
-3. **缺乏资金平衡机制** - 多空严重失衡时系统承压
+## 架构选择
 
-## 解决方案对比
+**选定方案**: 简化版 dYdX v3（链下撮合 + 链上托管 + LP 对手方池）
 
-### 方案 A: 加强 vAMM 模型（当前架构改进）
+| 参考平台 | 架构 | 存款托管 | 结算方式 | 提款保障 |
+|----------|------|---------|---------|---------|
+| dYdX v3 | 链下撮合 + StarkEx L1 | L1 合约锁定 USDC | ZK-STARK 批量证明 | 强制提款 (14天) |
+| GMX | 全链上 | Vault 合约 | 每笔链上执行 | 直接提款 |
+| **我们** | 链下撮合 + SettlementV2 | WETH 锁定在 SettlementV2 | 批量结算到 PerpVault | Merkle proof 提款 |
 
+---
+
+## 资金流设计
+
+### 存款流 (用户 → 链上)
 ```
-优点：改动最小
-缺点：仍依赖保险基金
-
-资金流向：
-亏损用户 → InsuranceFund → 盈利用户
-
-改进点：
-1. 确保亏损先进入基金，再支付盈利
-2. 实时结算而非平仓时结算
-3. 动态调整资金费率平衡多空
-```
-
-### 方案 B: 多空对冲池模型（推荐）
-
-```
-做多池 (Long Pool)           做空池 (Short Pool)
-  ├─ 用户 A: 10 ETH            ├─ 用户 C: 8 ETH
-  ├─ 用户 B: 5 ETH             └─ 用户 D: 7 ETH
-  └─ 总计: 15 ETH                  总计: 15 ETH
-
-价格上涨 10%:
-  - 多头总盈利 = 15 * 10% = 1.5 ETH
-  - 空头总亏损 = 15 * 10% = 1.5 ETH
-  - 从空头池扣除 1.5 ETH → 转入多头池
-
-✅ 盈亏完全对冲，无需保险基金介入
+用户钱包 ETH
+    │
+    ▼ wrap
+用户钱包 WETH
+    │
+    ▼ approve + deposit()
+SettlementV2 合约 (WETH 托管)
+    │
+    ▼ Deposited 事件
+撮合引擎监听 → chainAvailable += amount
+    │
+    ▼
+用户可以下单交易
 ```
 
-### 方案 C: 订单簿模型
-
+### 交易结算流 (链下撮合 → 链上结算)
 ```
-买单队列              卖单队列
-[A: 100@1.05]         [C: 50@1.06]
-[B: 200@1.04]         [D: 150@1.07]
-
-撮合引擎配对：
-A (100@1.05) ←→ C (50@1.06) → 成交 50
-B (200@1.04) 等待更好价格
-
-✅ 每笔交易都有明确对手方
-❌ 需要链下撮合或 Layer2
-```
-
-## 推荐实现：多空池对冲模型
-
-### 核心原理
-
-```solidity
-// 全局多空池
-uint256 public totalLongCollateral;   // 多头总保证金
-uint256 public totalShortCollateral;  // 空头总保证金
-uint256 public totalLongSize;         // 多头总仓位
-uint256 public totalShortSize;        // 空头总仓位
-
-// 结算时，盈利从对手池支付
-function settle(address user, int256 pnl) internal {
-    Position storage pos = positions[user];
-
-    if (pnl > 0) {
-        // 盈利：从对手池扣除
-        uint256 profit = uint256(pnl);
-        if (pos.isLong) {
-            // 多头盈利，从空头池扣
-            require(totalShortCollateral >= profit, "Insufficient short pool");
-            totalShortCollateral -= profit;
-            totalLongCollateral += profit;
-        } else {
-            // 空头盈利，从多头池扣
-            require(totalLongCollateral >= profit, "Insufficient long pool");
-            totalLongCollateral -= profit;
-            totalShortCollateral += profit;
-        }
-    } else {
-        // 亏损：加入对手池
-        uint256 loss = uint256(-pnl);
-        if (pos.isLong) {
-            totalLongCollateral -= loss;
-            totalShortCollateral += loss;
-        } else {
-            totalShortCollateral -= loss;
-            totalLongCollateral += loss;
-        }
-    }
-}
+撮合引擎匹配订单
+    │
+    ├─ 即时: 内存记账 (仓位、余额、PnL)
+    │
+    ├─ 每 10s: PerpVault.increaseOI/decreaseOI (OI 追踪)
+    │
+    └─ 每 30s: 批量结算队列
+         ├─ settleTraderLoss()    → ETH 流入 PerpVault
+         ├─ settleLiquidation()  → ETH 流入 PerpVault
+         ├─ collectFee()         → ETH 流入 PerpVault
+         └─ settleTraderProfit() → ETH 从 PerpVault 流出
 ```
 
-### 处理多空不平衡
-
-```solidity
-// 当多空失衡时，使用资金费率调节
-function calculateFundingPayment() public view returns (int256) {
-    if (totalLongSize == totalShortSize) return 0;
-
-    // 多头过多 → 多头支付空头
-    // 空头过多 → 空头支付多头
-    int256 imbalance = int256(totalLongSize) - int256(totalShortSize);
-    int256 totalSize = int256(totalLongSize + totalShortSize);
-
-    // 费率 = 不平衡比例 * 基础费率
-    return (imbalance * BASE_FUNDING_RATE) / totalSize;
-}
+### 提款流 (链上 → 用户)
+```
+撮合引擎每小时生成 Merkle 快照
+    │
+    ▼ submitStateRoot()
+SettlementV2 记录 Merkle root
+    │
+用户请求提款 → 引擎返回 Merkle proof + 签名
+    │
+    ▼ withdraw(proof, sig)
+SettlementV2 验证 proof → 转 WETH 到用户钱包
 ```
 
-### 保险基金仅用于穿仓
+---
 
-```solidity
-// 保险基金只在穿仓时介入
-function handleBankruptcy(address user, uint256 deficit) internal {
-    // 1. 先尝试从对手池覆盖
-    // 2. 对手池不足时，使用保险基金
-    // 3. 保险基金不足时，触发 ADL
+## 合约职责
 
-    uint256 covered = 0;
+### SettlementV2 (用户保证金托管)
+- **类比**: dYdX 的 StarkEx 合约
+- **谁存钱**: 交易用户
+- **存什么**: WETH
+- **作用**: 托管用户资金，Merkle proof 验证提款
+- **地址**: `0x733EccCf612F70621c772D63334Cf5606d7a7C75`
 
-    // Step 1: 对手池
-    Position storage pos = positions[user];
-    if (pos.isLong && totalShortCollateral >= deficit) {
-        totalShortCollateral -= deficit;
-        covered = deficit;
-    } else if (!pos.isLong && totalLongCollateral >= deficit) {
-        totalLongCollateral -= deficit;
-        covered = deficit;
-    }
+### PerpVault (LP 对手方池)
+- **类比**: GMX 的 GLP Vault
+- **谁存钱**: LP 流动性提供者
+- **存什么**: ETH (native)
+- **作用**: 所有交易的对手方池，承担交易员盈利风险
+- **地址**: `0x586FB78b8dB39d8D89C1Fd2Aa0c756C828e5251F`
+- **关键函数**:
+  - `deposit()` → LP 存入 ETH 获得份额
+  - `settleTraderProfit()` → 池子支付交易员盈利
+  - `settleTraderLoss()` → 池子收取交易员亏损
+  - `settleLiquidation()` → 池子收取强平保证金
+  - `collectFee()` → 池子收取手续费
 
-    // Step 2: 保险基金
-    if (covered < deficit) {
-        uint256 fromInsurance = insuranceFund.coverDeficit(deficit - covered);
-        covered += fromInsurance;
-    }
-
-    // Step 3: ADL
-    if (covered < deficit) {
-        triggerADL(deficit - covered);
-    }
-}
+### 资金安全不变量
+```
+SettlementV2.WETH >= Σ(userDeposits) - Σ(userWithdraws)
+PerpVault.balance >= minSafetyThreshold (建议 > 1 ETH)
+引擎钱包.balance >= 0.05 ETH (gas 费)
 ```
 
-## 实现步骤
+---
 
-### Phase 1: 修改 Vault 支持多空池（1-2 天）
+## ⚠️ 当前实现差距
 
-```solidity
-contract Vault {
-    // 新增多空池余额跟踪
-    uint256 public longPoolBalance;
-    uint256 public shortPoolBalance;
+**以上设计是目标架构。当前实际状态：**
 
-    // 修改锁定保证金
-    function lockMargin(address user, uint256 amount, bool isLong) external {
-        balances[user] -= amount;
-        if (isLong) {
-            longPoolBalance += amount;
-        } else {
-            shortPoolBalance += amount;
-        }
-        lockedBalances[user] += amount;
-    }
+| 流程 | 设计 | 实际 | 状态 |
+|------|------|------|------|
+| 用户存款 | SettlementV2.deposit() | HTTP API 虚拟存款 | ❌ 未连通 |
+| 用户提款 | Merkle proof + SettlementV2.withdraw() | HTTP API 虚拟提款 | ❌ 未连通 |
+| PnL 结算 | PerpVault.settleTraderProfit/Loss() | mode2Adj 内存记账 | ❌ 虚拟 |
+| OI 追踪 | PerpVault.increaseOI/decreaseOI() | 批量队列 100% 成功 | ✅ 已完成 |
+| Merkle 快照 | 每小时提交 stateRoot | 代码就绪，未验证 | ⚠️ 待验证 |
+| LP 流动性 | PerpVault.deposit() 种子资金 | deposit() 从未调用 | ❌ 空池子 |
 
-    // 修改结算函数
-    function settlePnL(address user, bool isLong, int256 pnl) external {
-        if (pnl > 0) {
-            uint256 profit = uint256(pnl);
-            if (isLong) {
-                require(shortPoolBalance >= profit);
-                shortPoolBalance -= profit;
-            } else {
-                require(longPoolBalance >= profit);
-                longPoolBalance -= profit;
-            }
-            balances[user] += profit;
-        }
-        // ... 亏损处理
-    }
-}
-```
-
-### Phase 2: 修改 PositionManager（1-2 天）
-
-- 开仓时指定方向，将保证金加入对应池
-- 平仓时从对手池获取盈利
-- 实现实时盈亏计算
-
-### Phase 3: 添加资金费率实时结算（1 天）
-
-- 每次开仓/平仓时结算累计资金费
-- 资金费从多头池/空头池互转
-
-### Phase 4: 完善风控（1 天）
-
-- 多空池余额监控
-- 自动限制开仓方向
-- ADL 优先级队列
-
-## 总结
-
-| 模型 | 盈利来源 | 系统风险 | 复杂度 | 推荐 |
-|------|---------|---------|--------|------|
-| 当前 vAMM | 保险基金 | 高 | 低 | ❌ |
-| 多空池对冲 | 对手池 | 低 | 中 | ✅ |
-| 订单簿 | 对手方 | 最低 | 高 | 未来 |
-
-**推荐路线**：先实现多空池对冲，后续可升级到订单簿。
+**详见**: `docs/ISSUES_AUDIT_REPORT.md` 完整问题清单

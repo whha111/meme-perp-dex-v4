@@ -1,473 +1,149 @@
 # 系统架构文档
 
-## 业务流程
+> **最后更新**: 2026-03-01
+> **架构模式**: 链下撮合 + 链上托管 (类 dYdX v3)
+
+---
+
+## ⚠️ 重要提示
+
+**当前架构与最初设计不同。** 系统已从"全链上"迁移到"链下撮合 + 链上结算"模式。
+大部分链上合约（PositionManager, Liquidation, FundingRate 等）已被撮合引擎替代。
+详细问题清单见 `docs/ISSUES_AUDIT_REPORT.md`。
+
+---
+
+## 当前实际架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      完整业务流程                            │
-│                                                             │
-│    阶段一：内盘认购              阶段二：交易阶段             │
-│    ─────────────────            ─────────────────────        │
-│                                                             │
-│    用户存 BNB 认购               同时开启两个功能            │
-│         │                              │                    │
-│         ▼                              ▼                    │
-│    ┌─────────┐   打满 50 BNB    ┌─────────────────┐        │
-│    │ 可退款   │ ───────────────► │ 1. 现货交易(AMM) │        │
-│    │ 未打满   │                 │ 2. 永续合约交易  │        │
-│    │ 自动退款 │                 │ 3. LP存币赚息   │        │
-│    └─────────┘                 └─────────────────┘        │
-│                                                             │
-│    关键：内盘结束后，现货和合约同时开启                       │
-│    价格由 AMM 现货交易驱动，永续合约使用 AMM 价格             │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 合约架构图
-
-```
-                                    用户
-                                      │
-                                      ▼
-                    ┌─────────────────────────────────────┐
-                    │            Router.sol               │
-                    │         (统一交互入口)               │
-                    └─────────────────────────────────────┘
-                                      │
-          ┌───────────────────────────┼───────────────────────────┐
-          │                           │                           │
-          ▼                           ▼                           ▼
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│   Presale.sol   │       │    AMM.sol      │       │PositionManager  │
-│   (内盘认购)     │       │  (现货交易)     │       │   (永续交易)     │
-└─────────────────┘       └─────────────────┘       └─────────────────┘
-          │                         │                         │
-          │   打满后初始化           │                         │
-          └────────────────────────►│                         │
-                                    ▼                         │
-                          ┌─────────────────┐                 │
-                          │  PriceFeed.sol  │◄────────────────┤
-                          │   (价格聚合)    │    (读取价格)
-                          │   (TWAP计算)    │
-                          └─────────────────┘
-                                    ▲
-                                    │ 交易后更新价格
-                                    │
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│  MemeToken.sol  │◄──────│    AMM.sol      │       │   Vault.sol     │
-│   (MEME代币)    │       │   (储备金)      │       │  (保证金托管)    │
-└─────────────────┘       └─────────────────┘       └─────────────────┘
-          │                                                   │
-          ▼                                                   │
-┌─────────────────┐                                          │
-│ LendingPool.sol │◄─────────────────────────────────────────┘
-│  (LP存币借贷)   │              (做空借币)
-└─────────────────┘
-          │
-          ▼
-┌─────────────────┐
-│   LPToken.sol   │
-│   (LP凭证)      │
-└─────────────────┘
-
-
-                    ┌─────────────────────────────────────┐
-                    │           Keeper Services           │
-                    └─────────────────────────────────────┘
-                                      │
-          ┌───────────────────────────┼───────────────────────────┐
-          │                           │                           │
-          ▼                           ▼                           ▼
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│Liquidation.sol  │       │  OrderBook.sol  │       │FundingRate.sol  │
-│   (清算引擎)    │       │   (限价单)      │       │  (资金费率)     │
-└─────────────────┘       └─────────────────┘       └─────────────────┘
-          │                         │
-          ▼                         ▼
-┌─────────────────┐       ┌─────────────────┐
-│TakeProfitStop   │       │ RiskManager.sol │
-│   Loss.sol      │       │   (风控管理)    │
-│ (止盈止损)      │       └─────────────────┘
-└─────────────────┘
+                              用户浏览器
+                                 │
+                    ┌────────────┼────────────┐
+                    │            │            │
+                    ▼            ▼            ▼
+              ┌──────────┐ ┌──────────┐ ┌──────────┐
+              │ Next.js  │ │ WebSocket│ │ 链上合约  │
+              │ 前端     │ │ 实时推送  │ │ (现货)   │
+              │ :3000    │ │ ws:8081  │ │          │
+              └──────────┘ └──────────┘ └──────────┘
+                    │            │            │
+                    ▼            ▼            │
+              ┌──────────────────────┐       │
+              │   撮合引擎 (TypeScript)│       │
+              │   Bun runtime :8081  │       │
+              │                      │       │
+              │ ┌──────────────────┐ │       │
+              │ │ 订单簿 + 撮合    │ │       │
+              │ │ 仓位管理        │ │       │
+              │ │ PnL 计算        │ │       │
+              │ │ 强平 + ADL      │ │       │
+              │ │ 资金费结算      │ │       │
+              │ └──────────────────┘ │       │
+              └──────────────────────┘       │
+                    │          │              │
+              ┌─────┘    ┌─────┘             │
+              ▼          ▼                   ▼
+        ┌──────────┐ ┌──────────┐    ┌──────────────┐
+        │  Redis   │ │PostgreSQL│    │ Base Sepolia  │
+        │ (主存储) │ │(镜像/审计)│    │   合约       │
+        │  :6379   │ │  :5432   │    │              │
+        └──────────┘ └──────────┘    │ TokenFactory │
+                                     │ AMM/Router   │
+              ┌──────────────┐       │ PriceFeed    │
+              │  Go 后端      │       │ PerpVault    │
+              │  API :8080   │       │ SettlementV2 │
+              │  + Keeper    │       └──────────────┘
+              └──────────────┘
 ```
 
 ---
 
-## 数据流图
+## 模块职责
 
-### 1. 开多仓流程
+### 撮合引擎 (TypeScript/Bun) — 核心
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| HTTP/WS 服务 | server.ts | 12000+ 行主入口 |
+| 订单撮合 | engine.ts | 价格-时间优先 |
+| OI 追踪 | modules/perpVault.ts | 批量写入 PerpVault 合约 |
+| Merkle 快照 | modules/snapshot.ts | 每小时生成 stateRoot |
+| 提款授权 | modules/withdraw.ts | 生成 Merkle proof |
+| 链上存款中继 | modules/relay.ts | 监听 SettlementV2 事件 |
+| 资金费 | server.ts (settleFunding) | 8小时周期 |
+| 强平/ADL | server.ts | 每秒检查 |
+| 价格更新 | modules/priceFeed.ts | 写入 PriceFeed 合约 |
 
+### 智能合约 — 链上层
+| 合约 | 实际使用状态 | 说明 |
+|------|-------------|------|
+| TokenFactory | ✅ 活跃 | Meme 代币创建 |
+| AMM + Router | ✅ 活跃 | 现货交易 |
+| PriceFeed | ✅ 活跃 | 价格预言机 |
+| PerpVault | ⚠️ 部分 | 仅 OI 追踪，LP 池空 |
+| SettlementV2 | ❌ 未连通 | 设计为用户存款托管，实际空 |
+| PositionManager | ❌ 未使用 | 被引擎替代 |
+| Liquidation | ❌ 未使用 | 被引擎替代 |
+| FundingRate | ❌ 未使用 | 被引擎替代 |
+| Vault | ❌ 未使用 | 被 SettlementV2 替代 |
+
+### Go 后端 — 辅助层
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| REST API | ⚠️ 部分有效 | 读 PostgreSQL（多数表为空） |
+| Keeper (强平监控) | ❌ 无效 | 读不到仓位数据 |
+| Keeper (资金费) | ❌ 无效 | 读不到仓位数据 |
+| Auth (HMAC) | ✅ 有效 | 鉴权中间件正常 |
+
+### 前端 (Next.js)
+| 功能 | 数据来源 | 说明 |
+|------|---------|------|
+| 现货交易 | 链上合约 | 直接调合约 |
+| 合约下单 | 撮合引擎 WS/HTTP | 完全链下 |
+| 仓位显示 | 撮合引擎 | 无链上验证 |
+| 余额显示 | 引擎 + 钱包 | 可能双重计算 |
+| 存款 | ⚠️ 未连通 | 应调 SettlementV2 |
+| 提款 | ⚠️ 未连通 | 应走 Merkle proof |
+
+---
+
+## 数据流
+
+### 现货交易 (全链上 ✅)
 ```
-用户调用 Router.openLong(size, leverage)
-                │
-                ▼
-        Router.openLong()
-                │
-                ├──► Vault.lockMargin(user, margin)     // 锁定 BNB 保证金
-                │
-                ├──► PriceFeed.getMarkPrice()           // 获取标记价格（从AMM）
-                │
-                ├──► RiskManager.validatePosition()     // 风控检查
-                │
-                └──► PositionManager.openLong()         // 创建仓位
-                            │
-                            ├── 记录仓位信息
-                            ├── 更新总持仓量
-                            └── 触发事件 PositionOpened
-
-注意：开仓不直接影响价格，价格由现货交易驱动
-```
-
-### 2. 开空仓流程
-
-```
-用户调用 Router.openShort(size, leverage)
-                │
-                ▼
-        Router.openShort()
-                │
-                ├──► Vault.lockMargin(user, margin)     // 锁定 BNB 保证金
-                │
-                ├──► LendingPool.borrow(memeAmount)     // 借 MEME 币
-                │
-                ├──► PriceFeed.getMarkPrice()           // 获取标记价格（从AMM）
-                │
-                ├──► RiskManager.validatePosition()     // 风控检查
-                │
-                └──► PositionManager.openShort()        // 创建仓位
-                            │
-                            ├── 记录仓位信息
-                            ├── 记录借币数量
-                            ├── 更新总持仓量
-                            └── 触发事件 PositionOpened
-
-注意：开仓不直接影响价格，价格由现货交易驱动
-```
-
-### 2.5 现货交易流程（价格驱动）
-
-```
-用户调用 Router.swapBNBForMeme(minMemeOut)
-                │
-                ▼
-        Router.swapBNBForMeme()
-                │
-                ├──► AMM.swapBNBForMeme()               // 执行交易
-                │          │
-                │          ├── 更新储备金
-                │          ├── 转出 MEME 给用户
-                │          └── 价格上涨
-                │
-                └──► PriceFeed.updatePrice()            // 记录价格历史
-                            │
-                            └── 触发事件 PriceUpdated
-
-价格变动影响：
-├── 永续合约标记价格变化
-├── 多头/空头盈亏变化
-└── 可能触发清算
+用户 → Router.swap() → AMM 执行 → PriceFeed 更新价格
 ```
 
-### 3. 平仓流程
-
+### 永续合约交易 (链下撮合 ⚠️)
 ```
-用户调用 Router.closePosition()
-                │
-                ▼
-        Router.closePosition()
-                │
-                ├──► PriceFeed.getMarkPrice()           // 获取标记价格
-                │
-                ├──► PositionManager.calculatePnL()     // 计算盈亏
-                │
-                ├──► FundingRate.settleFunding(user)    // 结算资金费
-                │
-                ├──► (如果是空仓) LendingPool.repay()   // 还借的币
-                │
-                ├──► Vault.settlePnL()                  // 结算盈亏
-                │          │
-                │          ├── 盈利：从对手方转入
-                │          └── 亏损：转给对手方
-                │
-                └──► PositionManager.closePosition()    // 关闭仓位
-                            │
-                            ├── 删除仓位信息
-                            ├── 更新总持仓量
-                            └── 触发事件 PositionClosed
+用户 → WS submit_order → 引擎撮合 → 内存记账
+                                      ↓
+                              Redis 持久化 (仓位/余额)
+                                      ↓
+                              每 10s → PerpVault OI 更新 (链上)
+                              每 30s → 批量结算队列 (链上, 待完善)
+                              每 1h  → Merkle 快照 (链上, 待验证)
 ```
 
-### 4. 清算流程
-
+### ⚠️ 当前缺失的数据流
 ```
-Keeper 调用 Liquidation.liquidate(user)
-                │
-                ▼
-      Liquidation.liquidate()
-                │
-                ├──► PriceFeed.getTWAP()                // 获取 TWAP 价格
-                │
-                ├──► PositionManager.getMarginRatio()   // 计算保证金率
-                │
-                ├──► require(marginRatio < maintenance) // 检查可清算
-                │
-                ├──► PositionManager.forceClose()       // 强制平仓
-                │
-                ├──► Vault.distributeLiquidation()      // 分配清算金
-                │          │
-                │          ├── 清算人奖励: 0.5%
-                │          └── 剩余给对手方
-                │
-                └──► 触发事件 Liquidated
-```
-
-### 5. LP 存币流程
-
-```
-用户调用 Router.depositLP(memeAmount)
-                │
-                ▼
-        Router.depositLP()
-                │
-                ├──► MemeToken.transferFrom(user)       // 转入 MEME
-                │
-                ├──► LendingPool.deposit(amount)        // 存入借贷池
-                │          │
-                │          ├── 计算 LP Token 数量
-                │          └── 更新总存款
-                │
-                └──► LPToken.mint(user, lpTokens)       // 铸造 LP 凭证
+❌ 用户存款 → SettlementV2.deposit()    (未连通)
+❌ 用户提款 → SettlementV2.withdraw()   (未连通)
+❌ PnL 结算 → PerpVault.settle*()       (火烧不忘式，失败忽略)
+❌ 保险基金 → PerpVault 链上池           (纯内存)
+❌ Keeper   → 撮合引擎 HTTP             (读空库)
 ```
 
 ---
 
-## 状态变量关系
+## 合约地址 (Base Sepolia)
 
-### PositionManager 核心状态
-
-```solidity
-// 用户仓位
-mapping(address => Position) public positions;
-
-struct Position {
-    bool isLong;              // 方向
-    uint256 size;             // 仓位大小 (BNB 计价)
-    uint256 collateral;       // 保证金 (BNB)
-    uint256 entryPrice;       // 开仓价格
-    uint256 leverage;         // 杠杆倍数
-    uint256 borrowedMeme;     // 借的 MEME (做空用)
-    uint256 lastFundingTime;  // 上次资金费时间
-    int256 accFundingFee;     // 累计资金费
-}
-
-// 全局状态
-uint256 public totalLongSize;   // 总多头持仓
-uint256 public totalShortSize;  // 总空头持仓
-```
-
-### Vault 核心状态
-
-```solidity
-// 用户余额
-mapping(address => uint256) public balances;           // 可用余额
-mapping(address => uint256) public lockedBalances;     // 锁定保证金
-
-// 全局
-uint256 public totalBalance;
-```
-
-### LendingPool 核心状态
-
-```solidity
-// LP 状态
-uint256 public totalDeposits;      // 总存款
-uint256 public totalBorrowed;      // 总借出
-uint256 public accInterestPerShare; // 累计每股利息
-
-// 用户状态
-mapping(address => uint256) public userDeposits;
-mapping(address => uint256) public userDebt;         // 借款
-mapping(address => uint256) public rewardDebt;       // 已领利息
-```
-
-### AMM 核心状态
-
-```solidity
-// 真实储备金（用于现货交易和定价）
-uint256 public reserveBNB;      // BNB 储备
-uint256 public reserveMEME;     // MEME 储备
-uint256 public K;               // 恒定乘积 (reserveBNB * reserveMEME)
-
-// 价格计算
-// spotPrice = reserveBNB / reserveMEME
-// 买入 MEME：reserveBNB 增加 → 价格上涨
-// 卖出 MEME：reserveBNB 减少 → 价格下跌
-```
-
-### PriceFeed 核心状态
-
-```solidity
-// 引用 AMM 合约
-IAMM public amm;
-
-// 价格历史 (用于 TWAP)
-struct PricePoint {
-    uint256 price;
-    uint256 timestamp;
-    uint256 cumulativePrice;
-}
-PricePoint[] public priceHistory;
-
-// 从 AMM 读取现货价格
-function getSpotPrice() public view returns (uint256) {
-    return amm.getSpotPrice();
-}
-
-// 计算 TWAP（用于清算）
-function getTWAP() public view returns (uint256);
-
-// 标记价格 = (现货 + TWAP) / 2
-function getMarkPrice() public view returns (uint256);
-```
+详见 `frontend/contracts/deployments/base-sepolia.json`
 
 ---
 
-## 权限模型
+## 参考文档
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Owner (多签)                         │
-│                                                             │
-│  - 设置风控参数                                              │
-│  - 暂停/恢复合约                                             │
-│  - 升级合约 (通过时间锁)                                     │
-│  - 添加/移除 Keeper                                         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       Timelock (48h)                        │
-│                                                             │
-│  - 所有敏感操作延迟 48 小时执行                               │
-│  - 用户有时间退出                                            │
-└─────────────────────────────────────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          │                   │                   │
-          ▼                   ▼                   ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│     Keeper      │ │     Router      │ │    Contracts    │
-│                 │ │                 │ │                 │
-│ - 执行清算       │ │ - 用户入口      │ │ - 内部调用      │
-│ - 执行订单       │ │ - 权限检查      │ │ - 受限访问      │
-│ - 更新价格       │ │                 │ │                 │
-└─────────────────┘ └─────────────────┘ └─────────────────┘
-```
-
----
-
-## 合约依赖关系
-
-```
-                      Presale（内盘认购）
-                           │
-                           │ 打满后初始化
-                           ▼
-MemeToken ◄───────────────AMM（现货交易）────────────┐
-    │                      │                        │
-    │                      │ 价格驱动               │
-    │                      ▼                        │
-    │               PriceFeed（价格聚合）            │
-    │                      │                        │
-    ▼                      ▼                        │
-LPToken ◄── LendingPool ◄── PositionManager ────────┤
-                │                   │               │
-                │                   ▼               │
-                │              Vault ───────────────┘
-                │                   │
-                │                   ▼
-                └────────────► RiskManager
-                                    │
-        ┌───────────────────────────┼───────────────────────────┐
-        │                           │                           │
-        ▼                           ▼                           ▼
-   Liquidation               OrderBook              TakeProfitStopLoss
-        │                           │                           │
-        └───────────────────────────┼───────────────────────────┘
-                                    │
-                                    ▼
-                                 Router
-                                    │
-                                    ▼
-                                  User
-
-关键点：
-├── AMM 负责现货交易和定价
-├── PriceFeed 从 AMM 读取价格，计算 TWAP
-├── 永续合约使用 PriceFeed 价格
-└── 价格由现货交易驱动
-```
-
----
-
-## Gas 优化策略
-
-### 1. 存储优化
-```solidity
-// 使用 packed struct
-struct Position {
-    uint128 size;        // 够用了
-    uint128 collateral;
-    uint64 entryPrice;   // 用定点数
-    uint32 leverage;     // 最大 100
-    uint32 lastFundingTime;
-    bool isLong;
-}
-```
-
-### 2. 批量操作
-```solidity
-// Keeper 批量清算
-function liquidateBatch(address[] calldata users) external {
-    for (uint i = 0; i < users.length; i++) {
-        _liquidate(users[i]);
-    }
-}
-```
-
-### 3. 缓存读取
-```solidity
-// 缓存 storage 变量到 memory
-function closePosition() external {
-    Position memory pos = positions[msg.sender];  // 一次读取
-    // 后续使用 pos 而不是 positions[msg.sender]
-}
-```
-
----
-
-## 升级策略
-
-### 使用 UUPS 代理模式
-
-```
-┌─────────────┐     ┌─────────────┐
-│   Proxy     │────►│Implementation│
-│ (存储状态)   │     │  (逻辑代码)  │
-└─────────────┘     └─────────────┘
-       │                   │
-       │            ┌──────┴──────┐
-       │            │             │
-       ▼            ▼             ▼
-   Storage      Logic V1      Logic V2
-                              (升级后)
-```
-
-### 升级流程
-```
-1. 部署新 Implementation
-2. 提交升级提案到 Timelock
-3. 等待 48 小时
-4. 执行升级
-5. 验证状态正确
-```
+- 结算机制: `docs/SETTLEMENT_DESIGN.md`
+- 问题清单: `docs/ISSUES_AUDIT_REPORT.md`
+- 合约接口: `docs/CONTRACTS_INTERFACE.md`
+- API 文档: `docs/API_SPECIFICATION_V2.md`

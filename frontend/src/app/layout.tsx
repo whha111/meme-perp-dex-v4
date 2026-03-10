@@ -22,8 +22,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" style={{ background: '#0B0B0B' }}>
-      <body className={inter.className} style={{ background: '#0B0B0B', minHeight: '100vh' }}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.className} bg-okx-bg-primary min-h-screen`}>
         <Providers>{children}</Providers>
       </body>
     </html>

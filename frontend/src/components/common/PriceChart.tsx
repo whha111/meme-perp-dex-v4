@@ -9,7 +9,7 @@ interface PriceChartProps {
 
 declare global {
   interface Window {
-    TradingView: any;
+    TradingView?: { widget: new (config: Record<string, unknown>) => unknown };
   }
 }
 

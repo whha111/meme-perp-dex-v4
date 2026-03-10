@@ -17,16 +17,16 @@
  * - Token 数量: 1e18
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
-import { createWalletClient, http, keccak256, parseEther } from "viem";
+import { createWalletClient, createPublicClient, http, keccak256, parseEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
-import { MATCHING_ENGINE_URL, SETTLEMENT_ADDRESS } from "@/config/api";
-import { CONTRACTS } from "@/lib/contracts";
-import { useWebSocketMessage } from "@/lib/websocket/hooks";
-import { MessageType } from "@/lib/websocket/types";
+import { bsc } from "viem/chains";
+import { MATCHING_ENGINE_URL, SETTLEMENT_ADDRESS, SETTLEMENT_V2_ADDRESS } from "@/config/api";
+import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI } from "@/lib/contracts";
+import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
+import { getWebSocketManager } from "@/hooks/common/useUnifiedWebSocket";
 import {
   signOrder,
   submitOrder,
@@ -56,6 +56,7 @@ export const PositionStatusValue = {
 
 export interface PairedPosition {
   pairId: string;
+  trader?: Address;                   // 仓位持有者地址 (后端风控推送)
   token: Address;
   isLong: boolean;
   size: string;
@@ -69,6 +70,7 @@ export interface PairedPosition {
   margin?: string;
   marginRatio?: string;
   maintenanceMargin?: string;
+  mmr?: string;                       // 维持保证金率 (基点, 与 tradingDataStore 同步)
   unrealizedPnL: string;
   realizedPnL?: string;
   roe?: string;
@@ -139,6 +141,12 @@ export interface UserBalance {
 }
 
 // ============================================================
+// Stable empty constants (prevent unnecessary React re-renders)
+// ============================================================
+const EMPTY_RECENT_TRADES: readonly { id: string; price: string; size: string; side: "buy" | "sell"; timestamp: number }[] = Object.freeze([]);
+const NOOP_REFRESH = (_token: Address) => {};
+
+// ============================================================
 // Hook Return Type
 // ============================================================
 
@@ -150,30 +158,30 @@ export interface UsePerpetualV2Return {
   positions: PairedPosition[];
   hasPosition: boolean;
   pendingOrders: OrderInfo[];
+  /** @deprecated Always null. Order book data flows through WebSocket → tradingDataStore. */
   orderBook: { longs: OrderBookLevel[]; shorts: OrderBookLevel[]; lastPrice: string } | null;
-  recentTrades: Array<{
-    id: string;
-    price: string;
-    size: string;
-    side: "buy" | "sell";
-    timestamp: number;
-  }>;
-  submitMarketOrder: (token: Address, isLong: boolean, size: string, leverage: number) => Promise<{ success: boolean; orderId?: string; error?: string }>;
-  submitLimitOrder: (token: Address, isLong: boolean, size: string, leverage: number, price: string) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  /** @deprecated Always empty. Trade data flows through WebSocket → tradingDataStore. */
+  recentTrades: readonly { id: string; price: string; size: string; side: "buy" | "sell"; timestamp: number }[];
+  submitMarketOrder: (token: Address, isLong: boolean, size: string, leverage: number, options?: { takeProfit?: string; stopLoss?: string }) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  submitLimitOrder: (token: Address, isLong: boolean, size: string, leverage: number, price: string, options?: { takeProfit?: string; stopLoss?: string }) => Promise<{ success: boolean; orderId?: string; error?: string }>;
   cancelPendingOrder: (orderId: string) => Promise<{ success: boolean; error?: string }>;
   closePair: (pairId: string) => Promise<{ success: boolean; error?: string }>;
   approveToken: (token: Address, amount: string) => Promise<void>;
   approveTradingWallet: (token: Address, amount?: string) => Promise<`0x${string}`>;
-  deposit: (token: Address, amount: string) => Promise<void>;
-  withdraw: (token: Address, amount: string) => Promise<void>;
+  deposit: (token: Address, amount: string) => Promise<string>;
+  withdraw: (token: Address, amount: string) => Promise<string | null>;
   refreshBalance: () => void;
   refreshPositions: () => void;
   refreshOrders: () => void;
+  /** @deprecated No-op. Order book refreshes via WebSocket. */
   refreshOrderBook: (token: Address) => void;
+  /** @deprecated No-op. Recent trades refresh via WebSocket. */
   refreshRecentTrades: (token: Address) => void;
   isLoading: boolean;
   isSigningOrder: boolean;
   isSubmittingOrder: boolean;
+  isDepositing: boolean;
+  isWithdrawing: boolean;
   isPending: boolean;
   isConfirming: boolean;
   error: string | null;
@@ -285,6 +293,8 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
   // ── Signing / submitting state ─────────────────────────────
   const [isSigningOrder, setIsSigningOrder] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // ── Derive local WalletClient from trading wallet signature ─
@@ -296,7 +306,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       const account = privateKeyToAccount(privateKey);
       return createWalletClient({
         account,
-        chain: baseSepolia,
+        chain: bsc,
         transport: http(),
       });
     } catch (e) {
@@ -305,10 +315,44 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     }
   }, [tradingWalletSignature]);
 
+  // Public client for reading chain state and waiting for tx receipts
+  const publicClient = useMemo(() => createPublicClient({
+    chain: bsc,
+    transport: http(),
+  }), []);
+
   // Resolve settlement address: env var → hardcoded from contracts.ts
   const settlementAddress = (SETTLEMENT_ADDRESS || CONTRACTS.SETTLEMENT) as Address;
 
-  // ── Balance: HTTP for initial load, WS for real-time updates ──
+  // Resolve SettlementV2 address (Merkle withdrawal system)
+  const settlementV2Address = (SETTLEMENT_V2_ADDRESS || CONTRACTS.SETTLEMENT_V2) as Address | undefined;
+
+  // ── WS Auth: authenticate trading wallet for real-time position/balance/orders ──
+  const wsConnected = useTradingDataStore(state => state.wsConnected);
+  useEffect(() => {
+    if (!wsConnected || !tradingWalletAddress || !tradingWalletSignature) return;
+
+    const manager = getWebSocketManager();
+    if (!manager) return;
+
+    // Derive private key → local account for signing auth message
+    const privateKey = keccak256(tradingWalletSignature);
+    const account = privateKeyToAccount(privateKey);
+
+    manager.authenticate(
+      tradingWalletAddress,
+      async (msg: string) => {
+        const walletClient = createWalletClient({
+          account,
+          chain: bsc,
+          transport: http(),
+        });
+        return walletClient.signMessage({ account, message: msg });
+      }
+    );
+  }, [wsConnected, tradingWalletAddress, tradingWalletSignature]);
+
+  // ── Balance: WS primary (via subscribe_trader), HTTP for initial load ──
   const {
     data: httpBalance,
     isLoading: isBalanceLoading,
@@ -317,52 +361,43 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     queryFn: () => fetchBalance(tradingWalletAddress!),
     enabled: !!tradingWalletAddress,
     retry: 2,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: Infinity,           // No auto-refetch; WS handles real-time updates
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,          // Fetch once on mount
   });
 
-  // WS balance kept in local state for instant updates
-  const [wsBalance, setWsBalance] = useState<UserBalance | null>(null);
+  // WS balance from tradingDataStore (set by useUnifiedWebSocket on `balance` message)
+  const storeBalance = useTradingDataStore(state => state.balance);
 
-  // Listen for WS "balance" messages → use pushed data directly
-  useWebSocketMessage<{ trader: string; availableBalance: string; usedMargin: string; unrealizedPnL: string; walletBalance?: string; settlementAvailable?: string; settlementLocked?: string }>(
-    MessageType.BALANCE,
-    useCallback((message: { data?: { trader?: string; availableBalance?: string; usedMargin?: string; unrealizedPnL?: string; walletBalance?: string; settlementAvailable?: string; settlementLocked?: string } }) => {
-      const d = message.data;
-      if (d && d.trader?.toLowerCase() === tradingWalletAddress?.toLowerCase()) {
-        const available = BigInt(d.availableBalance || "0");
-        const locked = BigInt(d.usedMargin || "0");
-        const unrealizedPnL = BigInt(d.unrealizedPnL || "0");
-        const walletBalance = BigInt(d.walletBalance || "0");
-        const settlementAvailable = BigInt(d.settlementAvailable || "0");
-        const settlementLocked = BigInt(d.settlementLocked || "0");
-        setWsBalance({
-          available,
-          locked,
-          unrealizedPnL,
-          equity: available + locked + unrealizedPnL,
-          walletBalance,
-          settlementAvailable,
-          settlementLocked,
-        });
+  // WS takes priority, HTTP is fallback for initial load
+  const balance: UserBalance | null = storeBalance
+    ? {
+        available: storeBalance.available,
+        locked: storeBalance.locked,
+        unrealizedPnL: storeBalance.unrealizedPnL,
+        equity: storeBalance.equity,
+        walletBalance: storeBalance.walletBalance,
       }
-    }, [tradingWalletAddress])
-  );
+    : httpBalance ?? null;
 
-  // WS takes priority, HTTP is fallback
-  const balance = wsBalance ?? httpBalance ?? null;
-
-  // ── Positions from backend API ─────────────────────────────
-  const { data: positionsData } = useQuery({
+  // ── Positions: WS primary (via subscribe_trader), HTTP for initial load ──
+  const { data: httpPositions } = useQuery({
     queryKey: ["perpetual-positions", tradingWalletAddress],
     queryFn: () => getUserPositions(tradingWalletAddress!),
     enabled: !!tradingWalletAddress,
-    staleTime: 5_000,
+    staleTime: Infinity,           // No auto-refetch; WS handles real-time updates
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
+  // WS positions from tradingDataStore (set by useUnifiedWebSocket on `position` messages)
+  const storePositions = useTradingDataStore(state => state.positions);
+
+  // WS takes priority when available, HTTP for initial load
   const positions: PairedPosition[] = useMemo(() => {
-    if (!positionsData) return [];
-    return positionsData.map((p) => ({
+    const source = storePositions.length > 0 ? storePositions : httpPositions;
+    if (!source) return [];
+    return source.map((p) => ({
       pairId: p.pairId,
       token: p.token,
       isLong: p.isLong,
@@ -386,47 +421,34 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       isLiquidatable: p.isLiquidatable,
       adlRanking: p.adlRanking,
     }));
-  }, [positionsData]);
+  }, [storePositions, httpPositions]);
 
-  // WS: refetch positions on position updates (实时刷新)
-  useWebSocketMessage(MessageType.POSITIONS, useCallback(() => {
-    if (tradingWalletAddress) {
-      // 使用 refetchQueries 立即重新获取数据，而不是 invalidateQueries
-      queryClient.refetchQueries({
-        queryKey: ["perpetual-positions", tradingWalletAddress],
-      });
-    }
-  }, [tradingWalletAddress, queryClient]));
-
-  // ── Orders from backend API ────────────────────────────────
-  const { data: ordersData } = useQuery({
+  // ── Orders: WS primary (via subscribe_trader), HTTP for initial load ──
+  const { data: httpOrders } = useQuery({
     queryKey: ["perpetual-orders", tradingWalletAddress],
     queryFn: async () => {
       const raw = await getUserOrders(tradingWalletAddress!);
       return raw.map(toOrderInfo);
     },
     enabled: !!tradingWalletAddress,
-    staleTime: 5_000,
+    staleTime: Infinity,           // No auto-refetch; WS handles real-time updates
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
-  const pendingOrders: OrderInfo[] = useMemo(() => {
-    if (!ordersData) return [];
-    return ordersData.filter((o) => PENDING_STATUSES.has(o.status));
-  }, [ordersData]);
+  // WS orders from tradingDataStore (set by useUnifiedWebSocket on `orders` messages)
+  const storePendingOrders = useTradingDataStore(state => state.pendingOrders);
 
-  // WS: refetch orders on order updates (实时刷新)
-  useWebSocketMessage(MessageType.ORDERS, useCallback(() => {
-    if (tradingWalletAddress) {
-      queryClient.refetchQueries({
-        queryKey: ["perpetual-orders", tradingWalletAddress],
-      });
-    }
-  }, [tradingWalletAddress, queryClient]));
+  // WS takes priority when available, HTTP for initial load
+  const pendingOrders: OrderInfo[] = useMemo(() => {
+    if (storePendingOrders.length > 0) return storePendingOrders;
+    if (!httpOrders) return [];
+    return httpOrders.filter((o) => PENDING_STATUSES.has(o.status));
+  }, [storePendingOrders, httpOrders]);
 
   // ── Refresh callbacks ──────────────────────────────────────
   const refreshBalance = useCallback(() => {
     if (tradingWalletAddress) {
-      setWsBalance(null); // Clear WS cache so HTTP re-fetches
       queryClient.invalidateQueries({
         queryKey: ["perpetual-balance", tradingWalletAddress],
       });
@@ -449,21 +471,17 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     }
   }, [tradingWalletAddress, queryClient]);
 
-  // ── Order book & recent trades (still placeholder, separate feature) ──
-  const [orderBook] = useState<{ longs: OrderBookLevel[]; shorts: OrderBookLevel[]; lastPrice: string } | null>(null);
-  const [recentTrades] = useState<Array<{
-    id: string;
-    price: string;
-    size: string;
-    side: "buy" | "sell";
-    timestamp: number;
-  }>>([]);
-  const refreshOrderBook = useCallback((_token: Address) => {}, []);
-  const refreshRecentTrades = useCallback((_token: Address) => {}, []);
+  // ── Order book & recent trades ──
+  // DEPRECATED: These are dead state — order book data flows through WebSocket → tradingDataStore.
+  // Kept as no-ops for interface compatibility. Use useTradingDataStore selectors instead.
+  const orderBook = null;
+  const recentTrades = EMPTY_RECENT_TRADES;
+  const refreshOrderBook = NOOP_REFRESH;
+  const refreshRecentTrades = NOOP_REFRESH;
 
   // ── Submit Market Order ────────────────────────────────────
   const submitMarketOrder = useCallback(
-    async (token: Address, isLong: boolean, size: string, leverage: number) => {
+    async (token: Address, isLong: boolean, size: string, leverage: number, options?: { takeProfit?: string; stopLoss?: string }) => {
       if (!tradingWalletClient || !tradingWalletAddress) {
         return { success: false, error: "交易钱包未连接" };
       }
@@ -489,9 +507,9 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
         const signedOrder = await signOrder(tradingWalletClient, settlementAddress, params);
         setIsSigningOrder(false);
 
-        // 4. Submit to matching engine
+        // 4. Submit to matching engine (P2-2: pass TP/SL)
         setIsSubmittingOrder(true);
-        const result = await submitOrder(signedOrder);
+        const result = await submitOrder(signedOrder, options);
         setIsSubmittingOrder(false);
 
         if (result.success) {
@@ -518,7 +536,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
 
   // ── Submit Limit Order ─────────────────────────────────────
   const submitLimitOrder = useCallback(
-    async (token: Address, isLong: boolean, size: string, leverage: number, price: string) => {
+    async (token: Address, isLong: boolean, size: string, leverage: number, price: string, options?: { takeProfit?: string; stopLoss?: string }) => {
       if (!tradingWalletClient || !tradingWalletAddress) {
         return { success: false, error: "交易钱包未连接" };
       }
@@ -546,7 +564,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
         setIsSigningOrder(false);
 
         setIsSubmittingOrder(true);
-        const result = await submitOrder(signedOrder);
+        const result = await submitOrder(signedOrder, options);
         setIsSubmittingOrder(false);
 
         if (result.success) {
@@ -642,20 +660,52 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     [tradingWalletClient, tradingWalletAddress, refreshPositions, refreshBalance]
   );
 
-  // ── Token approve / deposit / withdraw (not yet implemented) ──
+  // P3-P5: These are no-ops — approval happens inside deposit() (L681-688).
+  // Kept for interface compatibility; callers should use deposit() directly.
   const approveToken = useCallback(async (_token: Address, _amount: string) => {
-    throw new Error("Token 授权功能待实现");
+    console.warn("[usePerpetualV2] approveToken is a no-op. Use deposit() which handles approval internally.");
   }, []);
 
-  const approveTradingWallet = useCallback(async (_token: Address, _amount?: string) => {
-    throw new Error("交易钱包授权功能待实现");
+  const approveTradingWallet = useCallback(async (_token: Address, _amount?: string): Promise<`0x${string}`> => {
+    console.warn("[usePerpetualV2] approveTradingWallet is a no-op. Use deposit() which handles approval internally.");
+    return "0x0" as `0x${string}`;
   }, []);
 
-  const deposit = useCallback(async (_token: Address, _amount: string) => {
-    throw new Error("充值功能待实现");
-  }, []);
+  const deposit = useCallback(async (token: Address, amount: string): Promise<string> => {
+    if (!tradingWalletClient) throw new Error("交易钱包未连接");
+    if (!settlementV2Address) throw new Error("SettlementV2 合约未配置");
 
-  const withdraw = useCallback(async (token: Address, amount: string) => {
+    const amountWei = parseEther(amount);
+    if (amountWei <= 0n) throw new Error("无效的充值金额");
+
+    setIsDepositing(true);
+    try {
+      // 1. Approve WETH → SettlementV2
+      const approveTx = await tradingWalletClient.writeContract({
+        address: token,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [settlementV2Address, amountWei],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveTx });
+
+      // 2. Deposit to SettlementV2
+      const depositTx = await tradingWalletClient.writeContract({
+        address: settlementV2Address,
+        abi: SETTLEMENT_V2_ABI,
+        functionName: "deposit",
+        args: [amountWei],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: depositTx });
+
+      refreshBalance();
+      return depositTx;
+    } finally {
+      setIsDepositing(false);
+    }
+  }, [tradingWalletClient, settlementV2Address, publicClient, refreshBalance]);
+
+  const withdraw = useCallback(async (token: Address, amount: string): Promise<string | null> => {
     if (!tradingWalletAddress) throw new Error("交易钱包未连接");
     if (!mainWalletAddress) throw new Error("主钱包地址未提供");
 
@@ -663,20 +713,77 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     const amountInWei = parseEther(amount);
     if (amountInWei <= 0n) throw new Error("无效的提现金额");
 
-    const res = await fetch(`${MATCHING_ENGINE_URL}/api/wallet/withdraw`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tradingWallet: tradingWalletAddress,
-        mainWallet: mainWalletAddress,
-        amount: amountInWei.toString(),
-        token,
-      }),
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || "提现失败");
-    refreshBalance();
-  }, [tradingWalletAddress, mainWalletAddress, refreshBalance]);
+    setIsWithdrawing(true);
+    try {
+      // P3-P1: 签名提款消息，后端验证签名后才生成 Merkle proof
+      const withdrawSignature = tradingWalletClient
+        ? await tradingWalletClient.signMessage({
+            account: tradingWalletClient.account!,
+            message: `Withdraw ${amountInWei.toString()} for ${tradingWalletAddress.toLowerCase()}`,
+          })
+        : undefined;
+
+      // Step 1: 请求后端生成 Merkle proof + EIP-712 签名
+      let data: { success: boolean; error?: string; authorization?: { userEquity: string; merkleProof: string[]; deadline: string; signature: string } };
+      try {
+        const res = await fetch(`${MATCHING_ENGINE_URL}/api/wallet/withdraw`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tradingWallet: tradingWalletAddress,
+            mainWallet: mainWalletAddress,
+            amount: amountInWei.toString(),
+            token,
+            signature: withdrawSignature,
+          }),
+        });
+        data = await res.json();
+      } catch {
+        throw new Error("提现服务暂时不可用，请稍后重试");
+      }
+      if (!data.success) throw new Error(data.error || "提现失败");
+
+      // Step 2: 如果后端返回 Merkle 授权信息，提交到链上 SettlementV2
+      let withdrawTxHash: string | null = null;
+      if (data.authorization && settlementV2Address && tradingWalletClient) {
+        const { userEquity, merkleProof, deadline, signature } = data.authorization;
+
+        // AUDIT-FIX FE-C03: 验证 Merkle proof 元素格式，避免无效数据导致不可读的合约错误
+        if (!Array.isArray(merkleProof) || merkleProof.length === 0) {
+          throw new Error("Invalid merkle proof: empty or not an array");
+        }
+        const validatedProof = merkleProof.map((p: unknown, i: number) => {
+          if (typeof p !== 'string' || !p.match(/^0x[0-9a-fA-F]{64}$/)) {
+            throw new Error(`Invalid merkle proof element at index ${i}: ${String(p)}`);
+          }
+          return p as `0x${string}`;
+        });
+        if (typeof signature !== 'string' || !signature.match(/^0x[0-9a-fA-F]+$/)) {
+          throw new Error("Invalid signature format from server");
+        }
+
+        const txHash = await tradingWalletClient.writeContract({
+          address: settlementV2Address,
+          abi: SETTLEMENT_V2_ABI,
+          functionName: "withdraw",
+          args: [
+            BigInt(amountInWei),
+            BigInt(userEquity),
+            validatedProof,
+            BigInt(deadline),
+            signature as `0x${string}`,
+          ],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        withdrawTxHash = txHash;
+      }
+
+      refreshBalance();
+      return withdrawTxHash;
+    } finally {
+      setIsWithdrawing(false);
+    }
+  }, [tradingWalletAddress, mainWalletAddress, tradingWalletClient, settlementV2Address, publicClient, refreshBalance]);
 
   return {
     mainWalletAddress: mainWalletAddress,
@@ -704,6 +811,8 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     isLoading: isBalanceLoading,
     isSigningOrder,
     isSubmittingOrder,
+    isDepositing,
+    isWithdrawing,
     isPending: false,
     isConfirming: false,
     error,

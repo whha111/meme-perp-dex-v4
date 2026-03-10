@@ -33,8 +33,6 @@ export function useWebSocketKlines(
   interval: KlineInterval = "1m",
   limit: number = 100
 ) {
-  console.log(`[useWebSocketKlines] 初始化 - token=${token}, interval=${interval}, MATCHING_ENGINE_URL=${MATCHING_ENGINE_URL}`);
-
   const [klines, setKlines] = useState<Kline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,15 +41,13 @@ export function useWebSocketKlines(
   // ✅ 使用新的 spot kline API，从 Redis 获取包含真实交易的 K 线
   const fetchInitialData = useCallback(async () => {
     if (!token) {
-      console.log("[useWebSocketKlines] token 为空，跳过加载");
       return;
     }
 
     try {
       setLoading(true);
       // 新 API: /api/v1/spot/klines/latest/{token}?resolution=1m&limit=100
-      const url = `${MATCHING_ENGINE_URL}/api/v1/spot/klines/latest/${token}?resolution=${interval}&limit=${limit}`;
-      console.log(`[useWebSocketKlines] 请求K线数据: ${url}`);
+      const url = `${MATCHING_ENGINE_URL}/api/v1/spot/klines/latest/${token.toLowerCase()}?resolution=${interval}&limit=${limit}`;
       const res = await fetch(url);
 
       if (!res.ok) {
@@ -61,7 +57,6 @@ export function useWebSocketKlines(
       const json = await res.json();
 
       if (!json.success || !json.data) {
-        console.warn("[useWebSocketKlines] API returned no data:", json);
         setKlines([]);
         setError(json.error || "No data");
         return;
@@ -92,7 +87,6 @@ export function useWebSocketKlines(
 
       setKlines(formattedKlines);
       setError(null);
-      console.log(`[useWebSocketKlines] Loaded ${formattedKlines.length} klines for ${token}`);
     } catch (e) {
       console.error("Failed to fetch initial klines:", e);
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -124,7 +118,7 @@ export function useWebSocketKlines(
         // 订阅代币市场数据 (包含K线推送)
         await ws.subscribe([`kline:${token.toLowerCase()}`]);
 
-        console.log(`[useWebSocketKlines] Subscribed to token: ${token}`);
+        // subscribed
       } catch (err) {
         console.error("[useWebSocketKlines] WebSocket setup failed:", err);
       }
@@ -199,7 +193,7 @@ export function useWebSocketKlines(
       // ✅ 移除消息监听器
       unsubscribeMessage();
 
-      console.log(`[useWebSocketKlines] Unsubscribed from token: ${token}`);
+      // unsubscribed
     };
   }, [token, interval, limit, fetchInitialData]);
 

@@ -22,7 +22,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { useAccount, useChainId, useSignMessage } from "wagmi";
-import { baseSepolia, base } from "viem/chains";
+import { bscTestnet, bsc } from "viem/chains";
 import {
   createTradingWallet,
   getWalletSigningMessage,
@@ -110,7 +110,7 @@ export function useTradingWallet(): UseTradingWalletReturn {
   const privateKeyRef = useRef<Hex | null>(null);
 
   // 获取对应的 viem chain 对象
-  const chain = chainId === 8453 ? base : baseSepolia;
+  const chain = chainId === 56 ? bsc : bscTestnet;
 
   // RPC URL: 使用配置的 RPC 而非默认的 sepolia.base.org (会 403)
   const rpcUrl = NETWORK_CONFIG.RPC_URL;
@@ -168,7 +168,9 @@ export function useTradingWallet(): UseTradingWalletReturn {
           error: null,
         });
         // 恢复时也向后端注册 session (服务器可能重启过, 不阻塞恢复流程)
-        registerSessionWithBackend(stored.signature).catch(() => {});
+        registerSessionWithBackend(stored.signature).catch((err) =>
+          console.warn("[TradingWallet] Session register failed:", err)
+        );
       } catch {
         // 存储数据损坏，清除
         clearTradingWallet(mainWallet);
@@ -232,11 +234,9 @@ export function useTradingWallet(): UseTradingWalletReturn {
       console.log(
         `[useTradingWallet] Wallet activated: ${wallet.address.slice(0, 10)}...`
       );
-    } catch (e: any) {
-      const msg =
-        e?.code === 4001 || e?.message?.includes("rejected")
-          ? "用户取消签名"
-          : e?.message || "激活失败";
+    } catch (e) {
+      const { isUserRejection, extractErrorMessage } = await import("@/lib/errors/errorDictionary");
+      const msg = isUserRejection(e) ? "用户取消签名" : extractErrorMessage(e, "激活失败");
       setState((prev) => ({ ...prev, isLoading: false, error: msg }));
     }
   }, [mainWallet, isConnected, signMessageAsync, signingMessage, chainId, publicClient]);

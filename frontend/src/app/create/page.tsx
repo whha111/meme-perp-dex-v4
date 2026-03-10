@@ -13,7 +13,9 @@ import { NETWORK_CONFIG } from "@/lib/contracts";
 import { createTokenMetadata } from "@/lib/api/tokenMetadata";
 
 /**
- * 创建 Meme 代币页面 - Pump.fun 风格
+ * 创建 Meme 代币页面 — 匹配 Pencil 设计: 双栏布局
+ * 左栏: 代币信息表单 + 社交链接 + 初始购买 + 费用摘要 + 创建按钮
+ * 右栏: 代币参数 + 手续费分配 + 运作方式
  */
 export default function CreateTokenPage() {
   const router = useRouter();
@@ -69,7 +71,6 @@ export default function CreateTokenPage() {
   useEffect(() => {
     const saveMetadataAndRedirect = async () => {
       if (isConfirmed && createdTokenAddress && address) {
-        // 保存代币元数据到后端
         try {
           const instId = `${tokenSymbol}-USDT-SWAP`;
           await createTokenMetadata({
@@ -85,13 +86,12 @@ export default function CreateTokenPage() {
             telegram,
             discord,
             creatorAddress: address,
-            totalSupply: "1000000.0", // 1M tokens in base units
+            totalSupply: "1000000.0",
             initialBuyAmount: initialBuyEth || undefined,
           });
           console.log("Token metadata saved successfully");
         } catch (error) {
           console.error("Failed to save token metadata:", error);
-          // 不阻止跳转，即使保存失败
         }
 
         showToast(t("tokenCreated"), "success");
@@ -167,39 +167,35 @@ export default function CreateTokenPage() {
 
   const showWalletLoading = isReconnecting;
   const effectivelyConnected = isConnected && !isReconnecting;
+  const buyVal = parseFloat(initialBuyEth) || 0;
+  const totalCost = (parseFloat(serviceFeeEth) || 0.001) + buyVal;
 
   return (
-    <main className="min-h-screen bg-okx-bg-primary text-okx-text-primary">
+    <main className="min-h-screen bg-[#000000] text-okx-text-primary">
       <Navbar />
 
-      {/* 背景装饰 */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-okx-up/10 rounded-full blur-[128px]"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-okx-up/5 rounded-full blur-[128px]"></div>
+      {/* Title Section — full width */}
+      <div className="px-12 pt-10">
+        <h1 className="text-[32px] font-semibold text-white">
+          {t("title")}
+        </h1>
+        <p className="text-sm text-[#6e6e6e] font-mono mt-2">
+          {t("subtitle")}
+        </p>
       </div>
 
-      <div className="relative max-w-lg mx-auto px-4 py-8">
-        {/* 标题区域 */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 bg-okx-up/10 border border-okx-up/30 rounded-full px-4 py-1.5 mb-4">
-            <span className="text-2xl">🚀</span>
-            <span className="text-okx-up text-sm font-medium">{t("launchOnBase")}</span>
-          </div>
-          <h1 className="text-4xl font-black mb-3 bg-gradient-to-r from-okx-text-primary via-okx-up to-okx-accent bg-clip-text text-transparent">
-            {t("title")}
-          </h1>
-          <p className="text-okx-text-secondary text-sm">
-            {t("subtitle")}
-          </p>
-        </div>
+      {/* Two-column layout */}
+      <div className="flex gap-8 px-12 py-8">
+        {/* ====== Left Column — Form ====== */}
+        <div className="flex-1 flex flex-col gap-8">
 
-        {/* 主表单卡片 */}
-        <div className="bg-okx-bg-card border border-okx-border-primary rounded-2xl overflow-hidden">
-          {/* Logo 上传区域 */}
-          <div className="p-6 border-b border-okx-border-primary bg-gradient-to-b from-okx-bg-hover to-transparent">
-            <div className="flex justify-center">
-              <div className="relative group">
-                <div className="absolute -inset-1 bg-gradient-to-r from-okx-up to-okx-accent rounded-full opacity-30 blur group-hover:opacity-50 transition-opacity"></div>
+          {/* Token Info Card */}
+          <div className="bg-[#111111] border border-[#1A1A1A] rounded-lg p-6 space-y-6">
+            <h2 className="text-lg font-semibold text-white">{t("descriptionLabel") === "描述" ? "代币信息" : "Token Info"}</h2>
+
+            <div className="flex gap-6">
+              {/* Logo Upload */}
+              <div className="flex-shrink-0">
                 <ImageUpload
                   value={logoUrl}
                   onChange={(url, hash) => {
@@ -210,45 +206,42 @@ export default function CreateTokenPage() {
                   hint=""
                   size="lg"
                 />
+                <p className="text-center text-[#6e6e6e] text-xs mt-2">{t("uploadLogo")}</p>
               </div>
-            </div>
-            <p className="text-center text-okx-text-tertiary text-xs mt-3">{t("uploadLogo")}</p>
-          </div>
 
-          {/* 表单主体 */}
-          <div className="p-6 space-y-5">
-            {/* 名称和符号 */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-okx-text-secondary text-xs font-medium mb-2 uppercase tracking-wider">
-                  {t("nameLabel")} <span className="text-[#FF3B30]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={tokenName}
-                  onChange={(e) => setTokenName(e.target.value)}
-                  placeholder={t("namePlaceholder")}
-                  className="w-full bg-okx-bg-secondary border border-okx-border-secondary rounded-xl px-4 py-3 text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-up focus:ring-1 focus:ring-okx-up/50 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-okx-text-secondary text-xs font-medium mb-2 uppercase tracking-wider">
-                  {t("symbolLabel")} <span className="text-[#FF3B30]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={tokenSymbol}
-                  onChange={(e) => setTokenSymbol(e.target.value.toUpperCase())}
-                  placeholder={t("symbolPlaceholder")}
-                  maxLength={10}
-                  className="w-full bg-okx-bg-secondary border border-okx-border-secondary rounded-xl px-4 py-3 text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-up focus:ring-1 focus:ring-okx-up/50 transition-all uppercase"
-                />
+              {/* Name + Symbol fields */}
+              <div className="flex-1 space-y-4">
+                <div>
+                  <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">
+                    {t("nameLabel")} <span className="text-[#FF3B30]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={tokenName}
+                    onChange={(e) => setTokenName(e.target.value)}
+                    placeholder={t("namePlaceholder")}
+                    className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 py-3 text-white placeholder:text-[#6e6e6e] focus:outline-none focus:border-[#BFFF00] transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">
+                    {t("symbolLabel")} <span className="text-[#FF3B30]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={tokenSymbol}
+                    onChange={(e) => setTokenSymbol(e.target.value.toUpperCase())}
+                    placeholder={t("symbolPlaceholder")}
+                    maxLength={10}
+                    className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 py-3 text-white placeholder:text-[#6e6e6e] focus:outline-none focus:border-[#BFFF00] transition-colors uppercase"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* 描述 */}
+            {/* Description */}
             <div>
-              <label className="block text-okx-text-secondary text-xs font-medium mb-2 uppercase tracking-wider">
+              <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">
                 {t("descriptionLabel")}
               </label>
               <textarea
@@ -256,73 +249,61 @@ export default function CreateTokenPage() {
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t("descriptionPlaceholder")}
                 rows={3}
-                className="w-full bg-okx-bg-secondary border border-okx-border-secondary rounded-xl px-4 py-3 text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-up focus:ring-1 focus:ring-okx-up/50 transition-all resize-none"
+                className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 py-3 text-white placeholder:text-[#6e6e6e] focus:outline-none focus:border-[#BFFF00] transition-colors resize-none"
               />
             </div>
+          </div>
 
-            {/* 社交链接折叠区 */}
-            <div>
-              <button
-                onClick={() => setShowSocials(!showSocials)}
-                className="flex items-center gap-2 text-okx-text-secondary text-sm hover:text-okx-text-primary transition-colors"
-              >
-                <span className={`transform transition-transform ${showSocials ? 'rotate-90' : ''}`}>▶</span>
-                {t("addSocialLinks")}
-              </button>
+          {/* Social Links Card */}
+          <div className="bg-[#111111] border border-[#1A1A1A] rounded-lg p-6">
+            <button
+              onClick={() => setShowSocials(!showSocials)}
+              className="flex items-center justify-between w-full"
+            >
+              <span className="text-base font-semibold text-white">{t("addSocialLinks")}</span>
+              <svg className={`w-4 h-4 text-[#6e6e6e] transition-transform ${showSocials ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
-              {showSocials && (
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-okx-text-tertiary">🌐</span>
-                    <input
-                      type="url"
-                      value={website}
-                      onChange={(e) => setWebsite(e.target.value)}
-                      placeholder={t("websitePlaceholder")}
-                      className="w-full bg-okx-bg-secondary border border-okx-border-secondary rounded-lg pl-9 pr-3 py-2.5 text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-up text-sm"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-okx-text-tertiary">𝕏</span>
-                    <input
-                      type="url"
-                      value={twitter}
-                      onChange={(e) => setTwitter(e.target.value)}
-                      placeholder={t("twitterPlaceholder")}
-                      className="w-full bg-okx-bg-secondary border border-okx-border-secondary rounded-lg pl-9 pr-3 py-2.5 text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-up text-sm"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-okx-text-tertiary">✈️</span>
-                    <input
-                      type="url"
-                      value={telegram}
-                      onChange={(e) => setTelegram(e.target.value)}
-                      placeholder={t("telegramPlaceholder")}
-                      className="w-full bg-okx-bg-secondary border border-okx-border-secondary rounded-lg pl-9 pr-3 py-2.5 text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-up text-sm"
-                    />
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-okx-text-tertiary">💬</span>
-                    <input
-                      type="url"
-                      value={discord}
-                      onChange={(e) => setDiscord(e.target.value)}
-                      placeholder={t("discordPlaceholder")}
-                      className="w-full bg-okx-bg-secondary border border-okx-border-secondary rounded-lg pl-9 pr-3 py-2.5 text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-up text-sm"
-                    />
-                  </div>
+            {showSocials && (
+              <div className="grid grid-cols-2 gap-4 mt-5">
+                <div>
+                  <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">{t("websitePlaceholder")}</label>
+                  <input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..."
+                    className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 py-2.5 text-white placeholder:text-[#6e6e6e] focus:outline-none focus:border-[#BFFF00] text-sm" />
                 </div>
-              )}
+                <div>
+                  <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">Twitter / X</label>
+                  <input type="url" value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder="https://twitter.com/..."
+                    className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 py-2.5 text-white placeholder:text-[#6e6e6e] focus:outline-none focus:border-[#BFFF00] text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">Telegram</label>
+                  <input type="url" value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="https://t.me/..."
+                    className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 py-2.5 text-white placeholder:text-[#6e6e6e] focus:outline-none focus:border-[#BFFF00] text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">Discord</label>
+                  <input type="url" value={discord} onChange={(e) => setDiscord(e.target.value)} placeholder="https://discord.gg/..."
+                    className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 py-2.5 text-white placeholder:text-[#6e6e6e] focus:outline-none focus:border-[#BFFF00] text-sm" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Initial Buy Card */}
+          <div className="bg-[#111111] border border-[#1A1A1A] rounded-lg p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <span className="text-base font-semibold text-white">{t("initialBuyTitle")}</span>
+              <span className="text-xs text-[#6e6e6e] font-mono">{t("initialBuySubtitle")}</span>
             </div>
 
-            {/* 初始购买 */}
-            <div className="bg-okx-bg-secondary border border-okx-border-secondary rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-okx-text-secondary text-sm">{t("initialBuyTitle")}</span>
-                <span className="text-xs text-okx-text-tertiary">{t("initialBuySubtitle")}</span>
-              </div>
-              <div className="flex items-center gap-2">
+            <div>
+              <label className="block text-[#999999] text-xs font-medium font-mono mb-1.5">
+                {t("buyAmountLabel")}
+              </label>
+              <div className="flex items-center bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg px-3.5 h-12">
                 <input
                   type="number"
                   step="0.01"
@@ -330,125 +311,192 @@ export default function CreateTokenPage() {
                   value={initialBuyEth}
                   onChange={(e) => setInitialBuyEth(e.target.value)}
                   placeholder="0.00"
-                  className="flex-1 bg-transparent text-2xl font-bold text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none"
+                  className="flex-1 bg-transparent text-lg font-bold text-white placeholder:text-[#6e6e6e] focus:outline-none"
                 />
-                <div className="flex items-center gap-2 bg-okx-bg-hover rounded-lg px-3 py-2">
-                  <div className="w-6 h-6 rounded-full bg-okx-accent flex items-center justify-center">
-                    <span className="text-xs">Ξ</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-[#BFFF00] flex items-center justify-center">
+                    <span className="text-[10px] text-black font-bold">B</span>
                   </div>
-                  <span className="font-bold text-okx-text-primary">ETH</span>
+                  <span className="text-sm font-bold text-white">BNB</span>
                 </div>
-              </div>
-              {/* 快捷金额按钮 */}
-              <div className="flex gap-2 mt-3">
-                {["0.01", "0.05", "0.1", "0.5", "1"].map(val => (
-                  <button
-                    key={val}
-                    onClick={() => setInitialBuyEth(val)}
-                    className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-all ${
-                      initialBuyEth === val
-                        ? "bg-okx-up/20 border-okx-up text-okx-up"
-                        : "bg-okx-bg-hover border-okx-border-secondary text-okx-text-secondary hover:border-okx-border-hover hover:text-okx-text-primary"
-                    }`}
-                  >
-                    {val}
-                  </button>
-                ))}
               </div>
             </div>
-          </div>
 
-          {/* 代币参数信息条 */}
-          <div className="px-6 py-4 bg-okx-bg-secondary border-t border-okx-border-primary">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-okx-text-tertiary">{t("tokenSupply")}</span>
-                  <span className="text-okx-text-primary font-medium">1B</span>
-                </div>
-                <div className="w-px h-3 bg-okx-border-secondary"></div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-okx-text-tertiary">{t("graduation")}</span>
-                  <span className="text-okx-up font-medium">~5.16 ETH</span>
-                </div>
-                <div className="w-px h-3 bg-okx-border-secondary"></div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-okx-text-tertiary">{t("feeRate")}</span>
-                  <span className="text-okx-text-primary font-medium">1%</span>
-                </div>
-              </div>
-              <div className="text-okx-text-tertiary">
-                {t("bondingCurve")}
-              </div>
-            </div>
-          </div>
-
-          {/* 创建按钮区域 */}
-          <div className="p-6 bg-okx-bg-secondary">
-            {showWalletLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <div className="w-5 h-5 border-2 border-okx-up border-t-transparent rounded-full animate-spin"></div>
-                <span className="ml-3 text-okx-text-secondary text-sm">{tc("syncingWallet")}</span>
-              </div>
-            ) : !effectivelyConnected ? (
-              <div className="bg-okx-warning/10 border border-okx-warning/30 rounded-xl p-4">
-                <p className="text-okx-warning text-sm text-center font-medium">{tc("connectWalletFirst")}</p>
-              </div>
-            ) : (
-              <button
-                onClick={handleCreateToken}
-                disabled={isCreating || !tokenName || !tokenSymbol}
-                className="w-full relative group"
-              >
-                {/* 按钮光效 */}
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-okx-up to-okx-accent rounded-xl opacity-70 blur group-hover:opacity-100 transition-opacity"></div>
-                <div className={`relative bg-gradient-to-r from-okx-up to-okx-accent text-black px-6 py-4 rounded-xl font-bold text-lg transition-all ${
-                  isCreating || !tokenName || !tokenSymbol ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg hover:shadow-okx-up/30'
-                }`}>
-                  {isCreating ? (
-                    <span className="flex items-center justify-center gap-3">
-                      <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                      {step === "creating" && t("submitTx")}
-                      {step === "confirming" && t("waitingConfirm")}
-                      {step === "done" && t("createSuccess")}
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      🚀 {t("createTokenButton")}
-                    </span>
-                  )}
-                </div>
-              </button>
-            )}
-
-            {/* 费用提示 */}
-            <div className="mt-4 text-center space-y-1">
-              <p className="text-okx-text-tertiary text-xs">
-                {t("serviceFee")} {serviceFeeEth} ETH + {t("gas")}
-                {initialBuyEth && parseFloat(initialBuyEth) > 0 && (
-                  <span className="text-okx-up"> + {initialBuyEth} ETH {t("buyAmount")}</span>
-                )}
-              </p>
-              {txHash && (
-                <a
-                  href={`${NETWORK_CONFIG.BLOCK_EXPLORER}/tx/${txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-okx-up text-xs hover:underline"
+            {/* Quick buttons */}
+            <div className="flex gap-2">
+              {["0.01", "0.05", "0.1", "0.5", "1"].map(val => (
+                <button
+                  key={val}
+                  onClick={() => setInitialBuyEth(val)}
+                  className={`flex-1 h-9 text-xs font-medium rounded-lg border transition-all ${
+                    initialBuyEth === val
+                      ? "bg-[#1A1A1A] border-[#BFFF00] text-[#BFFF00]"
+                      : "bg-[#1A1A1A] border-[#2A2A2A] text-[#999999] hover:border-[#444] hover:text-white"
+                  }`}
                 >
-                  {t("viewTransaction")} ↗
-                </a>
+                  {val}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Fee Summary */}
+          <div className="space-y-2.5 px-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[#6e6e6e] font-mono">{t("creationFee")}</span>
+              <span className="text-[#999999] font-mono font-medium">{serviceFeeEth} BNB</span>
+            </div>
+            {buyVal > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#6e6e6e] font-mono">{t("initialBuy")}</span>
+                <span className="text-[#999999] font-mono font-medium">{initialBuyEth} BNB</span>
+              </div>
+            )}
+            <div className="h-px bg-[#1A1A1A]"></div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-white font-mono font-semibold">{t("totalLabel")}</span>
+              <span className="text-[#BFFF00] font-mono font-semibold">{totalCost.toFixed(4)} BNB</span>
+            </div>
+          </div>
+
+          {/* Create Button */}
+          {showWalletLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="w-5 h-5 border-2 border-[#BFFF00] border-t-transparent rounded-full animate-spin"></div>
+              <span className="ml-3 text-[#6e6e6e] text-sm">{tc("syncingWallet")}</span>
+            </div>
+          ) : !effectivelyConnected ? (
+            <div className="bg-[#BFFF00]/10 border border-[#BFFF00]/30 rounded-xl p-4">
+              <p className="text-[#BFFF00] text-sm text-center font-medium">{tc("connectWalletFirst")}</p>
+            </div>
+          ) : (
+            <button
+              onClick={handleCreateToken}
+              disabled={isCreating || !tokenName || !tokenSymbol}
+              className={`w-full h-14 bg-[#BFFF00] text-black rounded-lg font-bold text-base flex items-center justify-center gap-2.5 transition-all ${
+                isCreating || !tokenName || !tokenSymbol ? 'opacity-50 cursor-not-allowed' : 'hover:brightness-110'
+              }`}
+            >
+              {isCreating ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+                  {step === "creating" && t("submitTx")}
+                  {step === "confirming" && t("waitingConfirm")}
+                  {step === "done" && t("createSuccess")}
+                </>
+              ) : (
+                <>{t("createTokenButton")}</>
               )}
+            </button>
+          )}
+
+          {txHash && (
+            <div className="text-center">
+              <a
+                href={`${NETWORK_CONFIG.BLOCK_EXPLORER}/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[#BFFF00] text-xs hover:underline"
+              >
+                {t("viewTransaction")} ↗
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* ====== Right Column — Info Sidebar ====== */}
+        <div className="w-[380px] flex-shrink-0 flex flex-col gap-6">
+
+          {/* Token Parameters */}
+          <div className="bg-[#111111] border border-[#1A1A1A] rounded-lg p-6">
+            <h3 className="text-base font-semibold text-white mb-4">{t("tokenParams")}</h3>
+            <div className="space-y-0">
+              {[
+                { label: t("totalSupply"), value: "1,000,000,000", color: "text-white" },
+                { label: t("creationFee"), value: `${serviceFeeEth} BNB`, color: "text-white" },
+                { label: t("tradingFee"), value: "1%", color: "text-white" },
+                { label: t("graduationThreshold"), value: "~5.16 BNB", color: "text-[#BFFF00]" },
+                { label: t("bondingCurve"), value: t("bondingCurveFormula"), color: "text-white" },
+              ].map((row, i, arr) => (
+                <React.Fragment key={i}>
+                  <div className="flex items-center justify-between py-3">
+                    <span className="text-xs text-[#6e6e6e] font-mono">{row.label}</span>
+                    <span className={`text-xs font-mono font-semibold ${row.color}`}>{row.value}</span>
+                  </div>
+                  {i < arr.length - 1 && <div className="h-px bg-[#1A1A1A]"></div>}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+
+          {/* Fee Distribution */}
+          <div className="bg-[#111111] border border-[#1A1A1A] rounded-lg p-6">
+            <h3 className="text-base font-semibold text-white mb-4">{t("feeDistribution")}</h3>
+            {/* Colored bar */}
+            <div className="flex h-2 rounded-full overflow-hidden mb-4">
+              <div className="bg-[#BFFF00]" style={{ width: '50%' }}></div>
+              <div className="bg-[#3B82F6]" style={{ width: '20%' }}></div>
+              <div className="bg-[#404040] flex-1"></div>
+            </div>
+            {/* Legend */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#BFFF00]"></div>
+                  <span className="text-xs text-[#6e6e6e] font-mono">{t("creator")}</span>
+                </div>
+                <span className="text-xs text-white font-mono font-medium">50%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]"></div>
+                  <span className="text-xs text-[#6e6e6e] font-mono">{t("referrer")}</span>
+                </div>
+                <span className="text-xs text-white font-mono font-medium">10%</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#404040]"></div>
+                  <span className="text-xs text-[#6e6e6e] font-mono">{t("platform")}</span>
+                </div>
+                <span className="text-xs text-white font-mono font-medium">40%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* How It Works */}
+          <div className="bg-[#111111] border border-[#1A1A1A] rounded-lg p-6">
+            <h3 className="text-base font-semibold text-white mb-5">{t("howItWorks")}</h3>
+            <div className="space-y-5">
+              {[
+                { num: "1", title: t("step1Title"), desc: t("step1Desc"), active: true },
+                { num: "2", title: t("step2Title"), desc: t("step2Desc"), active: false },
+                { num: "3", title: t("step3Title"), desc: t("step3Desc"), active: false },
+              ].map((s) => (
+                <div key={s.num} className="flex gap-3">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                    s.active
+                      ? 'bg-[#BFFF00] text-black'
+                      : 'bg-[#1A1A1A] border border-[#2A2A2A] text-[#6e6e6e]'
+                  }`}>
+                    {s.num}
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-white">{s.title}</div>
+                    <div className="text-xs text-[#6e6e6e] font-mono mt-1 leading-relaxed">{s.desc}</div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
+      </div>
 
-        {/* 底部提示 */}
-        <div className="mt-6 text-center">
-          <p className="text-okx-text-tertiary text-xs">
-            {t("termsAgree")} <a href="#" className="text-okx-text-secondary hover:text-okx-text-primary">{t("termsOfService")}</a>
-          </p>
-        </div>
+      {/* Terms */}
+      <div className="px-12 pb-8 text-center">
+        <p className="text-[#6e6e6e] text-xs">
+          {t("termsAgree")} <a href="#" className="text-[#999999] hover:text-white">{t("termsOfService")}</a>
+        </p>
       </div>
     </main>
   );

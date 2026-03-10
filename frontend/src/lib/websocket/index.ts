@@ -37,14 +37,12 @@ export {
   useWebSocketRequest,
   useWebSocketConnection,
   useWebSocketSubscription,
-  useAutoConnectWebSocket,
 } from "./hooks";
 
 // ============================================================
 // 交易对资产数据类型 (保留所有类型定义)
 // ============================================================
 
-import { Ticker } from "../api/client";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
 /** 交易对资产数据 */
@@ -165,113 +163,16 @@ export interface TokenListResponse {
 // ============================================================
 
 class WebSocketServices {
-  private tradeEventCallbacks: Array<(event: InstrumentTradeEvent) => void> =
-    [];
-  private assetUpdateCallbacks: Array<(update: InstrumentAssetUpdate) => void> =
-    [];
-  private tickerCallbacks: Map<string, Array<(ticker: Ticker) => void>> =
-    new Map();
-
-  constructor() {
-    // TODO: 对接真实 WebSocket 服务
-  }
+  constructor() {}
 
   /**
-   * 获取交易对资产信息
-   * TODO: 对接真实后端 API
+   * 订阅/取消订阅交易对 (no-op, 保留接口兼容)
    */
-  async getInstrumentAsset(params: {
-    inst_id: string;
-  }): Promise<InstrumentAssetData> {
-    // 未对接 - 返回空数据结构
-    return {
-      instId: params.inst_id,
-      currentPrice: "0",
-      fdv: "0",
-    };
-  }
+  async subscribeInstrument(_instId: string): Promise<void> {}
+  async unsubscribeInstrument(_instId: string): Promise<void> {}
 
   /**
-   * 获取代币列表
-   * TODO: 对接真实后端 API
-   */
-  async getTokenList(_params: TokenListParams): Promise<TokenListResponse> {
-    // 未对接 - 返回空列表
-    return {
-      success: false,
-      tokens: [],
-      message: "服务未对接",
-    };
-  }
-
-  /**
-   * 订阅交易事件
-   */
-  onTradeEvent(callback: (event: InstrumentTradeEvent) => void): () => void {
-    this.tradeEventCallbacks.push(callback);
-    return () => {
-      const index = this.tradeEventCallbacks.indexOf(callback);
-      if (index > -1) {
-        this.tradeEventCallbacks.splice(index, 1);
-      }
-    };
-  }
-
-  /**
-   * 订阅资产更新
-   */
-  onAssetUpdate(callback: (update: InstrumentAssetUpdate) => void): () => void {
-    this.assetUpdateCallbacks.push(callback);
-    return () => {
-      const index = this.assetUpdateCallbacks.indexOf(callback);
-      if (index > -1) {
-        this.assetUpdateCallbacks.splice(index, 1);
-      }
-    };
-  }
-
-  /**
-   * 订阅交易对实时更新
-   * TODO: 对接真实 WebSocket
-   */
-  async subscribeInstrument(_instId: string): Promise<void> {
-    // 未对接 - 不执行任何操作
-  }
-
-  /**
-   * 取消订阅交易对
-   * TODO: 对接真实 WebSocket
-   */
-  async unsubscribeInstrument(_instId: string): Promise<void> {
-    // 未对接 - 不执行任何操作
-  }
-
-  /**
-   * 订阅 ticker 更新
-   */
-  onTickerUpdate(
-    instId: string,
-    callback: (ticker: Ticker) => void
-  ): () => void {
-    if (!this.tickerCallbacks.has(instId)) {
-      this.tickerCallbacks.set(instId, []);
-    }
-    this.tickerCallbacks.get(instId)!.push(callback);
-
-    return () => {
-      const callbacks = this.tickerCallbacks.get(instId);
-      if (callbacks) {
-        const index = callbacks.indexOf(callback);
-        if (index > -1) {
-          callbacks.splice(index, 1);
-        }
-      }
-    };
-  }
-
-  /**
-   * 获取交易历史
-   * TODO: 对接真实后端 API
+   * 获取交易历史 (stub — 返回空数组)
    */
   async getTradeHistory(_params: {
     inst_id: string;
@@ -287,10 +188,7 @@ class WebSocketServices {
       tx_hash: string;
     }>;
   }> {
-    // 未对接 - 返回空数组
-    return {
-      transactions: [],
-    };
+    return { transactions: [] };
   }
 
   /**
@@ -317,41 +215,6 @@ class WebSocketServices {
     }
   }
 
-  /**
-   * 订阅交易对资产更新
-   */
-  onInstrumentAssetUpdate(
-    callback: (update: InstrumentAssetUpdate) => void
-  ): () => void {
-    return this.onAssetUpdate(callback);
-  }
-
-  /**
-   * 获取K线历史数据
-   * TODO: 对接真实后端 API
-   */
-  async getKlineHistory(_params: {
-    inst_id: string;
-    resolution: string;
-    from: number;
-    to: number;
-  }): Promise<{ success: boolean; bars: KlineBar[]; message?: string }> {
-    // 未对接 - 返回空数组
-    return {
-      success: false,
-      bars: [],
-      message: "服务未对接",
-    };
-  }
-
-  /**
-   * 获取实时 ETH 价格
-   * TODO: 对接真实价格源
-   */
-  async getETHPrice(): Promise<number> {
-    // 未对接 - 返回 0
-    return 0;
-  }
 }
 
 // 全局单例
@@ -372,29 +235,33 @@ export function getWebSocketServices(): WebSocketServices {
  * 支持 snake_case 和 camelCase 两种格式
  */
 export function adaptInstrumentAssetResponse(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  response: any
+  response: Record<string, unknown>
 ): InstrumentAssetData {
+  // Helper: 安全读取 snake_case / camelCase 字段
+  const s = (a: string, b: string, fallback = ""): string =>
+    String(response[a] ?? response[b] ?? fallback);
+  const n = (a: string, b: string, fallback = 0): number =>
+    Number(response[a] ?? response[b] ?? fallback);
+
+  const instId = s("inst_id", "instId");
   return {
-    instId: response.inst_id || response.instId || "",
-    symbol:
-      response.symbol ||
-      (response.inst_id || response.instId || "").split("-")[0],
-    tokenAddress: response.token_address || response.tokenAddress,
-    poolAddress: response.pool_address || response.poolAddress,
-    creatorAddress: response.creator_address || response.creatorAddress,
-    currentPrice: response.current_price || response.currentPrice || "0",
-    fdv: response.fdv || "0",
-    volume24h: response.volume_24h || response.volume24h || "0",
-    priceChange24h: response.price_change_24h || response.priceChange24h || 0,
-    soldSupply: response.sold_supply || response.soldSupply,
-    totalSupply: response.total_supply || response.totalSupply,
-    isGraduated: response.is_graduated || response.isGraduated || false,
-    securityStatus: response.security_status || response.securityStatus,
-    createdAt: response.created_at || response.createdAt,
-    uniqueTraders: response.unique_traders || response.uniqueTraders || 0,
-    logo: response.logo_url || response.logoUrl || response.logo,
-    imageUrl: response.image_url || response.imageUrl,
+    instId,
+    symbol: s("symbol", "symbol") || instId.split("-")[0],
+    tokenAddress: s("token_address", "tokenAddress") || undefined,
+    poolAddress: s("pool_address", "poolAddress") || undefined,
+    creatorAddress: s("creator_address", "creatorAddress") || undefined,
+    currentPrice: s("current_price", "currentPrice", "0"),
+    fdv: s("fdv", "fdv", "0"),
+    volume24h: s("volume_24h", "volume24h", "0"),
+    priceChange24h: n("price_change_24h", "priceChange24h"),
+    soldSupply: s("sold_supply", "soldSupply") || undefined,
+    totalSupply: s("total_supply", "totalSupply") || undefined,
+    isGraduated: !!(response.is_graduated ?? response.isGraduated ?? false),
+    securityStatus: s("security_status", "securityStatus") || undefined,
+    createdAt: n("created_at", "createdAt") || undefined,
+    uniqueTraders: n("unique_traders", "uniqueTraders"),
+    logo: s("logo_url", "logoUrl") || (response.logo as string) || undefined,
+    imageUrl: s("image_url", "imageUrl") || undefined,
   };
 }
 

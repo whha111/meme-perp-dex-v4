@@ -116,10 +116,14 @@ func OptionalAuthMiddleware(db *gorm.DB) gin.HandlerFunc {
 
 // verifySignature verifies the HMAC-SHA256 signature
 func verifySignature(c *gin.Context, secret, signature, timestamp string) bool {
-	// Read body
+	// Read body — P1: check err to prevent empty body bypassing signature
 	var body []byte
 	if c.Request.Body != nil {
-		body, _ = io.ReadAll(c.Request.Body)
+		var err error
+		body, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			return false // body read failed → reject
+		}
 		// Restore body for later use
 		c.Request.Body = io.NopCloser(strings.NewReader(string(body)))
 	}
@@ -149,10 +153,14 @@ func abs(x int64) int64 {
 }
 
 func respondError(c *gin.Context, err *errors.AppError) {
-	c.JSON(err.HTTPStatus(), gin.H{
-		"code": err.Code,
-		"msg":  err.Message,
-		"data": nil,
+	c.JSON(err.HTTPStatus(), struct {
+		Code int         `json:"code"`
+		Msg  string      `json:"msg"`
+		Data interface{} `json:"data"`
+	}{
+		Code: err.Code,
+		Msg:  err.Message,
+		Data: nil,
 	})
 }
 

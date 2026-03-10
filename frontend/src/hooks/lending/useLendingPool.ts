@@ -19,12 +19,14 @@ import {
   useAccount,
   useReadContract,
   useReadContracts,
+  type UseReadContractsParameters,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { formatUnits, parseUnits, maxUint256, type Address } from "viem";
 import { CONTRACTS, ERC20_ABI } from "@/lib/contracts";
 import { useToast } from "@/components/shared/Toast";
+import { extractErrorMessage } from "@/lib/errors/errorDictionary";
 import LendingPoolABIImport from "@/abis/LendingPool.json";
 
 const LendingPoolABI = LendingPoolABIImport.abi;
@@ -125,7 +127,9 @@ export function useLendingPool() {
   // ── Step 2: Batch read pool info + token metadata ──────────
   const poolInfoCalls = useMemo(() => {
     if (enabledTokens.length === 0) return [];
-    const calls: any[] = [];
+    // wagmi useReadContracts 的泛型要求精确 ABI 元组类型
+    // 动态构建时无法满足，定义结构化数组后在 useReadContracts 处断言
+    const calls: { address: Address; abi: typeof LendingPoolABI | typeof ERC20_ABI; functionName: string; args?: Address[] }[] = [];
     for (const token of enabledTokens) {
       // getPoolInfo(token)
       calls.push({
@@ -162,7 +166,8 @@ export function useLendingPool() {
     isLoading: isLoadingPoolInfo,
     refetch: refetchPoolInfo,
   } = useReadContracts({
-    contracts: poolInfoCalls,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- wagmi multicall 要求精确 ABI 元组类型，动态数组无法满足
+    contracts: poolInfoCalls as UseReadContractsParameters["contracts"],
     query: {
       enabled: poolInfoCalls.length > 0,
       staleTime: 15_000,
@@ -219,7 +224,7 @@ export function useLendingPool() {
   // ── Step 3: Batch read user positions ──────────────────────
   const userCalls = useMemo(() => {
     if (!address || enabledTokens.length === 0) return [];
-    const calls: any[] = [];
+    const calls: { address: Address; abi: typeof LendingPoolABI; functionName: string; args: readonly [Address, Address] }[] = [];
     for (const token of enabledTokens) {
       calls.push({
         address: LENDING_POOL,
@@ -248,7 +253,8 @@ export function useLendingPool() {
     isLoading: isLoadingUserData,
     refetch: refetchUserData,
   } = useReadContracts({
-    contracts: userCalls,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- wagmi multicall 同上
+    contracts: userCalls as UseReadContractsParameters["contracts"],
     query: {
       enabled: userCalls.length > 0,
       staleTime: 15_000,
@@ -345,8 +351,8 @@ export function useLendingPool() {
           args: [LENDING_POOL, maxUint256],
         });
         showToast("Approval submitted...", "info");
-      } catch (err: any) {
-        showToast(err?.shortMessage || "Approval failed", "error");
+      } catch (err) {
+        showToast(extractErrorMessage(err, "Approval failed"), "error");
         throw err;
       }
     },
@@ -383,8 +389,8 @@ export function useLendingPool() {
           args: [token, amount],
         });
         showToast("Deposit submitted...", "info");
-      } catch (err: any) {
-        showToast(err?.shortMessage || "Deposit failed", "error");
+      } catch (err) {
+        showToast(extractErrorMessage(err, "Deposit failed"), "error");
         throw err;
       }
     },
@@ -421,8 +427,8 @@ export function useLendingPool() {
           args: [token, shares],
         });
         showToast("Withdrawal submitted...", "info");
-      } catch (err: any) {
-        showToast(err?.shortMessage || "Withdrawal failed", "error");
+      } catch (err) {
+        showToast(extractErrorMessage(err, "Withdrawal failed"), "error");
         throw err;
       }
     },
@@ -459,8 +465,8 @@ export function useLendingPool() {
           args: [token],
         });
         showToast("Claim submitted...", "info");
-      } catch (err: any) {
-        showToast(err?.shortMessage || "Claim failed", "error");
+      } catch (err) {
+        showToast(extractErrorMessage(err, "Claim failed"), "error");
         throw err;
       }
     },

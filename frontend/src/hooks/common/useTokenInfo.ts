@@ -1,29 +1,7 @@
 "use client";
 
-import { useReadContract } from "wagmi";
 import { useMemo } from "react";
-import { baseSepolia } from "wagmi/chains";
-
-// Minimal ERC20 ABI for name and symbol
-const ERC20_ABI = [
-  {
-    inputs: [],
-    name: "name",
-    outputs: [{ name: "", type: "string" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "symbol",
-    outputs: [{ name: "", type: "string" }],
-    stateMutability: "view",
-    type: "function",
-  },
-] as const;
-
-// Get chain ID from env
-const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "84532", 10);
+import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
 
 export interface TokenInfo {
   name: string | null;
@@ -33,44 +11,40 @@ export interface TokenInfo {
 }
 
 /**
- * Hook to fetch token name and symbol from blockchain
+ * Hook to get token name and symbol from WSS (via tradingDataStore).
+ *
+ * Architecture: matching engine 启动时用 multicall 一次性读取所有代币的 name/symbol，
+ * 前端通过 WSS `get_all_token_info` 消息获取，存入 tradingDataStore.tokenInfoMap。
+ * 零 HTTP 调用，零 RPC 调用。
+ *
  * @param addressOrSymbol - Token contract address (0x...) or symbol
  * @returns Token info with name and symbol
  */
 export function useTokenInfo(addressOrSymbol: string): TokenInfo {
   const isAddress = addressOrSymbol?.startsWith("0x") && addressOrSymbol.length === 42;
-  const tokenAddress = isAddress ? addressOrSymbol as `0x${string}` : undefined;
+  const normalizedAddress = isAddress ? addressOrSymbol.toLowerCase() : undefined;
 
-  // Fetch token name
-  const { data: name, isLoading: nameLoading, error: nameError } = useReadContract({
-    address: tokenAddress,
-    abi: ERC20_ABI,
-    functionName: "name",
-    chainId,
-    query: {
-      enabled: !!tokenAddress,
-      staleTime: 60 * 60 * 1000, // Cache for 1 hour since token info doesn't change
-    },
-  });
+  const tokenInfoMap = useTradingDataStore((s) => s.tokenInfoMap);
+  const wsConnected = useTradingDataStore((s) => s.wsConnected);
 
-  // Fetch token symbol
-  const { data: symbol, isLoading: symbolLoading, error: symbolError } = useReadContract({
-    address: tokenAddress,
-    abi: ERC20_ABI,
-    functionName: "symbol",
-    chainId,
-    query: {
-      enabled: !!tokenAddress,
-      staleTime: 60 * 60 * 1000, // Cache for 1 hour
-    },
-  });
+  return useMemo(() => {
+    if (!normalizedAddress) {
+      return { name: null, symbol: null, isLoading: false, error: null };
+    }
 
-  return useMemo(() => ({
-    name: name as string | null ?? null,
-    symbol: symbol as string | null ?? null,
-    isLoading: nameLoading || symbolLoading,
-    error: (nameError || symbolError) as Error | null,
-  }), [name, symbol, nameLoading, symbolLoading, nameError, symbolError]);
+    // WSS not connected yet — still loading
+    if (!wsConnected && Object.keys(tokenInfoMap).length === 0) {
+      return { name: null, symbol: null, isLoading: true, error: null };
+    }
+
+    const info = tokenInfoMap[normalizedAddress];
+    return {
+      name: info?.name ?? null,
+      symbol: info?.symbol ?? null,
+      isLoading: false,
+      error: null,
+    };
+  }, [normalizedAddress, tokenInfoMap, wsConnected]);
 }
 
 /**

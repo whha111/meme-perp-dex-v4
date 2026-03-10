@@ -25,8 +25,14 @@ interface IPriceFeed {
     // Price update (only TokenFactory can call)
     function updateTokenPriceFromFactory(address token, uint256 newPrice) external;
 
+    // P0-2: Uniswap V2 price update (permissionless — any keeper can call)
+    function updateTokenPriceFromUniswap(address token) external;
+    function setTokenUniswapPair(address token, address pair) external;
+    function tokenUniswapPair(address token) external view returns (address);
+
     // Admin functions
     function addSupportedToken(address token, uint256 initialPrice) external;
     function addSupportedTokenFromFactory(address token, uint256 initialPrice) external;
     function removeSupportedToken(address token) external;
+    function setWETH(address _weth) external;
 }

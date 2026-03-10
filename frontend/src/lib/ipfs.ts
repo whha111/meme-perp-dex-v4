@@ -4,8 +4,23 @@
  * 用于上传代币 Logo 图片到 IPFS
  */
 
-const PINATA_JWT = process.env.NEXT_PUBLIC_PINATA_JWT;
+// P0-1: Pinata JWT 不能暴露在客户端 (NEXT_PUBLIC_ 前缀会被打包进浏览器 JS)
+// 上传功能通过 /api/upload 代理到后端，JWT 仅在服务端使用
+// 客户端只需要 gateway URL（公开可读，无需认证）
 const PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs';
+
+// Locale-aware error messages for IPFS upload
+const ipfsI18n: Record<string, { invalidFormat: string; tooLarge: string; uploadFailed: string }> = {
+  zh: { invalidFormat: '不支持的图片格式，请使用 JPG、PNG、GIF、WebP 或 SVG', tooLarge: '图片大小不能超过 5MB', uploadFailed: '上传失败' },
+  en: { invalidFormat: 'Unsupported image format. Please use JPG, PNG, GIF, WebP or SVG', tooLarge: 'Image size cannot exceed 5MB', uploadFailed: 'Upload failed' },
+  ja: { invalidFormat: 'サポートされていない画像形式です。JPG、PNG、GIF、WebP、SVGを使用してください', tooLarge: '画像サイズは5MBを超えることはできません', uploadFailed: 'アップロード失敗' },
+  ko: { invalidFormat: '지원되지 않는 이미지 형식입니다. JPG, PNG, GIF, WebP 또는 SVG를 사용하세요', tooLarge: '이미지 크기는 5MB를 초과할 수 없습니다', uploadFailed: '업로드 실패' },
+};
+
+function getLocale(): string {
+  if (typeof window === 'undefined') return 'zh';
+  try { return localStorage.getItem('meme-perp-locale') || 'zh'; } catch { return 'zh'; }
+}
 
 export interface UploadResult {
   success: boolean;
@@ -15,22 +30,17 @@ export interface UploadResult {
 }
 
 /**
- * 上传文件到 IPFS (通过 Pinata)
+ * 上传文件到 IPFS (通过后端 API 代理，JWT 不暴露在客户端)
  */
 export async function uploadToIPFS(file: File): Promise<UploadResult> {
-  if (!PINATA_JWT) {
-    return {
-      success: false,
-      error: 'Pinata JWT 未配置',
-    };
-  }
+  const t = ipfsI18n[getLocale()] || ipfsI18n.zh;
 
   // 验证文件类型
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
   if (!allowedTypes.includes(file.type)) {
     return {
       success: false,
-      error: '不支持的图片格式，请使用 JPG、PNG、GIF、WebP 或 SVG',
+      error: t.invalidFormat,
     };
   }
 
@@ -39,7 +49,7 @@ export async function uploadToIPFS(file: File): Promise<UploadResult> {
   if (file.size > maxSize) {
     return {
       success: false,
-      error: '图片大小不能超过 5MB',
+      error: t.tooLarge,
     };
   }
 
@@ -47,37 +57,19 @@ export async function uploadToIPFS(file: File): Promise<UploadResult> {
     const formData = new FormData();
     formData.append('file', file);
 
-    // 添加 Pinata 元数据
-    const metadata = JSON.stringify({
-      name: `token-logo-${Date.now()}`,
-      keyvalues: {
-        type: 'token-logo',
-        uploadedAt: new Date().toISOString(),
-      },
-    });
-    formData.append('pinataMetadata', metadata);
-
-    // 上传选项
-    const options = JSON.stringify({
-      cidVersion: 1,
-    });
-    formData.append('pinataOptions', options);
-
-    const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+    // P0-1: 通过 Next.js API route 代理上传，JWT 仅在服务端使用
+    const response = await fetch('/api/upload', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PINATA_JWT}`,
-      },
       body: formData,
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `上传失败: ${response.status}`);
+      throw new Error(errorData.error || `${t.uploadFailed}: ${response.status}`);
     }
 
     const data = await response.json();
-    const ipfsHash = data.IpfsHash;
+    const ipfsHash = data.ipfsHash;
 
     return {
       success: true,
@@ -85,54 +77,35 @@ export async function uploadToIPFS(file: File): Promise<UploadResult> {
       ipfsUrl: `${PINATA_GATEWAY}/${ipfsHash}`,
     };
   } catch (error) {
-    console.error('[IPFS] 上传失败:', error);
+    console.error('[IPFS] upload failed:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : '上传失败',
+      error: error instanceof Error ? error.message : t.uploadFailed,
     };
   }
 }
 
 /**
- * 上传 JSON 元数据到 IPFS
+ * 上传 JSON 元数据到 IPFS (通过后端 API 代理)
  */
 export async function uploadJSONToIPFS(data: Record<string, unknown>, name: string): Promise<UploadResult> {
-  if (!PINATA_JWT) {
-    return {
-      success: false,
-      error: 'Pinata JWT 未配置',
-    };
-  }
+  const t = ipfsI18n[getLocale()] || ipfsI18n.zh;
 
   try {
-    const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+    // P0-1: 通过 Next.js API route 代理上传，JWT 仅在服务端使用
+    const response = await fetch('/api/upload-json', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PINATA_JWT}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        pinataContent: data,
-        pinataMetadata: {
-          name,
-          keyvalues: {
-            type: 'token-metadata',
-            uploadedAt: new Date().toISOString(),
-          },
-        },
-        pinataOptions: {
-          cidVersion: 1,
-        },
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, name }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `上传失败: ${response.status}`);
+      throw new Error(errorData.error || `${t.uploadFailed}: ${response.status}`);
     }
 
     const result = await response.json();
-    const ipfsHash = result.IpfsHash;
+    const ipfsHash = result.ipfsHash;
 
     return {
       success: true,
@@ -140,10 +113,10 @@ export async function uploadJSONToIPFS(data: Record<string, unknown>, name: stri
       ipfsUrl: `${PINATA_GATEWAY}/${ipfsHash}`,
     };
   } catch (error) {
-    console.error('[IPFS] 上传 JSON 失败:', error);
+    console.error('[IPFS] JSON upload failed:', error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : '上传失败',
+      error: error instanceof Error ? error.message : t.uploadFailed,
     };
   }
 }

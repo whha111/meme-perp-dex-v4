@@ -1,0 +1,56 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "memeperp-health",
+    "title": "MemePerpDEX Service Health",
+    "tags": ["memeperp", "health"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": { "from": "now-1h", "to": "now" },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Up/Down",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 12, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "up",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+            ]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Scrape Duration (s)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+        "targets": [
+          {
+            "expr": "scrape_duration_seconds",
+            "legendFormat": "{{job}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Target Scrape Samples",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+        "targets": [
+          {
+            "expr": "scrape_samples_scraped",
+            "legendFormat": "{{job}}"
+          }
+        ]
+      }
+    ]
+  }
+}

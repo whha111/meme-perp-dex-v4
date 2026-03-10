@@ -28,5 +28,5 @@ interface ILiquidation {
 
     // Insurance fund functions (called by Vault)
     function payProfit(address user, uint256 amount) external;
-    function coverDeficit(uint256 amount) external;
+    function coverDeficit(uint256 amount) external returns (uint256 covered);
 }

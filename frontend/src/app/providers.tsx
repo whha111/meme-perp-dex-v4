@@ -1,12 +1,19 @@
 "use client";
 
+// Window 扩展 — WalletConnect 重复初始化警告抑制标记
+declare global {
+  interface Window {
+    __walletconnect_warned?: boolean;
+  }
+}
+
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { ToastProvider } from "@/components/shared/Toast";
 import { config, configError } from "@/lib/wagmi";
-import { useAutoConnectWebSocket } from "@/lib/websocket/hooks";
+import { useUnifiedWebSocket } from "@/hooks/common/useUnifiedWebSocket";
 import { WebSocketStatusIndicator } from "@/components/debug/WebSocketStatusIndicator";
 import { NavigationProgress } from "@/components/shared/NavigationProgress";
 import { I18nProvider, useLocale } from "@/i18n";
@@ -150,25 +157,25 @@ function ErrorFallbackUI({ error, onRetry }: { error?: Error; onRetry: () => voi
   const t = errorTexts[locale] || errorTexts.zh;
 
   return (
-    <div className="min-h-screen bg-[#0D0D0F] flex items-center justify-center p-4">
-      <div className="bg-[#1C1C1E] border border-[#FF3B30] rounded-xl p-8 max-w-md text-center">
-        <h2 className="text-white text-xl font-bold mb-4">{t.title}</h2>
-        <p className="text-[#8E8E93] text-sm mb-4">
+    <div className="min-h-screen bg-okx-bg-primary flex items-center justify-center p-4">
+      <div className="bg-okx-bg-card border border-okx-down rounded-xl p-8 max-w-md text-center">
+        <h2 className="text-okx-text-primary text-xl font-bold mb-4">{t.title}</h2>
+        <p className="text-okx-text-secondary text-sm mb-4">
           {t.desc}
         </p>
-        <p className="text-[#636366] text-xs mb-4 font-mono bg-[#0D0D0F] p-2 rounded break-all">
+        <p className="text-okx-text-tertiary text-xs mb-4 font-mono bg-okx-bg-primary p-2 rounded break-all">
           {error?.message || 'Unknown error'}
         </p>
         <div className="flex gap-3 justify-center">
           <button
             onClick={() => window.location.reload()}
-            className="bg-[#A3E635] text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
+            className="bg-meme-lime text-black px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
           >
             {t.refresh}
           </button>
           <button
             onClick={onRetry}
-            className="bg-[#2C2C2E] text-white px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
+            className="bg-okx-bg-hover text-okx-text-primary px-6 py-2 rounded-lg font-bold hover:opacity-90 transition-opacity"
           >
             {t.retry}
           </button>
@@ -253,9 +260,18 @@ const skeletonTranslations: Record<string, Record<string, string>> = {
 };
 
 function LoadingSkeleton() {
-  // Always use Chinese for skeleton to prevent hydration mismatch
-  // The actual locale will be applied after hydration is complete
-  const t = skeletonTranslations.zh;
+  const [locale, setLocale] = useState('zh');
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('meme-perp-locale');
+      if (stored && ['zh', 'en', 'ja', 'ko'].includes(stored)) {
+        setLocale(stored);
+      }
+    } catch { /* localStorage unavailable */ }
+  }, []);
+
+  const t = skeletonTranslations[locale] || skeletonTranslations.zh;
 
   return (
     <main className="min-h-screen bg-okx-bg-primary">
@@ -263,13 +279,9 @@ function LoadingSkeleton() {
       <nav className="sticky top-0 z-30 bg-okx-bg-primary border-b border-okx-border-primary h-[64px]">
         <div className="max-w-[1440px] mx-auto px-4 h-full flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2 text-okx-text-primary font-bold text-xl">
-              <span className="text-2xl">🚀</span>
-              MemePerpDEX
-            </div>
-            <div className="flex items-center gap-6 text-[14px] text-okx-text-secondary">
-              <span className="text-okx-text-primary cursor-pointer hidden lg:inline">预售</span>
-              <a href="/create" className="hover:text-okx-text-primary cursor-pointer text-okx-up font-bold">发起预售</a>
+            <div className="flex items-center gap-2 text-okx-text-primary font-bold text-xl tracking-tight">
+              <span className="text-meme-lime">✦</span>
+              MEMEPERP
             </div>
           </div>
           <div
@@ -296,8 +308,7 @@ function LoadingSkeleton() {
 // WebSocket Auto-Connect Component
 // =====================================================
 function WebSocketAutoConnect({ children }: { children: ReactNode }) {
-  // TEMPORARILY DISABLED to debug infinite loop
-  // useAutoConnectWebSocket(true);
+  useUnifiedWebSocket({ enabled: true });
   return <>{children}</>;
 }
 
@@ -376,15 +387,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // Suppress WalletConnect/AppKit initialization warnings in development
     if (isDev && typeof window !== 'undefined') {
       const originalWarn = console.warn;
-      console.warn = (...args: any[]) => {
-        const message = args[0]?.toString() || '';
+      console.warn = (...args: unknown[]) => {
+        const message = String(args[0] ?? '');
         // Suppress WalletConnect Core already initialized warnings
         if (message.includes('WalletConnect Core is already initialized') ||
             message.includes('Init() was called')) {
           // Only log once to avoid spam
-          if (!(window as any).__walletconnect_warned) {
+          if (!window.__walletconnect_warned) {
             console.info('[WalletConnect] Multiple initialization detected (normal in React Strict Mode)');
-            (window as any).__walletconnect_warned = true;
+            window.__walletconnect_warned = true;
           }
           return;
         }
@@ -413,7 +424,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <WagmiProvider config={config}>
             <QueryClientProvider client={queryClient}>
               <RainbowKitProvider
-                initialChain={parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID || "84532")}
+                initialChain={parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID || "56")}
                 modalSize="compact"
               >
                 <ToastProvider>

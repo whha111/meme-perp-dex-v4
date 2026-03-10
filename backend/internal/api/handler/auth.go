@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -62,12 +63,34 @@ type LoginResponse struct {
 	ExpiresAt    int64  `json:"expiresAt"`
 }
 
-// nonce storage (in production, use Redis)
-var nonceStore = make(map[string]nonceInfo)
+// P1: nonce 存储 — sync.RWMutex 保护并发访问（生产环境应迁移到 Redis SETEX）
+var (
+	nonceStore = make(map[string]nonceInfo)
+	nonceMu    sync.RWMutex
+)
 
 type nonceInfo struct {
 	Nonce     string
+	Message   string    // P1: 存储完整签名消息，确保 Login 验证时用相同的消息
 	ExpiresAt time.Time
+}
+
+// M-25 FIX: 定期清理过期 nonce，防止内存无限增长
+func init() {
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			nonceMu.Lock()
+			now := time.Now()
+			for addr, info := range nonceStore {
+				if now.After(info.ExpiresAt) {
+					delete(nonceStore, addr)
+				}
+			}
+			nonceMu.Unlock()
+		}
+	}()
 }
 
 // GetNonce returns a nonce for the user to sign
@@ -105,10 +128,13 @@ func (h *AuthHandler) GetNonce(c *gin.Context) {
 		nonce, time.Now().Unix())
 
 	// Store nonce with expiration (5 minutes)
+	nonceMu.Lock()
 	nonceStore[strings.ToLower(req.Address)] = nonceInfo{
 		Nonce:     nonce,
+		Message:   message,
 		ExpiresAt: time.Now().Add(5 * time.Minute),
 	}
+	nonceMu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{
 		"code": "0",
@@ -150,9 +176,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Check nonce
+	// AUDIT-FIX GO-C01: 原子化 nonce 验证 + 消费
+	// 旧代码: RLock→read→RUnlock→...→Lock→delete 存在 TOCTOU 竞态
+	// 修复: 用 Lock 原子完成 read + validate + delete，再释放锁后做签名验证
+	nonceMu.Lock()
 	storedNonce, exists := nonceStore[address]
 	if !exists {
+		nonceMu.Unlock()
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": "40002",
 			"msg":  "Nonce not found, please request a new one",
@@ -161,9 +191,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Check nonce expiration
 	if time.Now().After(storedNonce.ExpiresAt) {
 		delete(nonceStore, address)
+		nonceMu.Unlock()
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": "40003",
 			"msg":  "Nonce expired, please request a new one",
@@ -172,8 +202,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Verify nonce matches
 	if storedNonce.Nonce != req.Nonce {
+		nonceMu.Unlock()
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code": "40004",
 			"msg":  "Invalid nonce",
@@ -182,10 +212,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Build the message that was signed
-	message := fmt.Sprintf("Sign this message to login to MemePerpDEX.\n\nNonce: %s", req.Nonce)
+	// P1: 使用存储的完整消息（与 GetNonce 返回给前端的完全一致）
+	message := storedNonce.Message
+	// 原子消费 nonce — 第二个并发请求到此时 nonce 已不存在
+	delete(nonceStore, address)
+	nonceMu.Unlock()
 
-	// Verify signature
+	// 签名验证（在锁外执行，避免阻塞其他地址的登录）
 	recoveredAddr, err := recoverAddress(message, req.Signature)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -205,13 +238,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Delete used nonce
-	delete(nonceStore, address)
-
 	// Get or create user
+	// P1: API Secret 以明文存储是 HMAC 认证模型的必要条件（与 Binance/OKX 一致）。
+	// 服务端需要原始 secret 来计算 HMAC-SHA256。bcrypt 不适用于此场景。
+	// 未来可考虑 AES-GCM 加密存储（application-level encryption-at-rest）。
+	// AUDIT-FIX GO-C02: 追踪是否新用户，仅新用户返回 API Secret
+	isNewUser := false
 	user, err := h.userRepo.GetByAddress(req.Address)
 	if err == gorm.ErrRecordNotFound {
 		// Create new user with API credentials
+		isNewUser = true
 		apiKey := generateAPIKey()
 		apiSecret := generateAPISecret()
 
@@ -237,9 +273,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		})
 		return
 	} else {
-		// User exists, regenerate API credentials
-		user.APIKey = generateAPIKey()
-		user.APISecret = generateAPISecret()
+		// AUDIT-FIX M-13: Reuse existing API key/secret if present (don't invalidate active sessions)
+		// Only regenerate if they are empty (e.g., migrated user with no API credentials)
+		if user.APIKey == "" || user.APISecret == "" {
+			user.APIKey = generateAPIKey()
+			user.APISecret = generateAPISecret()
+		}
 
 		if err := h.userRepo.Update(user); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -263,12 +302,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	// Return API credentials and JWT tokens
+	// AUDIT-FIX GO-C02: 仅新用户首次登录返回 API Secret（HMAC 模型需用户自行保存）
+	// 已有用户重复登录不再泄露 secret
+	responseSecret := ""
+	if isNewUser {
+		responseSecret = user.APISecret
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"code": "0",
 		"msg":  "success",
 		"data": LoginResponse{
 			APIKey:       user.APIKey,
-			APISecret:    user.APISecret,
+			APISecret:    responseSecret,
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
 			Address:      user.Address,

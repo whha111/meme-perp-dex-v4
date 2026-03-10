@@ -18,7 +18,7 @@ interface UseHeatmapDataResult {
 export function useHeatmapData(
   token: string | undefined,
   timeRange: TimeRange = "1d",
-  refreshInterval: number = 5000
+  refreshInterval: number = 60000
 ): UseHeatmapDataResult {
   const [data, setData] = useState<LiquidationHeatmapData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,7 +32,7 @@ export function useHeatmapData(
 
     try {
       const response = await fetch(
-        `${API_BASE}/api/liquidation-heatmap/${token}?timeRange=${timeRange}`
+        `${API_BASE}/api/liquidation-map/${token}?timeRange=${timeRange}`
       );
 
       if (!response.ok) {
@@ -47,9 +47,9 @@ export function useHeatmapData(
 
       setData(json);
       setError(null);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Failed to fetch heatmap data:", err);
-      setError(err.message || "Failed to load heatmap data");
+      setError(err instanceof Error ? err.message : "Failed to load heatmap data");
     } finally {
       setLoading(false);
     }

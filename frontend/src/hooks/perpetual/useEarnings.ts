@@ -16,11 +16,13 @@ import {
   useAccount,
   useReadContract,
   useReadContracts,
+  type UseReadContractsParameters,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { formatEther, type Address } from "viem";
 import { CONTRACTS, TOKEN_FACTORY_ABI } from "@/lib/contracts";
+import { extractErrorMessage } from "@/lib/errors/errorDictionary";
 import { useToast } from "@/components/shared/Toast";
 
 export interface EarningsData {
@@ -99,7 +101,8 @@ function useAllTokensEarnings() {
     isLoading: isLoadingBatch,
     refetch: refetchBatch,
   } = useReadContracts({
-    contracts: contracts as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- wagmi multicall 要求精确 ABI 元组类型，动态数组无法满足
+    contracts: contracts as UseReadContractsParameters["contracts"],
     query: {
       enabled: contracts.length > 0,
       staleTime: 15_000,
@@ -292,9 +295,9 @@ export function useEarnings() {
         setClaimCreatorTxHash(hash);
         showToast(`领取创建者收益已提交`, "info");
       }
-    } catch (e: any) {
+    } catch (e) {
       console.error("[useEarnings] claimCreatorEarnings error:", e);
-      showToast(e?.shortMessage || e?.message || "领取失败", "error");
+      showToast(extractErrorMessage(e, "领取失败"), "error");
     }
   }, [address, earnings.createdTokens, tokenEarnings, writeClaimCreator, showToast]);
 
@@ -323,9 +326,9 @@ export function useEarnings() {
       });
       setClaimReferrerTxHash(hash);
       showToast("领取返佣收益已提交", "info");
-    } catch (e: any) {
+    } catch (e) {
       console.error("[useEarnings] claimReferrerEarnings error:", e);
-      showToast(e?.shortMessage || e?.message || "领取失败", "error");
+      showToast(extractErrorMessage(e, "领取失败"), "error");
     }
   }, [address, writeClaimReferrer, showToast]);
 
@@ -352,9 +355,9 @@ export function useEarnings() {
         });
         setSetReferrerTxHash(hash);
         showToast("绑定推荐人已提交", "info");
-      } catch (e: any) {
+      } catch (e) {
         console.error("[useEarnings] setReferrer error:", e);
-        showToast(e?.shortMessage || e?.message || "绑定失败", "error");
+        showToast(extractErrorMessage(e, "绑定失败"), "error");
       }
     },
     [address, writeSetReferrer, showToast]

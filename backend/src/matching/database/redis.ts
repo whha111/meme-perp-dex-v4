@@ -12,7 +12,7 @@
 import Redis from "ioredis";
 import { v4 as uuidv4 } from "uuid";
 import type { Address } from "viem";
-import { REDIS_URL, REDIS_KEY_PREFIX } from "../config";
+import { REDIS_URL, REDIS_KEY_PREFIX, REDIS_SENTINEL_HOSTS, REDIS_MASTER_NAME, REDIS_PASSWORD } from "../config";
 import { logger } from "../utils/logger";
 import {
   type Position,
@@ -35,15 +35,37 @@ let isConnected = false;
 
 export function getRedisClient(): Redis {
   if (!redis) {
-    redis = new Redis(REDIS_URL, {
-      keyPrefix: REDIS_KEY_PREFIX,
-      maxRetriesPerRequest: 3,
-      connectTimeout: 3000,
-      commandTimeout: 5000,
-    });
+    if (REDIS_SENTINEL_HOSTS) {
+      // Sentinel 高可用模式
+      const sentinels = REDIS_SENTINEL_HOSTS.split(",").map((hostPort) => {
+        const [host, port] = hostPort.trim().split(":");
+        return { host, port: parseInt(port || "26379") };
+      });
+      redis = new Redis({
+        sentinels,
+        name: REDIS_MASTER_NAME,
+        keyPrefix: REDIS_KEY_PREFIX,
+        password: REDIS_PASSWORD || undefined,
+        maxRetriesPerRequest: 3,
+        connectTimeout: 5000,
+        commandTimeout: 5000,
+        sentinelRetryStrategy: (times: number) => Math.min(times * 100, 3000),
+      });
+      logger.info("Redis", `Sentinel mode: master="${REDIS_MASTER_NAME}", sentinels=${REDIS_SENTINEL_HOSTS}`);
+    } else {
+      // 单节点模式 (开发/测试)
+      redis = new Redis(REDIS_URL, {
+        keyPrefix: REDIS_KEY_PREFIX,
+        password: REDIS_PASSWORD || undefined,
+        maxRetriesPerRequest: 3,
+        connectTimeout: 3000,
+        commandTimeout: 5000,
+      });
+      logger.info("Redis", `Standalone mode: ${REDIS_URL}`);
+    }
 
     redis.on("connect", () => {
-      logger.info("Redis", `Connected to ${REDIS_URL}`);
+      logger.info("Redis", "Connected");
       isConnected = true;
     });
 
@@ -163,7 +185,9 @@ export async function withLock<T>(
         return await fn();
       } finally {
         // 使用 Lua 脚本安全释放锁 (Redis 原子操作，非 JS eval)
-        await client.call("EVAL", RELEASE_LOCK_SCRIPT, 1, fullKey, lockValue).catch(() => {});
+        await client.call("EVAL", RELEASE_LOCK_SCRIPT, 1, fullKey, lockValue).catch((err) => {
+          logger.warn("Redis", `Lock release failed for ${fullKey}: ${err}`);
+        });
       }
     }
 
@@ -249,6 +273,23 @@ export const Keys = {
   // Mode 2 PnL adjustments (链下盈亏调整，必须持久化)
   mode2Adjustment: (user: Address) => `mode2_adj:${user.toLowerCase()}`,
   allMode2Adjustments: () => "mode2_adj:all",
+
+  // Auth nonce keys (防重放攻击，必须持久化)
+  userNonce: (user: Address) => `nonce:${user.toLowerCase()}`,
+  allUserNonces: () => "nonces:all",
+
+  // Insurance fund keys (保险基金，必须持久化)
+  insuranceFundGlobal: () => "insurance_fund:global",
+  insuranceFundToken: (token: Address) => `insurance_fund:token:${token.toLowerCase()}`,
+  allInsuranceFundTokens: () => "insurance_fund:tokens:all",
+
+  // Referral keys (推荐系统，必须持久化 — 推荐关系 + 佣金累计)
+  referrer: (address: Address) => `referral:referrer:${address.toLowerCase()}`,
+  allReferrers: () => "referral:referrers:all",
+  referee: (address: Address) => `referral:referee:${address.toLowerCase()}`,
+  allReferees: () => "referral:referees:all",
+  referralCode: (code: string) => `referral:code:${code.toUpperCase()}`,
+  allReferralCodes: () => "referral:codes:all",
 };
 
 // ============================================================
@@ -616,16 +657,22 @@ export const BalanceRepo = {
   },
 
   async freezeMargin(trader: Address, amount: bigint): Promise<boolean> {
-    const balance = await this.getOrCreate(trader);
-    if (balance.availableBalance < amount) {
-      return false;
-    }
+    // P0-2: 使用 try/catch 防止 update 失败导致 margin 双花
+    try {
+      const balance = await this.getOrCreate(trader);
+      if (balance.availableBalance < amount) {
+        return false;
+      }
 
-    await this.update(trader, {
-      availableBalance: balance.availableBalance - amount,
-      frozenMargin: balance.frozenMargin + amount,
-    });
-    return true;
+      await this.update(trader, {
+        availableBalance: balance.availableBalance - amount,
+        frozenMargin: balance.frozenMargin + amount,
+      });
+      return true;
+    } catch (err) {
+      logger.error("Redis", `freezeMargin failed for ${trader} (${amount}): ${err}`);
+      return false; // 失败时拒绝冻结，防止双花
+    }
   },
 
   async unfreezeMargin(trader: Address, amount: bigint): Promise<void> {
@@ -1358,6 +1405,352 @@ export const Mode2AdjustmentRepo = {
 };
 
 // ============================================================
+// Insurance Fund Repository (保险基金持久化 — 防重启归零)
+// ============================================================
+
+interface InsuranceFundData {
+  balance: string;
+  totalContributions: string;
+  totalPayouts: string;
+  lastUpdated: string;
+}
+
+export const InsuranceFundRepo = {
+  /**
+   * 保存全局保险基金到 Redis
+   */
+  async saveGlobal(fund: { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      await client.hset(Keys.insuranceFundGlobal(), {
+        balance: fund.balance.toString(),
+        totalContributions: fund.totalContributions.toString(),
+        totalPayouts: fund.totalPayouts.toString(),
+        lastUpdated: fund.lastUpdated.toString(),
+      });
+    } catch (e) {
+      logger.error("Redis", `Failed to save global insurance fund: ${e}`);
+    }
+  },
+
+  /**
+   * 读取全局保险基金
+   */
+  async getGlobal(): Promise<{ balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number } | null> {
+    if (!isRedisConnected()) return null;
+    try {
+      const client = getRedisClient();
+      const data = await client.hgetall(Keys.insuranceFundGlobal()) as InsuranceFundData;
+      if (!data || !data.balance) return null;
+      return {
+        balance: BigInt(data.balance),
+        totalContributions: BigInt(data.totalContributions),
+        totalPayouts: BigInt(data.totalPayouts),
+        lastUpdated: parseInt(data.lastUpdated) || Date.now(),
+      };
+    } catch (e) {
+      logger.error("Redis", `Failed to load global insurance fund: ${e}`);
+      return null;
+    }
+  },
+
+  /**
+   * 保存代币保险基金到 Redis
+   */
+  async saveToken(token: Address, fund: { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      await client.hset(Keys.insuranceFundToken(token), {
+        balance: fund.balance.toString(),
+        totalContributions: fund.totalContributions.toString(),
+        totalPayouts: fund.totalPayouts.toString(),
+        lastUpdated: fund.lastUpdated.toString(),
+      });
+      await client.sadd(Keys.allInsuranceFundTokens(), token.toLowerCase());
+    } catch (e) {
+      logger.error("Redis", `Failed to save token insurance fund for ${token}: ${e}`);
+    }
+  },
+
+  /**
+   * 读取所有代币保险基金 (启动时恢复)
+   */
+  async getAllTokens(): Promise<Map<string, { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }>> {
+    const result = new Map<string, { balance: bigint; totalContributions: bigint; totalPayouts: bigint; lastUpdated: number }>();
+    if (!isRedisConnected()) return result;
+    try {
+      const client = getRedisClient();
+      const tokens = await client.smembers(Keys.allInsuranceFundTokens());
+      for (const token of tokens) {
+        const data = await client.hgetall(Keys.insuranceFundToken(token as Address)) as InsuranceFundData;
+        if (data && data.balance) {
+          result.set(token.toLowerCase(), {
+            balance: BigInt(data.balance),
+            totalContributions: BigInt(data.totalContributions),
+            totalPayouts: BigInt(data.totalPayouts),
+            lastUpdated: parseInt(data.lastUpdated) || Date.now(),
+          });
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load token insurance funds: ${e}`);
+    }
+    return result;
+  },
+};
+
+// ============================================================
+// Nonce Repository (防重放攻击，持久化到 Redis — AUDIT-FIX ME-C06)
+// ============================================================
+
+export const NonceRepo = {
+  /**
+   * 获取用户当前 nonce (0n if not set)
+   */
+  async get(trader: Address): Promise<bigint> {
+    if (!isRedisConnected()) return 0n;
+    try {
+      const client = getRedisClient();
+      const value = await client.get(Keys.userNonce(trader));
+      return value ? BigInt(value) : 0n;
+    } catch (e) {
+      logger.error("Redis", `Failed to get nonce for ${trader}: ${e}`);
+      return 0n;
+    }
+  },
+
+  /**
+   * 设置用户 nonce (原子写入)
+   */
+  async set(trader: Address, nonce: bigint): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      const normalizedTrader = trader.toLowerCase();
+      await client.set(Keys.userNonce(trader), nonce.toString());
+      await client.sadd(Keys.allUserNonces(), normalizedTrader);
+    } catch (e) {
+      logger.error("Redis", `Failed to set nonce for ${trader}: ${e}`);
+    }
+  },
+
+  /**
+   * 加载所有用户 nonce (启动时恢复)
+   * @returns Map<lowercase address, nonce>
+   */
+  async getAll(): Promise<Map<string, bigint>> {
+    const result = new Map<string, bigint>();
+    if (!isRedisConnected()) return result;
+    try {
+      const client = getRedisClient();
+      const users = await client.smembers(Keys.allUserNonces());
+      for (const user of users) {
+        const value = await client.get(Keys.userNonce(user as Address));
+        if (value) {
+          result.set(user.toLowerCase(), BigInt(value));
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load all nonces: ${e}`);
+    }
+    return result;
+  },
+};
+
+// ============================================================
+// Referral Repository (推荐系统持久化 — 防重启丢失推荐关系和佣金)
+// ============================================================
+
+interface ReferrerData {
+  address: string;
+  code: string;
+  level1Referrals: string;     // JSON array of addresses
+  level2Referrals: string;     // JSON array of addresses
+  totalEarnings: string;       // bigint as string
+  pendingEarnings: string;
+  withdrawnEarnings: string;
+  level1Earnings: string;
+  level2Earnings: string;
+  totalTradesReferred: string;
+  totalVolumeReferred: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface RefereeData {
+  address: string;
+  referrerCode: string;
+  referrer: string;
+  level2Referrer: string;      // "" if null
+  totalFeesPaid: string;
+  totalCommissionGenerated: string;
+  joinedAt: string;
+}
+
+export const ReferralRepo = {
+  // --- Referrer CRUD ---
+  async saveReferrer(referrer: {
+    address: string; code: string;
+    level1Referrals: string[]; level2Referrals: string[];
+    totalEarnings: bigint; pendingEarnings: bigint; withdrawnEarnings: bigint;
+    level1Earnings: bigint; level2Earnings: bigint;
+    totalTradesReferred: number; totalVolumeReferred: bigint;
+    createdAt: number; updatedAt: number;
+  }): Promise<void> {
+    if (!isRedisConnected()) {
+      logger.warn("Redis", `saveReferrer skipped: Redis disconnected (referrer=${referrer.address.slice(0, 10)})`);
+      return;
+    }
+    try {
+      const client = getRedisClient();
+      const key = Keys.referrer(referrer.address as Address);
+      await client.hset(key, {
+        address: referrer.address.toLowerCase(),
+        code: referrer.code,
+        level1Referrals: JSON.stringify(referrer.level1Referrals),
+        level2Referrals: JSON.stringify(referrer.level2Referrals),
+        totalEarnings: referrer.totalEarnings.toString(),
+        pendingEarnings: referrer.pendingEarnings.toString(),
+        withdrawnEarnings: referrer.withdrawnEarnings.toString(),
+        level1Earnings: referrer.level1Earnings.toString(),
+        level2Earnings: referrer.level2Earnings.toString(),
+        totalTradesReferred: referrer.totalTradesReferred.toString(),
+        totalVolumeReferred: referrer.totalVolumeReferred.toString(),
+        createdAt: referrer.createdAt.toString(),
+        updatedAt: referrer.updatedAt.toString(),
+      });
+      await client.sadd(Keys.allReferrers(), referrer.address.toLowerCase());
+    } catch (e) {
+      logger.error("Redis", `Failed to save referrer ${referrer.address}: ${e}`);
+    }
+  },
+
+  async getReferrer(address: Address): Promise<ReferrerData | null> {
+    if (!isRedisConnected()) {
+      logger.warn("Redis", `getReferrer skipped: Redis disconnected (address=${(address as string).slice(0, 10)})`);
+      return null;
+    }
+    try {
+      const client = getRedisClient();
+      const data = await client.hgetall(Keys.referrer(address)) as unknown as ReferrerData;
+      return data && data.address ? data : null;
+    } catch (e) {
+      logger.error("Redis", `Failed to get referrer ${address}: ${e}`);
+      return null;
+    }
+  },
+
+  async getAllReferrers(): Promise<Map<string, ReferrerData>> {
+    const result = new Map<string, ReferrerData>();
+    if (!isRedisConnected()) {
+      logger.warn("Redis", "getAllReferrers skipped: Redis disconnected");
+      return result;
+    }
+    try {
+      const client = getRedisClient();
+      const addresses = await client.smembers(Keys.allReferrers());
+      for (const addr of addresses) {
+        const data = await client.hgetall(Keys.referrer(addr as Address)) as unknown as ReferrerData;
+        if (data && data.address) {
+          result.set(addr.toLowerCase(), data);
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load all referrers: ${e}`);
+    }
+    return result;
+  },
+
+  // --- Referee CRUD ---
+  async saveReferee(referee: {
+    address: string; referrerCode: string; referrer: string;
+    level2Referrer: string | null;
+    totalFeesPaid: bigint; totalCommissionGenerated: bigint;
+    joinedAt: number;
+  }): Promise<void> {
+    if (!isRedisConnected()) {
+      logger.warn("Redis", `saveReferee skipped: Redis disconnected (referee=${referee.address.slice(0, 10)})`);
+      return;
+    }
+    try {
+      const client = getRedisClient();
+      const key = Keys.referee(referee.address as Address);
+      await client.hset(key, {
+        address: referee.address.toLowerCase(),
+        referrerCode: referee.referrerCode,
+        referrer: referee.referrer.toLowerCase(),
+        level2Referrer: referee.level2Referrer?.toLowerCase() || "",
+        totalFeesPaid: referee.totalFeesPaid.toString(),
+        totalCommissionGenerated: referee.totalCommissionGenerated.toString(),
+        joinedAt: referee.joinedAt.toString(),
+      });
+      await client.sadd(Keys.allReferees(), referee.address.toLowerCase());
+    } catch (e) {
+      logger.error("Redis", `Failed to save referee ${referee.address}: ${e}`);
+    }
+  },
+
+  async getAllReferees(): Promise<Map<string, RefereeData>> {
+    const result = new Map<string, RefereeData>();
+    if (!isRedisConnected()) {
+      logger.warn("Redis", "getAllReferees skipped: Redis disconnected");
+      return result;
+    }
+    try {
+      const client = getRedisClient();
+      const addresses = await client.smembers(Keys.allReferees());
+      for (const addr of addresses) {
+        const data = await client.hgetall(Keys.referee(addr as Address)) as unknown as RefereeData;
+        if (data && data.address) {
+          result.set(addr.toLowerCase(), data);
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load all referees: ${e}`);
+    }
+    return result;
+  },
+
+  // --- Code → Address mapping ---
+  async saveCode(code: string, address: Address): Promise<void> {
+    if (!isRedisConnected()) {
+      logger.warn("Redis", `saveCode skipped: Redis disconnected (code=${code})`);
+      return;
+    }
+    try {
+      const client = getRedisClient();
+      await client.set(Keys.referralCode(code), address.toLowerCase());
+      await client.sadd(Keys.allReferralCodes(), code.toUpperCase());
+    } catch (e) {
+      logger.error("Redis", `Failed to save referral code ${code}: ${e}`);
+    }
+  },
+
+  async getAllCodes(): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (!isRedisConnected()) {
+      logger.warn("Redis", "getAllCodes skipped: Redis disconnected");
+      return result;
+    }
+    try {
+      const client = getRedisClient();
+      const codes = await client.smembers(Keys.allReferralCodes());
+      for (const code of codes) {
+        const addr = await client.get(Keys.referralCode(code));
+        if (addr) {
+          result.set(code.toUpperCase(), addr.toLowerCase());
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load all referral codes: ${e}`);
+    }
+    return result;
+  },
+};
+
+// ============================================================
 // 定期清理任务
 // ============================================================
 
@@ -1456,6 +1849,9 @@ export default {
   MarketStatsRepo,
   WalletRepo,
   OrderMarginRepo,
+  InsuranceFundRepo,
+  NonceRepo,
+  ReferralRepo,
   // 工具函数
   safeBigInt,
   withLock,

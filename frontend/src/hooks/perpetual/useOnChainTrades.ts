@@ -87,7 +87,7 @@ export function useOnChainTrades(
     setError(null);
 
     try {
-      const url = `${MATCHING_ENGINE_URL}/api/v1/spot/trades/${tokenAddress}?limit=100`;
+      const url = `${MATCHING_ENGINE_URL}/api/v1/spot/trades/${tokenAddress.toLowerCase()}?limit=100`;
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -116,7 +116,6 @@ export function useOnChainTrades(
       }));
 
       setTrades(apiTrades);
-      console.log(`[useOnChainTrades] Fetched ${apiTrades.length} trades for ${tokenAddress}`);
     } catch (e) {
       console.error("[useOnChainTrades] Failed to fetch trades:", e);
       setError(e instanceof Error ? e : new Error(String(e)));
@@ -142,7 +141,6 @@ export function useOnChainTrades(
       try {
         await ws.connect();
         await ws.subscribe([normalizedToken]);
-        console.log(`[useOnChainTrades] Subscribed to WebSocket for ${normalizedToken}`);
       } catch (e) {
         console.error("[useOnChainTrades] WebSocket setup failed:", e);
       }
@@ -176,8 +174,6 @@ export function useOnChainTrades(
           price: parseFloat(message.price || "0"),
         };
 
-        console.log(`[useOnChainTrades] Received real-time trade:`, newTrade.transactionHash);
-
         // 添加到列表顶部 (最新在前)
         setTrades((prev) => {
           // 检查是否已存在
@@ -197,7 +193,7 @@ export function useOnChainTrades(
 
     return () => {
       unsubscribe();
-      ws.unsubscribe([normalizedToken]).catch(() => {});
+      ws.unsubscribe([normalizedToken]).catch((err) => console.warn("[OnChainTrades] Unsubscribe error:", err));
     };
   }, [tokenAddress, enabled]);
 
@@ -292,7 +288,7 @@ export function useOnChainTradeStream(
     return () => {
       unsubscribe();
       unsubscribeConnection();
-      ws.unsubscribe([normalizedToken]).catch(() => {});
+      ws.unsubscribe([normalizedToken]).catch((err) => console.warn("[OnChainTrades] Unsubscribe error:", err));
     };
   }, [tokenAddress, enabled, onTrade]);
 

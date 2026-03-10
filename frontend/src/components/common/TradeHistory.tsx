@@ -8,10 +8,10 @@ import { useTranslations } from "next-intl";
 export interface Trade {
   timestamp: number;
   type: "buy" | "sell";
-  totalValue: string; // e.g., "0.0099 ETH"
-  price: string; // e.g., "0.0₉21100 ETH"
+  totalValue: string; // e.g., "0.0099 BNB"
+  price: string; // e.g., "0.0₉21100 BNB"
   quantity: string; // e.g., "-1.88M TOKEN"
-  quantitySol: string; // e.g., "+0.00990 ETH"
+  quantitySol: string; // e.g., "+0.00990 BNB"
   address: string; // e.g., "9VXWLE...C3YX"
   txHash: string;
   isDev?: boolean; // 是否为开发者钱包
@@ -137,8 +137,8 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                     )}
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <span className="text-okx-text-tertiary cursor-pointer hover:text-okx-text-primary">✎</span>
-                      <span className="text-okx-text-tertiary cursor-pointer hover:text-okx-text-primary">📋</span>
-                      <span className="text-okx-text-tertiary cursor-pointer hover:text-okx-text-primary">🔍</span>
+                      <span className="text-okx-text-tertiary cursor-pointer hover:text-okx-text-primary"><svg className="w-3.5 h-3.5 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25H10.5a2.25 2.25 0 00-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.375a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg></span>
+                      <span className="text-okx-text-tertiary cursor-pointer hover:text-okx-text-primary"><svg className="w-3.5 h-3.5 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg></span>
                       <span className="text-okx-text-tertiary cursor-pointer hover:text-okx-text-primary">♡</span>
                     </div>
                   </div>
@@ -146,10 +146,10 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                   {(trade.isDev || trade.isCreator || trade.label === "DEV" || trade.label === "CREATOR") && (
                     <div className="flex gap-1 mt-0.5">
                       {(trade.isDev || trade.label === "DEV") && (
-                        <span className="text-[10px] text-[#FF9500]">👨‍💻 {t('holders.dev')}</span>
+                        <span className="text-[10px] text-[#FF9500] flex items-center gap-0.5"><svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg> {t('holders.dev')}</span>
                       )}
                       {(trade.isCreator || trade.label === "CREATOR") && (
-                        <span className="text-[10px] text-[#007AFF]">👤 {t('holders.creator')}</span>
+                        <span className="text-[10px] text-[#007AFF] flex items-center gap-0.5"><svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg> {t('holders.creator')}</span>
                       )}
                     </div>
                   )}
@@ -157,13 +157,13 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
 
                 {/* 资金池 */}
                 <td className="py-3 px-3 text-center">
-                  <div className="bg-[#A3E635] w-4 h-4 rounded-full flex items-center justify-center text-[9px] mx-auto">💊</div>
+                  <div className="bg-[#A3E635] w-4 h-4 rounded-full flex items-center justify-center mx-auto"><svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg></div>
                 </td>
 
                 {/* 详情 */}
                 <td className="py-3 px-3 text-center">
                   <a 
-                    href={`https://basescan.org/tx/${trade.txHash}`} 
+                    href={`https://sepolia.basescan.org/tx/${trade.txHash}`}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-okx-text-tertiary hover:text-okx-text-primary"

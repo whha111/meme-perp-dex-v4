@@ -1,0 +1,20 @@
+{
+  "name": "meme-perp-stress-test",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run orchestrator.ts",
+    "quick": "bun run orchestrator.ts --duration 10m --spot 15 --perp 5",
+    "1h": "bun run orchestrator.ts --duration 1h --spot 70 --perp 30",
+    "24h": "bun run orchestrator.ts --duration 24h --spot 200 --perp 100",
+    "48h": "bun run orchestrator.ts --duration 48h --spot 200 --perp 100",
+    "audit": "bun run audit-once.ts"
+  },
+  "dependencies": {
+    "viem": "^2.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "typescript": "^5.9.3"
+  }
+}

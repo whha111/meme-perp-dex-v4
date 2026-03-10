@@ -41,6 +41,13 @@ interface IMemeTokenV2 {
 interface IPriceFeedFactory {
     function addSupportedTokenFromFactory(address token, uint256 initialPrice) external;
     function updateTokenPriceFromFactory(address token, uint256 newPrice) external;
+    // P0-2: 毕业后通知 PriceFeed 设置 Uniswap V2 Pair
+    function setTokenUniswapPair(address token, address pair) external;
+}
+
+/// @notice 清算合约回调接口（毕业后启用清算奖励）
+interface ILiquidationCallback {
+    function enableLiquidatorReward(address token) external;
 }
 
 // [C-01/C-05] Helper library for price sync to avoid stack too deep
@@ -138,8 +145,17 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     // LendingPool 地址（用于自动开启 P2P 借贷）
     address public lendingPool;
 
-    // WETH 地址 (Base Sepolia)
-    address public constant WETH = 0x4200000000000000000000000000000000000006;
+    // Liquidation 地址（毕业后启用清算奖励）
+    address public liquidation;
+
+    // WBNB 地址 (BSC Mainnet)
+    address public constant WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+
+    // P0-2: 毕业后的 Uniswap V2 Pair 地址 (token => pair)
+    mapping(address => address) public uniswapPairs;
+
+    // P2-6: 重名代币检查 (symbol => used)
+    mapping(string => bool) private _symbolUsed;
 
     // 创建者累计收益 (token => 累计ETH)
     mapping(address => uint256) public creatorEarnings;
@@ -170,6 +186,7 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     error NoEarningsToClaim();       // 无收益可提取
     error ReferrerAlreadySet();      // 邀请人已设置
     error CannotReferSelf();         // 不能邀请自己
+    error SymbolAlreadyExists();     // P2-6: 代币符号已存在
 
     // ══════════════════════════════════════════════════════════════════════════════
     // EVENTS
@@ -182,6 +199,8 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     event GraduationFailed(address indexed token, uint8 attempt, string reason);
     event GraduationRetried(address indexed token, uint8 attempt);
     event GraduationRolledBack(address indexed token, uint256 ethReturned);
+    // L-10: receive() event for tracking unexpected ETH deposits
+    event ETHReceived(address indexed sender, uint256 amount);
     // 永续合约自动开启事件
     event PerpEnabled(address indexed token, uint256 ethReserve, uint256 price);
     event GraduationFeeCollected(address indexed token, uint256 fee, address feeReceiver);
@@ -189,6 +208,7 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     // P2P 借贷事件
     event LendingEnabled(address indexed token, uint256 ethReserve);
     event LendingPoolUpdated(address indexed oldLendingPool, address indexed newLendingPool);
+    event LiquidationUpdated(address indexed oldLiquidation, address indexed newLiquidation);
     // 费用分配事件
     event FeeDistributed(address indexed token, uint256 creatorFee, uint256 referrerFee, uint256 platformFee);
     event CreatorEarningsClaimed(address indexed token, address indexed creator, uint256 amount);
@@ -231,6 +251,10 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         uint256 minTokensOut
     ) external payable nonReentrant whenNotPaused returns (address tokenAddress) {
         if (msg.value < serviceFee) revert InsufficientFee(msg.value, serviceFee);
+
+        // P2-6: 防止重名代币
+        if (_symbolUsed[symbol]) revert SymbolAlreadyExists();
+        _symbolUsed[symbol] = true;
 
         uint256 buyAmount = msg.value - serviceFee;
 
@@ -314,6 +338,18 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
      * @param trader 交易者地址
      * @param amount 手续费总额
      */
+    /**
+     * @notice 分配交易手续费
+     * @dev H-08 FIX: 移除无推荐人时的重复加算。
+     *      当 referrer == address(0) 时，referrerFee = 0，
+     *      platformFee = amount - creatorFee - 0 已包含推荐人份额。
+     *      旧代码额外加了 10%，导致总分配 = 110% 的手续费，
+     *      多出的 10% 从池子 ETH 储备中被抽走。
+     *
+     *      分配比例:
+     *      - 有推荐人: 创建者 25% + 推荐人 10% + 平台 65% = 100%
+     *      - 无推荐人: 创建者 25% + 平台 75% = 100%
+     */
     function _distributeTradingFee(address token, address trader, uint256 amount) internal {
         if (amount == 0) return;
 
@@ -322,17 +358,15 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         // 计算各方份额
         uint256 creatorFee = (amount * CREATOR_FEE_SHARE) / 10000;
         uint256 referrerFee = referrer != address(0) ? (amount * REFERRER_FEE_SHARE) / 10000 : 0;
+        // H-08 FIX: platformFee = amount - creatorFee - referrerFee
+        // 无推荐人时 referrerFee=0，platformFee 自然包含推荐人份额，无需额外加算
         uint256 platformFee = amount - creatorFee - referrerFee;
 
-        // 如果没有邀请人，邀请人份额归平台
-        if (referrer == address(0)) {
-            platformFee += (amount * REFERRER_FEE_SHARE) / 10000;
-        }
-
-        // 创建者和邀请人: 累积收益等待提取
+        // 创建者: 累积收益等待提取
         if (creatorFee > 0) {
             creatorEarnings[token] += creatorFee;
         }
+        // 推荐人: 累积收益等待提取（无推荐人时 referrerFee=0，跳过）
         if (referrerFee > 0) {
             referrerEarnings[referrer] += referrerFee;
         }
@@ -396,24 +430,24 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
 
         if (tokensOut < minTokensOut) revert InsufficientLiquidity(tokensOut, minTokensOut);
 
-        // 分配手续费 (创建者25% + 邀请人10% + 平台65%)
-        if (fee > 0) {
-            _distributeTradingFee(tokenAddress, buyer, fee);
-        }
-
-        // 退还多余 ETH
-        if (refundAmount > 0) {
-            (bool refundSuccess,) = buyer.call{value: refundAmount}("");
-            require(refundSuccess, "Refund failed");
-        }
-
-        // 更新状态
+        // AUDIT-FIX SC-C01: CEI 模式 — 状态更新在外部调用之前
         state.realETHReserve += amountIn;
         state.realTokenReserve -= tokensOut;
         state.soldTokens += tokensOut;
 
-        // 铸造代币给买家
+        // 铸造代币给买家 (内部调用，安全)
         IMemeTokenV2(tokenAddress).mint(buyer, tokensOut);
+
+        // 分配手续费 (创建者25% + 邀请人10% + 平台65%) — 包含 ETH 外部调用
+        if (fee > 0) {
+            _distributeTradingFee(tokenAddress, buyer, fee);
+        }
+
+        // 退还多余 ETH — 外部调用在状态更新之后
+        if (refundAmount > 0) {
+            (bool refundSuccess,) = buyer.call{value: refundAmount}("");
+            require(refundSuccess, "Refund failed");
+        }
 
         emit Trade(tokenAddress, buyer, true, amountIn, tokensOut, virtualEth, virtualToken, block.timestamp);
 
@@ -481,20 +515,22 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         // 转移代币到合约
         IERC20(tokenAddress).safeTransferFrom(seller, address(this), tokenAmount);
 
-        // 分配手续费 (创建者25% + 邀请人10% + 平台65%)
-        _distributeTradingFee(tokenAddress, seller, fee);
-
-        // 转移 ETH 给卖家
-        (bool success,) = seller.call{value: ethOut}("");
-        require(success, "ETH transfer failed");
-
-        // 更新状态
+        // AUDIT-FIX SC-C01: CEI (Checks-Effects-Interactions) 模式
+        // 状态更新必须在 ETH 外部调用之前完成，防止重入攻击
+        // (合约已有 nonReentrant 保护，此为纵深防御)
         state.realETHReserve -= ethOutTotal;
         state.realTokenReserve += tokenAmount;
         state.soldTokens -= tokenAmount;
 
-        // 销毁代币
+        // 销毁代币 (内部调用，安全)
         IMemeTokenV2(tokenAddress).burn(tokenAmount);
+
+        // 分配手续费 (创建者25% + 邀请人10% + 平台65%) — 包含 ETH 外部调用
+        _distributeTradingFee(tokenAddress, seller, fee);
+
+        // 转移 ETH 给卖家 — 外部调用在状态更新之后
+        (bool success,) = seller.call{value: ethOut}("");
+        require(success, "ETH transfer failed");
 
         emit Trade(tokenAddress, seller, false, ethOut, tokenAmount, virtualEth, virtualToken, block.timestamp);
 
@@ -561,14 +597,16 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         // LP Token 发送到死地址 (销毁)
         address DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
 
-        // 允许 1% 滑点
+        // 允许 1% 滑点 (token + ETH 双向保护)
         uint256 minTokenAmount = tokenAmount * 99 / 100;
+        // M-14 FIX: ETH 侧也添加滑点保护，防止 MEV 三明治攻击
+        uint256 minETHAmount = liquidityETH * 99 / 100;
 
         try IUniswapV2Router02(uniswapV2Router).addLiquidityETH{value: liquidityETH}(
             tokenAddress,
             tokenAmount,
             minTokenAmount,
-            0,
+            minETHAmount,
             DEAD_ADDRESS,
             block.timestamp + 300
         ) returns (uint256, uint256, uint256) {
@@ -585,6 +623,18 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
 
             address factory = IUniswapV2Router02(uniswapV2Router).factory();
             address pairAddress = IUniswapV2Factory(factory).getPair(tokenAddress, WETH);
+
+            // P0-2: 存储 Uniswap V2 Pair 地址并通知 PriceFeed
+            uniswapPairs[tokenAddress] = pairAddress;
+            if (priceFeed != address(0) && pairAddress != address(0)) {
+                // 通知 PriceFeed 设置 Uniswap Pair（毕业后价格源切换）
+                try IPriceFeedFactory(priceFeed).setTokenUniswapPair(tokenAddress, pairAddress) {} catch {}
+            }
+
+            // 毕业后启用清算奖励（从系统清算0%切换到外部清算7.5%）
+            if (liquidation != address(0)) {
+                try ILiquidationCallback(liquidation).enableLiquidatorReward(tokenAddress) {} catch {}
+            }
 
             // 移除 Minter 权限
             IMemeTokenV2(tokenAddress).removeMinter(address(this));
@@ -660,6 +710,13 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         emit LendingPoolUpdated(oldLendingPool, newLendingPool);
     }
 
+    function setLiquidation(address _liquidation) external onlyOwner {
+        if (_liquidation == address(0)) revert InvalidAddress();
+        address old = liquidation;
+        liquidation = _liquidation;
+        emit LiquidationUpdated(old, _liquidation);
+    }
+
     /**
      * @notice M-007: 管理员重试毕业流程
      * @param tokenAddress 代币地址
@@ -684,11 +741,10 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         if (!state.graduationFailed) revert GraduationNotFailed();
         if (state.isGraduated) revert PoolAlreadyGraduated();
 
-        // 重置毕业失败状态
+        // M-13 FIX: 仅重置 graduationFailed flag，不膨胀 realTokenReserve
+        // 原来 += GRADUATION_THRESHOLD / 10 会导致会计偏差：
+        // 凭空增加 token reserve 使 bonding curve 价格失真
         state.graduationFailed = false;
-        // 增加代币储备以防止立即触发毕业
-        // 注意：这是一个紧急措施，可能导致价格波动
-        state.realTokenReserve += GRADUATION_THRESHOLD / 10; // 增加一些缓冲
 
         // 解锁铸造（如果之前被旧版本锁定了）
         try IMemeTokenV2(tokenAddress).unlockMinting() {} catch {}
@@ -821,5 +877,8 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
         return allTokens.length;
     }
 
-    receive() external payable {}
+    // L-10 FIX: 添加事件追踪意外 ETH 存入
+    receive() external payable {
+        emit ETHReceived(msg.sender, msg.value);
+    }
 }

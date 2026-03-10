@@ -64,6 +64,14 @@ contract PerpVaultTest is Test {
         vm.prank(owner);
         vault.setVault(vaultContract);
 
+        // Restore old parameter values so existing test math stays correct
+        vm.prank(owner);
+        vault.setFees(30, 30);           // restore old 0.3% fees
+        vm.prank(owner);
+        vault.setMaxUtilization(8000);   // restore old 80%
+        vm.prank(owner);
+        vault.setAdlThreshold(9000);     // restore old 90%
+
         vm.deal(lp1, 1000 ether);
         vm.deal(lp2, 1000 ether);
         vm.deal(lp3, 500 ether);
@@ -306,13 +314,13 @@ contract PerpVaultTest is Test {
         uint256 poolBefore = vault.getPoolValue();
 
         // Trader profits 2 ETH
-        uint256 vaultBalanceBefore = vaultContract.balance;
+        uint256 traderBalBefore = trader1.balance;
         vm.prank(matchingEngine);
         vault.settleTraderProfit(trader1, 2 ether);
 
         // Pool should decrease by 2 ETH
         assertEq(vault.getPoolValue(), poolBefore - 2 ether, "Pool reduced by profit");
-        assertEq(vaultContract.balance - vaultBalanceBefore, 2 ether, "Vault receives profit");
+        assertEq(trader1.balance - traderBalBefore, 2 ether, "Trader receives profit");
         // Share price drops: (10-2) * 1e18 / totalShares
         assertEq(vault.getSharePrice(), ((poolBefore - 2 ether) * PRECISION) / totalSharesNow);
     }
@@ -323,13 +331,13 @@ contract PerpVaultTest is Test {
         vault.deposit{value: 1 ether}();
 
         // Request 2 ETH profit but pool only has 1 ETH → partial payment
-        uint256 vaultBalBefore = vaultContract.balance;
+        uint256 traderBalBefore = trader1.balance;
         vm.prank(matchingEngine);
         vault.settleTraderProfit(trader1, 2 ether);
 
         // Should have paid all available balance
         assertEq(address(vault).balance, 0, "Pool drained for ADL");
-        assertEq(vaultContract.balance - vaultBalBefore, 1 ether, "Vault received partial");
+        assertEq(trader1.balance - traderBalBefore, 1 ether, "Trader received partial");
     }
 
     // C2: ADL — settleTraderProfit reverts only when pool is completely empty
@@ -691,15 +699,45 @@ contract PerpVaultTest is Test {
         assertEq(vault.maxOIPerToken(tokenA), 50 ether);
     }
 
-    function test_admin_emergencyRescue() public {
+    function test_admin_emergencyRescue_timelock() public {
         vm.prank(lp1);
         vault.deposit{value: 10 ether}();
 
+        // Step 1: Request rescue (starts 48h timelock)
+        vm.prank(owner);
+        vault.requestEmergencyRescue(owner, 5 ether);
+
+        // Step 2: Cannot execute before timelock expires
+        vm.prank(owner);
+        vm.expectRevert(PerpVault.RescueTimelockActive.selector);
+        vault.executeEmergencyRescue();
+
+        // Step 3: Warp past timelock (48 hours)
+        vm.warp(block.timestamp + 48 hours + 1);
+
+        // Step 4: Execute rescue after timelock
         uint256 ownerBalanceBefore = owner.balance;
         vm.prank(owner);
-        vault.emergencyRescue(owner, 5 ether);
+        vault.executeEmergencyRescue();
 
         assertEq(owner.balance - ownerBalanceBefore, 5 ether);
+    }
+
+    function test_admin_emergencyRescue_cancel() public {
+        vm.prank(lp1);
+        vault.deposit{value: 10 ether}();
+
+        // Request then cancel
+        vm.prank(owner);
+        vault.requestEmergencyRescue(owner, 5 ether);
+        vm.prank(owner);
+        vault.cancelEmergencyRescue();
+
+        // Cannot execute cancelled rescue
+        vm.warp(block.timestamp + 48 hours + 1);
+        vm.prank(owner);
+        vm.expectRevert(PerpVault.NoPendingRescue.selector);
+        vault.executeEmergencyRescue();
     }
 
     function test_admin_pause_unpause() public {
@@ -819,35 +857,34 @@ contract PerpVaultTest is Test {
     }
 
     function test_cooldown_newDepositResetsTimer() public {
-        // LP deposits at T=0
+        // Use absolute timestamps to avoid optimizer issues
+        // T=1000: first deposit
+        vm.warp(1000);
         vm.prank(lp1);
         vault.deposit{value: 5 ether}();
 
-        // Wait 20 hours
-        vm.warp(block.timestamp + 20 hours);
-
-        // LP deposits again at T=20h — resets lastDepositAt
+        // T=73000: second deposit (20h later), resets lastDepositAt
+        vm.warp(73000);
         vm.prank(lp1);
         vault.deposit{value: 5 ether}();
+        assertEq(vault.lastDepositAt(lp1), 73000, "lastDepositAt updated");
 
         uint256 lp1Shares = vault.shares(lp1);
 
-        // Request withdrawal
+        // Request withdrawal at T=73000
         vm.prank(lp1);
         vault.requestWithdrawal(lp1Shares);
 
-        // Advance 20 hours from second deposit (total T=40h) — still within cooldown of 2nd deposit
-        vm.warp(block.timestamp + 20 hours);
-
+        // T=145000: 20h after second deposit (72000s < 86400s cooldown) — should revert
+        vm.warp(145000);
         vm.prank(lp1);
         vm.expectRevert(PerpVault.CooldownNotMet.selector);
         vault.executeWithdrawal();
 
-        // Advance past 24h from second deposit
-        vm.warp(block.timestamp + 5 hours);
-
+        // T=160000: 24.16h after second deposit (87000s > 86400s cooldown) — should succeed
+        vm.warp(160000);
         vm.prank(lp1);
-        vault.executeWithdrawal(); // Now it works
+        vault.executeWithdrawal();
         assertEq(vault.shares(lp1), 0);
     }
 
@@ -1255,11 +1292,12 @@ contract PerpVaultTest is Test {
         vault.deposit{value: 5 ether}();
 
         // Try to settle 10 ETH but pool only has 5
+        uint256 traderBalBefore = trader1.balance;
         vm.prank(matchingEngine);
         vault.settleTraderProfit(trader1, 10 ether);
 
         assertEq(address(vault).balance, 0, "Pool fully drained");
-        assertEq(vaultContract.balance, 5 ether, "Vault got partial payment");
+        assertEq(trader1.balance - traderBalBefore, 5 ether, "Trader got partial payment");
     }
 
     function test_C2_extendedStats() public {

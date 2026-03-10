@@ -16,7 +16,7 @@
  */
 
 import { useState, useCallback, useMemo } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 import { useToast } from "@/components/shared/Toast";
@@ -100,6 +100,7 @@ async function postJSON(url: string, body: Record<string, unknown>) {
 
 export function usePerpReferral() {
   const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
@@ -214,7 +215,7 @@ export function usePerpReferral() {
       if (!address) throw new Error("No address");
       return postJSON(`${MATCHING_ENGINE_URL}/api/referral/bind`, {
         address,
-        code,
+        referralCode: code, // C-7: 后端期望 referralCode 而非 code
       });
     },
     onSuccess: () => {
@@ -227,12 +228,17 @@ export function usePerpReferral() {
   });
 
   // ---- Withdraw commission ----
+  // C-3: 后端要求钱包签名鉴权，防止未授权提现
   const withdrawMutation = useMutation({
     mutationFn: async (amount: string | undefined) => {
       if (!address) throw new Error("No address");
+      const normalizedAddr = address.toLowerCase();
+      const withdrawMessage = `Withdraw commission${amount ? ` ${amount}` : ""} for ${normalizedAddr}`;
+      const signature = await signMessageAsync({ message: withdrawMessage });
       return postJSON(`${MATCHING_ENGINE_URL}/api/referral/withdraw`, {
         address,
         amount,
+        signature,
       });
     },
     onSuccess: (data) => {

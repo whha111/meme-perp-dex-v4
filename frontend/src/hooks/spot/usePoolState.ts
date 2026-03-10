@@ -8,9 +8,12 @@ import { tradeEventEmitter } from "@/lib/tradeEvents";
 const TOKEN_FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TOKEN_FACTORY_ADDRESS as `0x${string}` | undefined;
 
 // Chain ID
-const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "84532", 10);
+const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56", 10);
 
 // TokenFactory ABI for view functions
+// ⚠️ ABI 必须与部署的 TokenFactory 合约完全一致
+// 合约 getPoolState 返回 11 个字段（不含 lendingEnabled）
+// 如果字段多了，viem 会把 metadataURI 的长度字节误读为 bool → InvalidBytesBooleanError
 const TOKEN_FACTORY_ABI = [
   {
     inputs: [{ name: "tokenAddress", type: "address" }],
@@ -29,7 +32,6 @@ const TOKEN_FACTORY_ABI = [
           { name: "graduationFailed", type: "bool" },
           { name: "graduationAttempts", type: "uint8" },
           { name: "perpEnabled", type: "bool" },
-          { name: "lendingEnabled", type: "bool" },
         ],
         name: "",
         type: "tuple",
@@ -64,7 +66,6 @@ export interface PoolState {
   graduationFailed: boolean;
   graduationAttempts: number;
   perpEnabled: boolean;
-  lendingEnabled: boolean;
 }
 
 export interface PoolData {
@@ -76,6 +77,10 @@ export interface PoolData {
   isLoading: boolean;
   error: Error | null;
 }
+
+// Error log throttle: only log same error once per 60 seconds
+let _lastPoolStateErrorLog = 0;
+let _lastPoolStateErrorMsg = "";
 
 // Default data to return when not enabled or loading
 const DEFAULT_POOL_DATA: PoolData = {
@@ -95,7 +100,9 @@ const DEFAULT_POOL_DATA: PoolData = {
  */
 export function usePoolState(tokenAddress: string | undefined): PoolData {
   const isValidAddress = tokenAddress?.startsWith("0x") && tokenAddress.length === 42;
-  const address = isValidAddress ? tokenAddress as `0x${string}` : undefined;
+  // ⚠️ 必须小写化！URL 里的 mixed-case 地址可能 checksum 不合法，
+  // viem 严格校验会拒绝 → 合约调用返回 "0x" → marketCap = 0
+  const address = isValidAddress && tokenAddress ? tokenAddress.toLowerCase() as `0x${string}` : undefined;
   const isEnabled = !!address && !!TOKEN_FACTORY_ADDRESS;
 
   // Use ref to store previous result to avoid unnecessary re-renders
@@ -183,9 +190,20 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
     const priceResult = data[1];
 
     if (poolStateResult.status !== "success" || priceResult.status !== "success") {
+      const getFailureMsg = (r: { status: string; error?: Error }) =>
+        r.status === "failure" ? ` (${r.error?.message || r.error || "unknown"})` : "";
+      const errDetail = `getPoolState: ${poolStateResult.status}${getFailureMsg(poolStateResult as { status: string; error?: Error })}, getCurrentPrice: ${priceResult.status}${getFailureMsg(priceResult as { status: string; error?: Error })}`;
+      // 节流: 相同错误 60 秒内只打印一次，避免刷屏
+      const now = Date.now();
+      const isSameError = errDetail === _lastPoolStateErrorMsg;
+      if (!isSameError || now - _lastPoolStateErrorLog > 60_000) {
+        console.warn(`[usePoolState] Contract call failure for ${address?.slice(0, 10)}:`, errDetail.slice(0, 120));
+        _lastPoolStateErrorLog = now;
+        _lastPoolStateErrorMsg = errDetail;
+      }
       return {
         ...DEFAULT_POOL_DATA,
-        error: new Error("Failed to fetch pool state"),
+        error: new Error(errDetail),
       };
     }
 
@@ -202,7 +220,6 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
       graduationFailed: boolean;
       graduationAttempts: number;
       perpEnabled: boolean;
-      lendingEnabled: boolean;
     };
 
     const poolState: PoolState = {
@@ -217,7 +234,6 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
       graduationFailed: rawState.graduationFailed,
       graduationAttempts: rawState.graduationAttempts,
       perpEnabled: rawState.perpEnabled ?? false,
-      lendingEnabled: rawState.lendingEnabled ?? false,
     };
 
     const currentPrice = priceResult.result as bigint;
@@ -253,15 +269,15 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
 /**
  * Calculate price in USD from ETH price
  */
-export function calculatePriceUsd(priceWei: bigint, ethPriceUsd: number): number {
+export function calculatePriceUsd(priceWei: bigint, bnbPriceUsd: number): number {
   const priceEth = Number(priceWei) / 1e18;
-  return priceEth * ethPriceUsd;
+  return priceEth * bnbPriceUsd;
 }
 
 /**
  * Calculate market cap in USD
  */
-export function calculateMarketCapUsd(marketCapWei: bigint, ethPriceUsd: number): number {
+export function calculateMarketCapUsd(marketCapWei: bigint, bnbPriceUsd: number): number {
   const marketCapEth = Number(marketCapWei) / 1e18;
-  return marketCapEth * ethPriceUsd;
+  return marketCapEth * bnbPriceUsd;
 }

@@ -39,6 +39,10 @@ func (r *OrderRepository) Update(order *model.Order) error {
 }
 
 func (r *OrderRepository) GetPendingByUser(userID int64, instID string, limit int) ([]model.Order, error) {
+	// P3-78: Cap query limit to prevent unbounded queries
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
 	var orders []model.Order
 	query := r.db.Where("user_id = ? AND state IN ?", userID, []string{model.OrderStateLive, model.OrderStatePartiallyFilled})
 	if instID != "" {
@@ -51,6 +55,10 @@ func (r *OrderRepository) GetPendingByUser(userID int64, instID string, limit in
 }
 
 func (r *OrderRepository) GetHistoryByUser(userID int64, instID string, after, before int64, limit int) ([]model.Order, error) {
+	// P3-78: Cap query limit to prevent unbounded queries
+	if limit <= 0 || limit > 1000 {
+		limit = 100
+	}
 	var orders []model.Order
 	query := r.db.Where("user_id = ? AND state IN ?", userID, []string{model.OrderStateFilled, model.OrderStateCanceled})
 	if instID != "" {

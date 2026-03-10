@@ -24,9 +24,15 @@ WORKDIR /app
 # Install ca-certificates for HTTPS
 RUN apk --no-cache add ca-certificates
 
+# AUDIT-FIX M-16: Run as non-root user for security (same pattern as backend Dockerfile)
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 # Copy binary from builder
 COPY --from=builder /app/keeper .
 COPY --from=builder /app/configs ./configs
+
+# Switch to non-root user
+USER appuser
 
 # Run the keeper
 CMD ["./keeper"]

@@ -98,11 +98,17 @@ func SuccessOrder(c *gin.Context, ordID, clOrdID string) {
 	})
 }
 
-// ErrorOrder returns an order error response
+// ErrorOrder returns an order error response with proper HTTP status
 func ErrorOrder(c *gin.Context, code int, msg string) {
-	c.JSON(http.StatusOK, Response{
-		Code: errors.CodeSuccess,
-		Msg:  "success",
+	httpStatus := http.StatusBadRequest
+	if code >= 50100 && code < 50200 {
+		httpStatus = http.StatusUnauthorized
+	} else if code >= 50000 && code < 51000 {
+		httpStatus = http.StatusInternalServerError
+	}
+	c.JSON(httpStatus, Response{
+		Code: code,
+		Msg:  msg,
 		Data: OrderResponse{
 			SCode: itoa(code),
 			SMsg:  msg,

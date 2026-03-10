@@ -13,6 +13,23 @@ import { type Address } from "viem";
 // Types
 // ============================================================
 
+// WSS token list (替代 useOnChainTokenList 的 400+ RPC 调用)
+export interface WssOnChainToken {
+  address: `0x${string}`;
+  name: string;
+  symbol: string;
+  creator: string;
+  createdAt: number;
+  isGraduated: boolean;
+  isActive: boolean;
+  price: string;       // wei string from bonding curve
+  marketCap: string;   // wei string
+  soldSupply: string;
+  metadataURI: string;
+  perpEnabled: boolean;
+  realETHReserve: string;
+}
+
 // 仓位方向
 export type PositionSide = "long" | "short";
 
@@ -98,6 +115,7 @@ export interface TradeData {
 
 export interface PairedPosition {
   pairId: string;
+  trader?: Address;                   // 仓位持有者地址 (后端风控推送)
   token: Address;
   isLong: boolean;
   size: string;
@@ -246,6 +264,13 @@ interface TradingDataState {
   currentToken: Address | null;
   currentTrader: Address | null;
 
+  // Token metadata (name/symbol, from WSS)
+  tokenInfoMap: Record<string, { name: string; symbol: string }>;
+
+  // Full token list from WSS (replaces useOnChainTokenList RPC calls)
+  allTokens: WssOnChainToken[];
+  allTokensLoaded: boolean;
+
   // Real-time market data (per token)
   orderBooks: Map<Address, OrderBookData>;
   recentTrades: Map<Address, TradeData[]>;
@@ -267,6 +292,7 @@ interface TradingDataState {
   wsConnected: boolean;
   wsError: string | null;
   lastUpdated: number;
+  dataStale: boolean; // P3-77: true when WS disconnects, cleared on reconnect data refresh
 
   // Loading states
   isLoadingPositions: boolean;
@@ -282,11 +308,16 @@ interface TradingDataState {
   setCurrentToken: (token: Address | null) => void;
   setCurrentTrader: (trader: Address | null) => void;
 
+  // Token info setter (WSS-only)
+  setTokenInfoMap: (info: Record<string, { name: string; symbol: string }>) => void;
+  setAllTokens: (tokens: WssOnChainToken[]) => void;
+
   // Market data setters
   setOrderBook: (token: Address, orderBook: OrderBookData) => void;
   addRecentTrade: (token: Address, trade: TradeData) => void;
   setRecentTrades: (token: Address, trades: TradeData[]) => void;
   setTokenStats: (token: Address, stats: TokenStats) => void;
+  setTokenStatsBatch: (entries: Array<{ token: Address; stats: TokenStats }>) => void;
   setFundingRate: (token: Address, rate: FundingRateInfo) => void;
 
   // User data setters
@@ -310,6 +341,7 @@ interface TradingDataState {
   setWsConnected: (connected: boolean) => void;
   setWsError: (error: string | null) => void;
   setLastUpdated: (timestamp: number) => void;
+  setDataStale: (stale: boolean) => void;
 
   // Loading states
   setIsLoadingPositions: (loading: boolean) => void;
@@ -340,6 +372,9 @@ interface TradingDataState {
 const initialState = {
   currentToken: null as Address | null,
   currentTrader: null as Address | null,
+  tokenInfoMap: {} as Record<string, { name: string; symbol: string }>,
+  allTokens: [] as WssOnChainToken[],
+  allTokensLoaded: false,
   orderBooks: new Map<Address, OrderBookData>(),
   recentTrades: new Map<Address, TradeData[]>(),
   tokenStats: new Map<Address, TokenStats>(),
@@ -354,13 +389,14 @@ const initialState = {
   wsConnected: false,
   wsError: null as string | null,
   lastUpdated: 0,
+  dataStale: false,
   isLoadingPositions: false,
   isLoadingOrders: false,
   isLoadingHistory: false,
   // Order form state (从 perpetualStore 迁移)
   orderForm: DEFAULT_ORDER_FORM,
   leverageSettings: {} as Record<string, LeverageSettings>,
-  selectedInstId: "PEPE-PERP",
+  selectedInstId: "",
 };
 
 // ============================================================
@@ -375,12 +411,16 @@ export const useTradingDataStore = create<TradingDataState>()(
     setCurrentToken: (token) => set({ currentToken: token }),
     setCurrentTrader: (trader) => set({ currentTrader: trader }),
 
+    // Token info (WSS-only)
+    setTokenInfoMap: (info) => set({ tokenInfoMap: info }),
+    setAllTokens: (tokens) => set({ allTokens: tokens, allTokensLoaded: true }),
+
     // Market data setters
     setOrderBook: (token, orderBook) =>
       set((state) => {
         const newOrderBooks = new Map(state.orderBooks);
         newOrderBooks.set(token.toLowerCase() as Address, orderBook);
-        return { orderBooks: newOrderBooks, lastUpdated: Date.now() };
+        return { orderBooks: newOrderBooks };
       }),
 
     addRecentTrade: (token, trade) =>
@@ -389,7 +429,7 @@ export const useTradingDataStore = create<TradingDataState>()(
         const normalizedToken = token.toLowerCase() as Address;
         const existing = newRecentTrades.get(normalizedToken) || [];
         newRecentTrades.set(normalizedToken, [trade, ...existing.slice(0, 99)]);
-        return { recentTrades: newRecentTrades, lastUpdated: Date.now() };
+        return { recentTrades: newRecentTrades };
       }),
 
     setRecentTrades: (token, trades) =>
@@ -416,7 +456,31 @@ export const useTradingDataStore = create<TradingDataState>()(
         }
         const newTokenStats = new Map(state.tokenStats);
         newTokenStats.set(normalizedToken, stats);
-        return { tokenStats: newTokenStats, lastUpdated: Date.now() };
+        return { tokenStats: newTokenStats };
+      }),
+
+    // Batch update: single Map clone for all tokens (avoids N re-renders from all_market_stats)
+    setTokenStatsBatch: (entries) =>
+      set((state) => {
+        let changed = false;
+        const newMap = new Map(state.tokenStats);
+        for (const { token, stats } of entries) {
+          const normalizedToken = token.toLowerCase() as Address;
+          const existing = newMap.get(normalizedToken);
+          if (existing &&
+            existing.lastPrice === stats.lastPrice &&
+            existing.volume24h === stats.volume24h &&
+            existing.openInterest === stats.openInterest &&
+            existing.high24h === stats.high24h &&
+            existing.low24h === stats.low24h &&
+            existing.priceChange24h === stats.priceChange24h &&
+            existing.trades24h === stats.trades24h) {
+            continue; // This token unchanged
+          }
+          newMap.set(normalizedToken, stats);
+          changed = true;
+        }
+        return changed ? { tokenStats: newMap } : state;
       }),
 
     setFundingRate: (token, rate) =>
@@ -489,9 +553,14 @@ export const useTradingDataStore = create<TradingDataState>()(
     clearRiskAlerts: () => set({ riskAlerts: [] }),
 
     // Connection status
-    setWsConnected: (connected) => set({ wsConnected: connected }),
+    setWsConnected: (connected) => set((state) => ({
+      wsConnected: connected,
+      // P3-77: Mark data as stale when WS disconnects
+      dataStale: !connected ? true : state.dataStale,
+    })),
     setWsError: (error) => set({ wsError: error }),
     setLastUpdated: (timestamp) => set({ lastUpdated: timestamp }),
+    setDataStale: (stale) => set({ dataStale: stale }),
 
     // Loading states
     setIsLoadingPositions: (loading) => set({ isLoadingPositions: loading }),

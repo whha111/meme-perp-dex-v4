@@ -280,7 +280,7 @@ export function validateAndExtractWalletFromTXT(
  */
 export function validateChainId(
   chainId: number, 
-  allowedChains: number[] = [84532, 8453] // 默认允许 Base Sepolia 和 Base Mainnet
+  allowedChains: number[] = [97, 56] // 默认允许 BSC Testnet 和 BSC Mainnet
 ): boolean {
   return allowedChains.includes(chainId);
 }
@@ -325,10 +325,10 @@ export function validateTradeParams(params: {
  * @param validator 验证器函数
  * @returns 错误信息或 null
  */
-export function getValidationError(
+export function getValidationError<T = unknown>(
   field: string,
-  value: any,
-  validator: (value: any) => boolean
+  value: T,
+  validator: (value: T) => boolean
 ): string | null {
   if (!validator(value)) {
     switch (field) {
@@ -705,26 +705,58 @@ export function validateTpSlPrice(
 
 /**
  * 验证保证金是否足够
- * @param availableBalance 可用余额
- * @param requiredMargin 所需保证金
+ * AUDIT-FIX M-27: Use BigInt comparison instead of parseFloat to avoid IEEE-754
+ * precision loss near boundary values (e.g., parseFloat("0.1") + parseFloat("0.2") !== 0.3).
+ * Both availableBalance and requiredMargin are expected as 1e18 wei strings or
+ * human-readable decimals — we parse both to avoid silent precision bugs.
+ * @param availableBalance 可用余额 (1e18 string or decimal)
+ * @param requiredMargin 所需保证金 (1e18 string or decimal)
  * @returns 验证结果
  */
 export function validateMarginSufficiency(
   availableBalance: string,
   requiredMargin: string
 ): { isValid: boolean; error?: string } {
-  const available = parseFloat(availableBalance);
-  const required = parseFloat(requiredMargin);
-
-  if (isNaN(available) || isNaN(required)) {
+  try {
+    // Try BigInt first (1e18 wei strings from backend)
+    const availBig = parseDecimalToBigInt(availableBalance);
+    const requiredBig = parseDecimalToBigInt(requiredMargin);
+    if (availBig === null || requiredBig === null) {
+      return { isValid: false, error: '无效的余额数据' };
+    }
+    if (requiredBig > availBig) {
+      return { isValid: false, error: `保证金不足，需要 ${requiredMargin}，可用 ${availableBalance}` };
+    }
+    return { isValid: true };
+  } catch {
     return { isValid: false, error: '无效的余额数据' };
   }
+}
 
-  if (required > available) {
-    return { isValid: false, error: `保证金不足，需要 ${requiredMargin}，可用 ${availableBalance}` };
+/**
+ * AUDIT-FIX M-27: Parse a decimal string or integer string into BigInt with 18 decimals precision.
+ * Handles both "0.05" (human-readable) and "50000000000000000" (wei) formats.
+ */
+function parseDecimalToBigInt(value: string): bigint | null {
+  if (!value || typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+
+  // If it's already a pure integer (wei string), parse directly
+  if (/^[0-9]+$/.test(trimmed)) {
+    return BigInt(trimmed);
   }
 
-  return { isValid: true };
+  // Parse decimal: "1.5" → 1500000000000000000n (1.5 * 1e18)
+  const parts = trimmed.split('.');
+  if (parts.length > 2) return null;
+
+  const intPart = parts[0] || '0';
+  const decPart = (parts[1] || '').padEnd(18, '0').slice(0, 18);
+
+  if (!/^[0-9]*$/.test(intPart) || !/^[0-9]+$/.test(decPart)) return null;
+
+  return BigInt(intPart) * 10n ** 18n + BigInt(decPart);
 }
 
 /**
@@ -753,26 +785,35 @@ export function validateSlippage(slippage: number): { isValid: boolean; error?: 
 
 /**
  * 计算所需保证金
+ * AUDIT-FIX M-27: Use BigInt arithmetic to avoid float precision loss.
+ * Returns a decimal string (human-readable) for display.
  * @param size 仓位大小
  * @param price 价格
  * @param leverage 杠杆
- * @returns 所需保证金
+ * @returns 所需保证金 (decimal string)
  */
 export function calculateRequiredMargin(
   size: string,
   price: string,
   leverage: number
 ): string {
-  const sizeNum = parseFloat(size);
-  const priceNum = parseFloat(price);
+  const sizeBig = parseDecimalToBigInt(size);
+  const priceBig = parseDecimalToBigInt(price);
 
-  if (isNaN(sizeNum) || isNaN(priceNum) || leverage <= 0) {
+  if (sizeBig === null || priceBig === null || leverage <= 0) {
     return '0';
   }
 
-  const notionalValue = sizeNum * priceNum;
-  const margin = notionalValue / leverage;
-  return margin.toFixed(8);
+  // notional = size * price / 1e18 (both are 1e18-scaled)
+  // margin = notional / leverage
+  const notional = sizeBig * priceBig / (10n ** 18n);
+  const margin = notional / BigInt(leverage);
+
+  // Convert back to decimal string with 8 decimal places
+  const intPart = margin / (10n ** 18n);
+  const decPart = margin % (10n ** 18n);
+  const decStr = decPart.toString().padStart(18, '0').slice(0, 8);
+  return `${intPart}.${decStr}`;
 }
 
 /**

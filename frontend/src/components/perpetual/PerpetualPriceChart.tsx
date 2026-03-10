@@ -27,6 +27,7 @@ import { MATCHING_ENGINE_URL } from "@/config/api";
 
 // 导入 WebSocket K线 Hook
 import { useWebSocketKlines } from "@/hooks/common/useWebSocketKlines";
+import { usePoolState } from "@/hooks/spot/usePoolState";
 
 interface PerpetualPriceChartProps {
   tokenAddress: string;
@@ -171,7 +172,6 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
   const [isLogScale, setIsLogScale] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
   const [klineCount, setKlineCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [latestOHLC, setLatestOHLC] = useState<OHLCDisplay | null>(null);
 
@@ -195,9 +195,28 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
     200
   );
 
-  // 处理 WebSocket K线数据更新
+  // 链上价格兜底：当 WS K 线数据为空时，用 on-chain 价格生成种子蜡烛
+  const poolData = usePoolState(tokenAddress);
+
+  // 合并数据源：优先 WS K线，fallback 用链上价格生成种子蜡烛
+  const effectiveChartData = useMemo(() => {
+    if (wsChartData && wsChartData.length > 0) return wsChartData;
+    if (wsLoading) return [];
+    if (poolData.currentPrice > 0n) {
+      const priceETH = Number(poolData.currentPrice) / 1e18;
+      const now = Math.floor(Date.now() / 1000);
+      const bucket = Math.floor(now / RESOLUTION_SECONDS[resolution]) * RESOLUTION_SECONDS[resolution];
+      return [{ time: bucket, open: priceETH, high: priceETH, low: priceETH, close: priceETH, volume: 0 }];
+    }
+    return [];
+  }, [wsChartData, wsLoading, poolData.currentPrice, resolution]);
+
+  // 派生 isLoading：仅当 WS 还在加载且没有任何可用数据时才为 true
+  const isLoading = wsLoading && effectiveChartData.length === 0;
+
+  // 处理 K线数据更新 (WS K线 + 链上种子蜡烛)
   useEffect(() => {
-    if (!wsKlines || wsKlines.length === 0) {
+    if (!effectiveChartData || effectiveChartData.length === 0) {
       setKlineCount(0);
       return;
     }
@@ -206,15 +225,8 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
       return;
     }
 
-    // 转换数据格式
-    const rawData = wsKlines.map((k) => ({
-      time: Math.floor(k.timestamp / 1000),
-      open: Number(k.open),
-      high: Number(k.high),
-      low: Number(k.low),
-      close: Number(k.close),
-      volume: Number(k.volume),
-    }));
+    // effectiveChartData 已经是 {time, open, high, low, close, volume} 数字格式
+    const rawData = effectiveChartData;
 
     // ★ 修复1: 价格跨度过大时，只显示最近数据（与 TokenPriceChart 一致）
     const prices = rawData.map(c => c.close);
@@ -299,7 +311,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
     }
 
     setKlineCount(displayData.length);
-  }, [wsKlines]);
+  }, [effectiveChartData]);
 
   // ✅ WebSocket 自动更新，无需定时刷新
 
@@ -351,6 +363,16 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
       crosshair: {
         vertLine: { color: 'rgba(128, 128, 128, 0.3)', style: 2, labelBackgroundColor: colors.background },
         horzLine: { color: 'rgba(128, 128, 128, 0.3)', style: 2, labelBackgroundColor: colors.background },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      kineticScroll: {
+        mouse: true,
+        touch: true,
       },
     };
 
@@ -503,7 +525,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
         {/* 左侧：交易对 */}
         <div className="flex items-center gap-2">
           <span className="text-okx-text-primary font-bold text-[16px]">{tokenSymbol}</span>
-          <span className="text-[#787B86] text-[12px]">/ETH Perp</span>
+          <span className="text-[#787B86] text-[12px]">/BNB Perp</span>
         </div>
 
         {displayOHLC && (
@@ -539,7 +561,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[#787B86]">{t("vol")}</span>
-                <span className="text-[#9CA3AF]">Ξ{formatVolume(displayOHLC.volume)}</span>
+                <span className="text-[#9CA3AF]">BNB {formatVolume(displayOHLC.volume)}</span>
               </div>
             </div>
           </>
@@ -617,7 +639,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
         <div ref={chartContainerRef} className="w-full h-full" />
 
         {/* 空数据/加载状态 */}
-        {(klineCount === 0 || isLoading) && (
+        {(klineCount === 0 && isLoading) && (
           <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: chartColors.background }}>
             <div className="flex flex-col items-center gap-3 text-center">
               <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: chartColors.hoverBg }}>

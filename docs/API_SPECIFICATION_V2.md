@@ -1,5 +1,9 @@
 # API 规范文档 V2
 
+> **⚠️ 2026-03-01**: 撮合引擎的 `POST /api/user/:trader/deposit` 和 `withdraw`
+> 是无鉴权的虚假充值/提款接口，不执行任何链上操作。必须禁用或加鉴权。
+> 详见 `docs/ISSUES_AUDIT_REPORT.md`
+
 ## 概述
 
 本文档定义 MEME Perp DEX 的 REST API 和 WebSocket API 规范，参考 OKX/Binance 标准设计。

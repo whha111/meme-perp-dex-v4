@@ -1,24 +1,26 @@
 "use client";
 
 /**
- * 钱包管理页面 (ETH 本位)
+ * 钱包管理页面 (BNB 本位)
  *
- * ETH 本位永续合约:
+ * BNB 本位永续合约:
  * - 所有余额以 ETH 计价 (1e18 精度)
  * - 充值: 发送 ETH 到派生钱包
  * - 提现: Settlement → 派生钱包 → 主钱包
  */
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract, useBalance } from "wagmi";
 import { formatUnits, type Address } from "viem";
 import { Navbar } from "@/components/layout/Navbar";
 import { usePerpetualV2 } from "@/hooks/perpetual/usePerpetualV2";
 import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
+import { useToast } from "@/components/shared/Toast";
+import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI } from "@/lib/contracts";
 
-// ETH 本位: 使用 WETH 或原生 ETH
-const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0x4200000000000000000000000000000000000006") as Address;
+// BNB 本位: 使用 WBNB (BSC Mainnet)
+const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
 export default function WalletPage() {
   const t = useTranslations("walletManagement");
@@ -31,8 +33,8 @@ export default function WalletPage() {
     balance,
     deposit,
     withdraw,
-    isPending,
-    isConfirming,
+    isDepositing,
+    isWithdrawing,
     error,
   } = usePerpetualV2({
     tradingWalletAddress: tradingWalletAddr || undefined,
@@ -40,11 +42,46 @@ export default function WalletPage() {
     mainWalletAddress: address,
   });
 
-  // Extract balances from V2 hook
-  const derivedWalletBalance = balance?.walletBalance || 0n;
-  const settlementAvailable = balance?.settlementAvailable || 0n;
+  const { showToast } = useToast();
+
+  // ── On-chain balance reads (fallback when backend is down) ──
+  const { data: onChainWeth, refetch: refetchWeth } = useReadContract({
+    address: WETH_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: tradingWalletAddr ? [tradingWalletAddr] : undefined,
+    query: { enabled: !!tradingWalletAddr },
+  });
+  const { data: onChainSettlement, refetch: refetchSettlement } = useReadContract({
+    address: CONTRACTS.SETTLEMENT_V2,
+    abi: SETTLEMENT_V2_ABI,
+    functionName: "userDeposits",
+    args: tradingWalletAddr ? [tradingWalletAddr] : undefined,
+    query: { enabled: !!tradingWalletAddr },
+  });
+  const { refetch: refetchNative } = useBalance({
+    address: tradingWalletAddr ?? undefined,
+  });
+
+  // Refresh all on-chain reads after deposit/withdraw
+  // Small delay ensures RPC node has indexed the latest block
+  const refreshOnChain = useCallback(() => {
+    refetchWeth();
+    refetchSettlement();
+    refetchNative();
+    // Second refetch after 2s to catch any RPC propagation delay
+    setTimeout(() => {
+      refetchWeth();
+      refetchSettlement();
+      refetchNative();
+    }, 2000);
+  }, [refetchWeth, refetchSettlement, refetchNative]);
+
+  // Extract balances: prefer backend, fallback to on-chain
+  const derivedWalletBalance = balance?.walletBalance || (onChainWeth as bigint) || 0n;
+  const settlementAvailable = balance?.settlementAvailable || (onChainSettlement as bigint) || 0n;
   const settlementLocked = balance?.settlementLocked || 0n;
-  const availableBalance = balance?.available || 0n;
+  const availableBalance = balance?.available || settlementAvailable;
   const lockedMargin = balance?.locked || 0n;
   const vaultBalance = availableBalance + lockedMargin;
 
@@ -53,7 +90,6 @@ export default function WalletPage() {
   const [activeTab, setActiveTab] = useState<"deposit" | "withdraw">("deposit");
   const [actionError, setActionError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
-  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // Format ETH balance for display (18 decimals)
   const formatBalance = (balance: bigint | null | undefined): string => {
@@ -65,7 +101,7 @@ export default function WalletPage() {
     return val.toFixed(6);
   };
 
-  // Handle deposit (ETH 本位: 存入 ETH/WETH)
+  // Handle deposit (BNB 本位: 存入 ETH/WETH)
   const handleDeposit = async () => {
     if (!depositAmount || parseFloat(depositAmount) <= 0) {
       setActionError(t("errors.invalidAmount"));
@@ -74,14 +110,18 @@ export default function WalletPage() {
     setActionError(null);
     setTxHash(null);
     try {
-      await deposit(WETH_ADDRESS, depositAmount);
+      const hash = await deposit(WETH_ADDRESS, depositAmount);
+      setTxHash(hash);
       setDepositAmount("");
+      refreshOnChain();
+      showToast(t("depositSuccess"), "success");
     } catch (err) {
       setActionError((err as Error).message);
+      showToast((err as Error).message, "error");
     }
   };
 
-  // Handle withdraw (ETH 本位: Settlement → derived wallet → main wallet)
+  // Handle withdraw (BNB 本位: Settlement → derived wallet → main wallet)
   const handleWithdraw = async () => {
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
       setActionError(t("errors.invalidAmount"));
@@ -95,14 +135,15 @@ export default function WalletPage() {
     }
     setActionError(null);
     setTxHash(null);
-    setIsWithdrawing(true);
     try {
-      await withdraw(WETH_ADDRESS, withdrawAmount);
+      const hash = await withdraw(WETH_ADDRESS, withdrawAmount);
+      if (hash) setTxHash(hash);
       setWithdrawAmount("");
+      refreshOnChain();
+      showToast(t("withdrawSuccess"), "success");
     } catch (err) {
       setActionError((err as Error).message);
-    } finally {
-      setIsWithdrawing(false);
+      showToast((err as Error).message, "error");
     }
   };
 
@@ -157,13 +198,13 @@ export default function WalletPage() {
               {/* Derived Wallet Balance Card */}
               <div className="bg-okx-bg-secondary rounded-2xl border border-okx-border-primary p-6">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                    <EthIcon className="w-5 h-5 text-blue-400" />
+                  <div className="w-10 h-10 rounded-full bg-okx-accent/20 flex items-center justify-center">
+                    <EthIcon className="w-5 h-5 text-okx-accent" />
                   </div>
                   <div>
                     <div className="text-okx-text-tertiary text-sm">{t("walletBalance")}</div>
                     <div className="text-xl font-bold text-okx-text-primary">
-                      Ξ {formatBalance(derivedWalletBalance)}
+                      BNB  {formatBalance(derivedWalletBalance)}
                     </div>
                   </div>
                 </div>
@@ -181,21 +222,21 @@ export default function WalletPage() {
                   <div>
                     <div className="text-okx-text-tertiary text-sm">{t("vaultBalance")}</div>
                     <div className="text-xl font-bold text-okx-text-primary">
-                      Ξ {formatBalance(vaultBalance)}
+                      BNB  {formatBalance(vaultBalance)}
                     </div>
                   </div>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-okx-text-tertiary">{t("available")}:</span>
-                  <span className="text-okx-up">Ξ {formatBalance(availableBalance)}</span>
+                  <span className="text-okx-up">BNB  {formatBalance(availableBalance)}</span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-okx-text-tertiary">Settlement:</span>
-                  <span className="text-blue-400">Ξ {formatBalance(settlementAvailable)}</span>
+                  <span className="text-okx-accent">BNB  {formatBalance(settlementAvailable)}</span>
                 </div>
                 <div className="flex justify-between text-sm mt-1">
                   <span className="text-okx-text-tertiary">{t("locked")}:</span>
-                  <span className="text-yellow-500">Ξ {formatBalance(settlementLocked)}</span>
+                  <span className="text-meme-lime">BNB  {formatBalance(settlementLocked)}</span>
                 </div>
               </div>
             </div>
@@ -256,19 +297,19 @@ export default function WalletPage() {
                         </button>
                       </div>
                       <div className="text-okx-text-tertiary text-sm mt-2">
-                        {t("walletBalance")}: Ξ {formatBalance(derivedWalletBalance)}
+                        {t("walletBalance")}: BNB  {formatBalance(derivedWalletBalance)}
                       </div>
                     </div>
 
                     <button
                       onClick={handleDeposit}
-                      disabled={isPending || isConfirming || !depositAmount}
+                      disabled={isDepositing || !depositAmount}
                       className="w-full bg-okx-up text-black py-3 rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isPending || isConfirming ? (
+                      {isDepositing ? (
                         <span className="flex items-center justify-center gap-2">
                           <LoadingSpinner />
-                          {isConfirming ? t("confirming") : t("processing")}
+                          {t("processing")}
                         </span>
                       ) : (
                         t("depositButton")
@@ -297,19 +338,19 @@ export default function WalletPage() {
                         </button>
                       </div>
                       <div className="text-okx-text-tertiary text-sm mt-2">
-                        {t("available")}: Ξ {formatBalance(availableBalance)}
+                        {t("available")}: BNB  {formatBalance(availableBalance)}
                       </div>
                     </div>
 
                     <button
                       onClick={handleWithdraw}
-                      disabled={isPending || isConfirming || isWithdrawing || !withdrawAmount}
+                      disabled={isWithdrawing || !withdrawAmount}
                       className="w-full bg-okx-down text-white py-3 rounded-xl font-bold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isPending || isConfirming || isWithdrawing ? (
+                      {isWithdrawing ? (
                         <span className="flex items-center justify-center gap-2">
                           <LoadingSpinner />
-                          {isWithdrawing ? t("processing") : isConfirming ? t("confirming") : t("processing")}
+                          {t("processing")}
                         </span>
                       ) : (
                         t("withdrawButton")

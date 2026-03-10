@@ -6,7 +6,7 @@
  */
 
 import { createPublicClient, http, type Address, parseAbiItem, formatUnits } from "viem";
-import { baseSepolia } from "viem/chains";
+import { bsc } from "viem/chains";
 import { RPC_URL, TOKEN_FACTORY_ADDRESS } from "../config";
 import { getRedisClient } from "../database/redis";
 import { logger } from "../utils/logger";
@@ -16,7 +16,7 @@ import { logger } from "../utils/logger";
 // ============================================================
 
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: bsc,
   transport: http(RPC_URL),
 });
 
@@ -84,7 +84,7 @@ async function fetchTransferLogs(token: Address, tokenCreatedAt?: number): Promi
   let fromBlock = 0n;
 
   // Calculate start block based on token creation time
-  // Base Sepolia: ~2 seconds per block
+  // BSC Testnet: ~3 seconds per block
   if (tokenCreatedAt && tokenCreatedAt > 0) {
     const nowSeconds = Math.floor(Date.now() / 1000);
     const ageSeconds = nowSeconds - tokenCreatedAt;

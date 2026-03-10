@@ -10,27 +10,69 @@
 cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 ```
 
+## 审计状态
+
+三轮独立审计，检查维度不同：
+
+| 审计 | 日期 | 维度 | 问题数 | 报告文件 |
+|------|------|------|--------|---------|
+| **V1 架构审计** | 2026-03-01 | 资金流、链上/链下一致性 | 48 (35 fixed) | `docs/ISSUES_AUDIT_REPORT.md` |
+| **V2 代码审查** | 2026-03-03 | 逐行代码 bug、安全漏洞 | 75 (8 fixed) | `docs/CODE_REVIEW_V2.md` |
+| **V3 全量审计** | 2026-03-04 | 全层全量 + 修复验证 | 12 open, 9 partial, 35 fixed | `docs/AUDIT_V3_FULL.md` |
+
+**当前关键状态 (BSC Testnet, Chain 97)**:
+- ✅ 链上资金托管已连通（PerpVault LP, SettlementV2 存取款）
+- ✅ 合约部署到 BSC Testnet (97)，E2E 测试 36/36 通过
+- ✅ V1/V2/V3 审计中 **35 个完全修复 + 9 个部分修复**
+- ✅ **V3 全部 CRITICAL + HIGH 已清零** (0/0) — 372 contract tests pass
+- ⚠️ 12 个 OPEN + 9 个 PARTIAL (全部 MEDIUM/LOW)（详见 AUDIT_V3_FULL.md）
+
 ## 项目概述
 
 这是一个 Meme 代币永续合约交易平台，包含:
 - **contracts/**: Solidity 智能合约 (Foundry)
 - **frontend/**: Next.js 前端
-- **backend/**: Go 后端 (待开发)
+- **backend/**: Go API + Keeper 服务
+- **backend/src/matching/**: TypeScript 撮合引擎 (核心，12000+ 行)
 
 ## 当前状态
 
-系统架构已完成清理和优化 (2026-02-02)。
+**架构**: 简化版 dYdX v3 — 链下撮合 + SettlementV2 托管 + PerpVault LP 池 + Merkle 提款
 
-**已解决:**
-- ✅ API URL 统一到 `config/api.ts`
-- ✅ WebSocket 统一到 `useUnifiedWebSocket`
-- ✅ Store 统一到 `tradingDataStore`
-- ✅ 死代码已清理 (~2000+ 行)
+**已完成 (2026-03-01 审计修复后):**
+- ✅ PerpVault OI 追踪 (batch queue + nonce管理，100% 成功率)
+- ✅ Merkle 快照 + 提款 Merkle proof (modules/snapshot.ts + withdraw.ts)
+- ✅ ConfigureSettlement.s.sol 已执行 — PerpVault 2 ETH LP, 合约全部授权
+- ✅ 前端 3 步链上存款 (ETH→WETH→SettlementV2.deposit)
+- ✅ 前端 Merkle proof 链上提款 (SettlementV2.withdraw)
+- ✅ 假充值/提款 API 已加环境变量守卫 (ALLOW_FAKE_DEPOSIT)
+- ✅ 18 个安全 Bug 修复 (鉴权/nonce/并发/K线/死代码)
+- ✅ 涨幅显示 Bug 修复 (priceChangePercent24h)
+- ✅ Keeper 从撮合引擎获取数据 (不再读空 DB)
+- ✅ 保险基金查询 PerpVault getPoolValue() (不再是内存假值)
 
-**仍需注意:**
-1. TokenFactory 交易需同步更新 PriceFeed 价格
-2. 使用多代币函数 `openLongToken/openShortToken`
-3. PnL 和强平价格计算必须符合行业标准
+**待优化 (非阻塞):**
+- ⚠️ PnL 主路径仍是 mode2Adj，PerpVault batch settlement 为异步同步
+- ⚠️ 余额/仓位主数据在 Redis，PostgreSQL 仅镜像订单
+- ⏳ 端到端真实资金流测试 (Phase E)
+
+**V3 审计确认已修复 (2026-03-04 验证):**
+- ✅ `broadcastBalanceUpdate()` — 改用 wsTraderClients 逐用户发送
+- ✅ `withdraw.ts` deadline — 改用 `Math.floor(Date.now()/1000)`
+- ✅ `currentTimeMillis()` — 正确返回 `Date.now()`
+- ✅ Auth nonce TOCTOU — withLock() 保护
+- ✅ Nonce Redis 持久化 — write-through cache
+
+**V3 审计 CRITICAL/HIGH 全部已修复 (2026-03-07):**
+- ✅ `/api/v2/withdraw/request` 无鉴权+不扣余额 (CR-01) — 2026-03-04 修复
+- ✅ `subscribe_risk` WS 无鉴权 (H-01) — 2026-03-04 修复
+- ✅ `broadcastMarginUpdate` 泄露到所有客户端 (H-02) — 2026-03-04 修复
+- ✅ 前端允许 100x 杠杆 (H-06) — 2026-03-04 修复
+- ✅ TokenFactory `_distributeTradingFee` 无推荐人时多扣 10% (H-08) — 2026-03-07 修复
+- ✅ Liquidation.sol phantom insuranceFund (H-09) — 2026-03-07 修复
+- ✅ 双保险基金无对账 (H-10) — 2026-03-07 修复
+- **0 CRITICAL, 0 HIGH 剩余** — 372 contract tests pass
+- 详见 `docs/AUDIT_V3_FULL.md` — 12 open + 9 partial (全部 MEDIUM/LOW)
 
 ## 行业标准 (必须遵循)
 
@@ -48,17 +90,20 @@ hasProfit = isLong ? (currentPrice > avgPrice) : (avgPrice > currentPrice)
 
 ## 关键文件位置
 
-**架构已重构 (2026-02-02)**: 现货和合约代码已分离到独立目录
-
-| 功能 | 合约 | 前端 |
-|------|------|------|
-| 价格 | contracts/src/common/PriceFeed.sol | - |
-| 仓位 | contracts/src/perpetual/PositionManager.sol | frontend/src/hooks/perpetual/usePerpetualV2.ts |
-| 现货交易 | contracts/src/spot/TokenFactory.sol | frontend/src/hooks/spot/useExecuteSwap.ts |
-| 合约下单面板 | - | frontend/src/components/perpetual/PerpetualOrderPanelV2.tsx |
-| 现货下单面板 | - | frontend/src/components/spot/SwapPanelOKX.tsx |
-| 交易状态 | - | frontend/src/lib/stores/tradingDataStore.ts |
-| API 配置 | - | frontend/src/config/api.ts |
+| 功能 | 文件 |
+|------|------|
+| 撮合引擎入口 | backend/src/matching/server.ts (12000+ 行) |
+| PerpVault 模块 | backend/src/matching/modules/perpVault.ts |
+| Merkle 快照 | backend/src/matching/modules/snapshot.ts |
+| 提款授权 | backend/src/matching/modules/withdraw.ts |
+| 链上存款中继 | backend/src/matching/modules/relay.ts |
+| 前端合约交互 | frontend/src/hooks/perpetual/usePerpetualV2.ts |
+| 前端余额显示 | frontend/src/components/common/AccountBalance.tsx |
+| 做市商脚本 | scripts/market-maker-all.ts |
+| 部署配置 | frontend/contracts/deployments/base-sepolia.json |
+| V1 审计报告 | docs/ISSUES_AUDIT_REPORT.md |
+| V2 代码审查 | docs/CODE_REVIEW_V2.md |
+| V3 全量审计 | docs/AUDIT_V3_FULL.md |
 
 ### 目录结构
 
@@ -69,18 +114,17 @@ frontend/src/
 │   ├── spot/        # 现货交易组件
 │   └── perpetual/   # 合约交易组件
 ├── hooks/
-│   ├── common/      # 共用 hooks (useETHPrice, useMarketData)
-│   ├── spot/        # 现货 hooks (useSpotSwap, useTokenFactory)
+│   ├── common/      # 共用 hooks
+│   ├── spot/        # 现货 hooks
 │   └── perpetual/   # 合约 hooks (usePerpetualV2, useRiskControl)
 
 contracts/src/
-├── common/          # 共用合约 (PriceFeed, Vault, ContractRegistry)
-├── spot/            # 现货合约 (TokenFactory, AMM, Router)
-└── perpetual/       # 合约合约 (PositionManager, Settlement, Liquidation)
+├── common/          # PriceFeed, Vault, ContractRegistry
+├── spot/            # TokenFactory, AMM, Router
+└── perpetual/       # PositionManager, Settlement, PerpVault, Liquidation
 
-backend/src/
-├── matching/        # 合约撮合引擎
-└── spot/            # 现货后端服务
+backend/src/matching/ # TypeScript 撮合引擎 (核心)
+backend/internal/     # Go API + Keeper
 ```
 
 ## 禁止事项
@@ -90,6 +134,13 @@ backend/src/
 3. ❌ 不要调用旧的 `openLong/openShort`，要用 `openLongToken/openShortToken`
 4. ❌ 不要调用旧的 `getPosition`，要用 `getPositionByToken`
 5. ❌ 不要忘记 TokenFactory 交易后更新 PriceFeed
+6. ❌ 不要使用 `POST /api/user/:trader/deposit` 虚假充值接口
+7. ❌ 不要在 mode2Adj 上建设新功能 — 所有资金流必须走链上合约
+8. ❌ 不要在合约中 external call 之后修改状态（CEI 违规 SC-C01）
+9. ❌ 不要用 `broadcastBalanceUpdate` 广播全量余额（ME-C01 隐私泄漏）
+10. ❌ 不要混淆 Unix 秒和 `Date.now()` 毫秒（ME-C02）
+11. ❌ 不要在前端用 `parseFloat` 处理 ETH 金额 — 使用 BigInt 全程（FE-C02）
+12. ❌ 修改合约地址时必须同步更新 7 个配置文件（见 CODE_REVIEW_V2.md 第八部分）
 
 ## 修改检查清单
 
@@ -97,4 +148,10 @@ backend/src/
 - [ ] 调用链是否完整?
 - [ ] 前端是否同步更新?
 - [ ] 公式是否符合行业标准?
+- [ ] 资金流是否走链上合约（不是 mode2Adj）?
+- [ ] 合约地址变更是否同步到所有 7 个配置文件?
+- [ ] 合约状态更新是否在 external call 之前（CEI 模式）?
+- [ ] 时间比较是否统一使用秒或毫秒?
+- [ ] ETH 金额计算是否全程使用 BigInt?
+- [ ] WS 广播是否只发送给目标用户（不是全量广播）?
 - [ ] DEVELOPMENT_RULES.md 是否需要更新?

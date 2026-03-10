@@ -441,9 +441,10 @@ contract TokenFactoryTest is Test {
         factory.buy{value: 1 ether}(tokenAddress, 0);
 
         // ETH 本位: _distributeTradingFee 直接 sendValue 给 feeReceiver
-        // 1% fee = 0.01 ETH, creator 15% = 0.0015 ETH, 无 referrer → 剩余 85% 归平台
-        // platformFee = 0.01 - 0.0015 = 0.0085 ETH (直接转到 feeReceiver)
-        uint256 expectedPlatformFee = 0.0085 ether;
+        // 1% fee = 0.01 ETH, creator 25% = 0.0025 ETH, 无 referrer → 剩余 75% 归平台
+        // platformFee = 0.01 - 0.0025 - 0 = 0.0075 ETH (直接转到 feeReceiver)
+        // H-08 FIX: 不再多扣 10% referrer share — 无推荐人时 platform 正确得 75%
+        uint256 expectedPlatformFee = 0.0075 ether;
         assertApproxEqAbs(feeReceiver.balance - feeReceiverBefore, expectedPlatformFee, 1e14, "Platform fee sent directly to feeReceiver");
     }
 

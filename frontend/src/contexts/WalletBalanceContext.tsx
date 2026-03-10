@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * 全局钱包余额 Context (ETH 本位)
+ * 全局钱包余额 Context (BNB 本位)
  *
  * 读取派生钱包的完整余额:
- * - WETH 链上余额 (ERC20 balanceOf)
- * - Native ETH 余额 (用于显示未 wrap 的 ETH)
+ * - WBNB 链上余额 (ERC20 balanceOf)
+ * - Native BNB 余额 (用于显示未 wrap 的 BNB)
  * - Settlement 合约可用余额 (链上托管 + 链下盈亏调整)
  * 数据源: wagmi useReadContract/useBalance + backend balance API + WS "balance" 消息触发 refetch
  */
@@ -21,16 +21,15 @@ import React, {
 import { formatEther, parseEther, type Address } from "viem";
 import { useReadContract, useBalance } from "wagmi";
 import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
-import { useWebSocketMessage } from "@/lib/websocket/hooks";
-import { MessageType } from "@/lib/websocket/types";
+import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
 // ============================================================
-// Constants (ETH 本位)
+// Constants (BNB 本位)
 // ============================================================
 
-// Base WETH address
-const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0x4200000000000000000000000000000000000006") as Address;
+// BSC Mainnet WBNB address
+const WETH_ADDRESS = (process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
 
 const ERC20_BALANCE_ABI = [
   {
@@ -73,7 +72,7 @@ const WalletBalanceContext = createContext<WalletBalanceContextType | null>(
   null
 );
 
-// Gas reserve: 0.0005 ETH
+// Gas reserve: 0.0005 BNB
 const GAS_RESERVE = parseEther("0.0005");
 
 export function WalletBalanceProvider({
@@ -134,7 +133,7 @@ export function WalletBalanceProvider({
   // Fetch Settlement balance on mount and periodically
   useEffect(() => {
     fetchSettlementBalance();
-    const interval = setInterval(fetchSettlementBalance, 15_000);
+    const interval = setInterval(fetchSettlementBalance, 60_000);
     return () => clearInterval(interval);
   }, [fetchSettlementBalance]);
 
@@ -158,12 +157,16 @@ export function WalletBalanceProvider({
     fetchSettlementBalance();
   }, [refetchWeth, refetchNative, fetchSettlementBalance]);
 
-  // Listen for WS "balance" messages → trigger refetch
-  useWebSocketMessage(MessageType.BALANCE, useCallback(() => {
-    refreshBalance();
-  }, [refreshBalance]));
+  // System B (WebSocketManager) pushes balance → tradingDataStore
+  // When store balance changes, refetch on-chain wallet balances
+  const storeBalance = useTradingDataStore(state => state.balance);
+  useEffect(() => {
+    if (storeBalance) {
+      refreshBalance();
+    }
+  }, [storeBalance, refreshBalance]);
 
-  // Formatted total balance (18 decimals for ETH)
+  // Formatted total balance (18 decimals for BNB)
   const formattedWethBalance = useMemo(() => {
     const balance = Number(totalBalance) / 1e18;
     if (balance >= 1) {

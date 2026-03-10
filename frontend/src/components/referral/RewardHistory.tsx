@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
+import { MATCHING_ENGINE_URL } from "@/config/api";
 
 interface RewardRecord {
   id: string;
@@ -15,50 +16,64 @@ interface RewardRecord {
   timestamp: string;
 }
 
-export function RewardHistory() {
-  const t = useTranslations("referral");
+interface RewardHistoryProps {
+  address?: string;
+}
 
-  // Mock data - replace with real API data
-  const rewards: RewardRecord[] = [
-    {
-      id: "1",
-      type: "level1",
-      traderAddress: "0x1234...5678",
-      domainName: "example.com",
-      tradeType: "buy",
-      feeAmount: "0.001",
-      rewardAmount: "0.00015",
-      txHash: "0xabc...123",
-      timestamp: "2024-01-10 14:30",
-    },
-    {
-      id: "2",
-      type: "level2",
-      traderAddress: "0xabcd...ef01",
-      domainName: "test.com",
-      tradeType: "sell",
-      feeAmount: "0.002",
-      rewardAmount: "0.00006",
-      txHash: "0xdef...456",
-      timestamp: "2024-01-10 12:15",
-    },
-    {
-      id: "3",
-      type: "claim",
-      traderAddress: "",
-      domainName: "",
-      tradeType: "buy",
-      feeAmount: "",
-      rewardAmount: "0.05",
-      txHash: "0xghi...789",
-      timestamp: "2024-01-09 18:00",
-    },
-  ];
+/**
+ * P2-1: 奖励历史组件 — 从真实 API 获取数据
+ *
+ * API: GET /api/referral/commissions?address=0x...&limit=50
+ */
+export function RewardHistory({ address }: RewardHistoryProps) {
+  const t = useTranslations("referral");
+  const [rewards, setRewards] = useState<RewardRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+
+    const fetchRewards = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${MATCHING_ENGINE_URL}/api/referral/commissions?address=${address}&limit=50`);
+        const data = await res.json();
+
+        if (data.commissions && Array.isArray(data.commissions)) {
+          setRewards(data.commissions.map((c: { id?: string; level?: number; status?: string; referee?: string; tradeFee?: string; commissionAmount?: string; tradeId?: string; timestamp?: string }) => ({
+            id: c.id || String(Math.random()),
+            type: c.level === 2 ? "level2" : c.status === "withdrawn" ? "claim" : "level1",
+            traderAddress: c.referee ? `${c.referee.slice(0, 6)}...${c.referee.slice(-4)}` : "",
+            domainName: "",
+            tradeType: "buy" as const,
+            feeAmount: (Number(c.tradeFee || "0") / 1e18).toFixed(6),
+            rewardAmount: (Number(c.commissionAmount || "0") / 1e18).toFixed(6),
+            txHash: c.tradeId || "",
+            timestamp: c.timestamp ? new Date(c.timestamp).toLocaleString() : "-",
+          })));
+        }
+      } catch (e) {
+        console.error("[RewardHistory] Failed to fetch:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRewards();
+  }, [address]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-okx-accent"></div>
+      </div>
+    );
+  }
 
   if (rewards.length === 0) {
     return (
       <div className="text-center py-12">
-        <div className="text-4xl mb-4">📊</div>
+        <div className="flex justify-center mb-4"><svg className="w-10 h-10 text-okx-text-tertiary" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg></div>
         <p className="text-okx-text-secondary">{t("noRewards")}</p>
         <p className="text-sm text-okx-text-tertiary mt-2">{t("inviteToEarn")}</p>
       </div>
@@ -110,9 +125,11 @@ export function RewardHistory() {
                       <span className="text-okx-text-secondary">{t("from")}: </span>
                       <span className="font-mono">{reward.traderAddress}</span>
                     </div>
-                    <div className="text-xs text-okx-text-tertiary mt-1">
-                      {reward.domainName} | {reward.tradeType === "buy" ? t("buyTrade") : t("sellTrade")}
-                    </div>
+                    {reward.feeAmount !== "0.000000" && (
+                      <div className="text-xs text-okx-text-tertiary mt-1">
+                        Fee: {reward.feeAmount} BNB
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="text-sm text-okx-text-secondary">{t("claimedToWallet")}</div>
@@ -121,7 +138,7 @@ export function RewardHistory() {
             </div>
             <div className="text-right">
               <div className={`font-bold ${reward.type === "claim" ? "text-purple-500" : "text-okx-up"}`}>
-                +{reward.rewardAmount} ETH
+                +{reward.rewardAmount} BNB
               </div>
               <div className="text-xs text-okx-text-tertiary">{reward.timestamp}</div>
             </div>

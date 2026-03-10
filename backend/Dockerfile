@@ -24,9 +24,16 @@ WORKDIR /app
 # Install ca-certificates for HTTPS
 RUN apk --no-cache add ca-certificates wget
 
+# Create non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 # Copy binary from builder
 COPY --from=builder /app/main .
 COPY --from=builder /app/configs ./configs
+
+# Set ownership and switch to non-root user
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 # Expose port
 EXPOSE 8080

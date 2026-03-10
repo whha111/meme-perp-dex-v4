@@ -86,7 +86,7 @@ function Leaderboard({
                     <div className="text-xs font-bold text-okx-up">
                       {parseFloat(entry.earnings).toFixed(4)}
                     </div>
-                    <div className="text-[10px] text-okx-text-tertiary">ETH</div>
+                    <div className="text-[10px] text-okx-text-tertiary">BNB</div>
                   </div>
                 </div>
               );
@@ -213,7 +213,7 @@ export default function EarningsPage() {
 
         {!isConnected ? (
           <div className="max-w-md mx-auto bg-okx-bg-card border border-okx-border-primary rounded-lg p-12 text-center">
-            <div className="text-6xl mb-4">💰</div>
+            <svg className="w-16 h-16 mb-4 text-meme-lime mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             <h2 className="text-xl font-bold mb-2">{t("connectWalletTitle")}</h2>
             <p className="text-okx-text-secondary">{t("connectWalletDesc")}</p>
           </div>
@@ -227,7 +227,7 @@ export default function EarningsPage() {
             <div className="lg:col-span-1 order-2 lg:order-1">
               <Leaderboard
                 title={t("creatorLeaderboard")}
-                icon="🏆"
+                icon=""
                 entries={creatorLeaderboard}
                 isLoading={isLoadingLeaderboard}
                 type="creator"
@@ -241,14 +241,14 @@ export default function EarningsPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
                   <div className="text-okx-text-secondary text-[10px] mb-1">{t("creatorEarningsLabel")}</div>
-                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.creatorEarnings).toFixed(4)} ETH</div>
+                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.creatorEarnings).toFixed(4)} BNB</div>
                   <div className="text-[10px] text-okx-text-tertiary mt-1">
                     {t("createdTokensCount", { count: earnings.createdTokens.length })}
                   </div>
                 </div>
                 <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
                   <div className="text-okx-text-secondary text-[10px] mb-1">{t("referralEarningsLabel")}</div>
-                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.referrerEarnings).toFixed(4)} ETH</div>
+                  <div className="text-lg font-bold text-okx-up">{parseFloat(earnings.referrerEarnings).toFixed(4)} BNB</div>
                   {earnings.referrer && (
                     <div className="text-[10px] text-okx-text-tertiary mt-1">
                       {t("yourReferrer")}: {formatAddress(earnings.referrer)}
@@ -257,9 +257,9 @@ export default function EarningsPage() {
                 </div>
                 <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
                   <div className="text-okx-text-secondary text-[10px] mb-1">{t("perpEarningsLabel")}</div>
-                  <div className="text-lg font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(4)} ETH</div>
+                  <div className="text-lg font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(4)} BNB</div>
                   <div className="text-[10px] text-okx-text-tertiary mt-1">
-                    {t("perpTotalEarnings")}: {parseFloat(perpEarnings.totalEarnings).toFixed(4)} ETH
+                    {t("perpTotalEarnings")}: {parseFloat(perpEarnings.totalEarnings).toFixed(4)} BNB
                   </div>
                 </div>
               </div>
@@ -511,19 +511,19 @@ export default function EarningsPage() {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpPendingEarnings")}</div>
-                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.pendingEarnings).toFixed(6)} BNB</div>
                           </div>
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpWithdrawnEarnings")}</div>
-                            <div className="text-sm font-bold">{parseFloat(perpEarnings.withdrawnEarnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold">{parseFloat(perpEarnings.withdrawnEarnings).toFixed(6)} BNB</div>
                           </div>
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpLevel1Earnings")}</div>
-                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level1Earnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level1Earnings).toFixed(6)} BNB</div>
                           </div>
                           <div className="bg-okx-bg-hover rounded-lg p-3">
                             <div className="text-[10px] text-okx-text-tertiary mb-1">{t("perpLevel2Earnings")}</div>
-                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level2Earnings).toFixed(6)} ETH</div>
+                            <div className="text-sm font-bold text-okx-up">{parseFloat(perpEarnings.level2Earnings).toFixed(6)} BNB</div>
                           </div>
                         </div>
                       )}
@@ -647,7 +647,7 @@ export default function EarningsPage() {
                                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                         c.level === 1
                                           ? "bg-okx-up/20 text-okx-up"
-                                          : "bg-blue-500/20 text-blue-400"
+                                          : "bg-okx-accent/20 text-okx-accent"
                                       }`}>
                                         L{c.level}
                                       </span>
@@ -708,7 +708,7 @@ export default function EarningsPage() {
             <div className="lg:col-span-1 order-3 space-y-6">
               <Leaderboard
                 title={t("referralLeaderboard")}
-                icon="🎯"
+                icon=""
                 entries={referralLeaderboard}
                 isLoading={isLoadingLeaderboard}
                 type="referral"
@@ -717,7 +717,7 @@ export default function EarningsPage() {
               {/* Perp Referral Leaderboard */}
               <Leaderboard
                 title={t("perpReferralLeaderboard")}
-                icon="📊"
+                icon=""
                 entries={perpReferralLeaderboard}
                 isLoading={isLoadingPerpLeaderboard}
                 type="referral"

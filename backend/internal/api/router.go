@@ -86,7 +86,6 @@ func (r *Router) setupRoutes() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(r.db)
 	instrumentRepo := repository.NewInstrumentRepository(r.db)
-	orderRepo := repository.NewOrderRepository(r.db)
 	positionRepo := repository.NewPositionRepository(r.db)
 	balanceRepo := repository.NewBalanceRepository(r.db)
 	tradeRepo := repository.NewTradeRepository(r.db)
@@ -98,8 +97,7 @@ func (r *Router) setupRoutes() {
 
 	// Initialize services
 	marketService := service.NewMarketService(instrumentRepo, tradeRepo, candleRepo, fundingRepo, tokenMetadataRepo, r.cache)
-	accountService := service.NewAccountService(userRepo, balanceRepo, positionRepo, r.cache)
-	tradeService := service.NewTradeService(orderRepo, positionRepo, balanceRepo, instrumentRepo, billRepo, r.cache)
+	accountService := service.NewAccountService(r.db, userRepo, balanceRepo, positionRepo, r.cache) // AUDIT-FIX GO-C05: pass DB for bill repo
 	positionService := service.NewPositionService(positionRepo, balanceRepo, instrumentRepo, billRepo, r.cache)
 	liquidationService := service.NewLiquidationService(positionRepo, balanceRepo, instrumentRepo, liquidationRepo, billRepo, r.cache)
 
@@ -107,7 +105,6 @@ func (r *Router) setupRoutes() {
 	authHandler := handler.NewAuthHandler(r.db, r.jwtManager)
 	marketHandler := handler.NewMarketHandler(marketService, r.cfg.MatchingEngine.URL)
 	accountHandler := handler.NewAccountHandler(accountService)
-	tradeHandler := handler.NewTradeHandler(tradeService)
 	positionHandler := handler.NewPositionHandler(positionService, liquidationService)
 	wsHandler := handler.NewWebSocketHandler(r.wsHub, r.cfg, r.logger)
 	healthHandler := handler.NewHealthHandler(r.db, r.redis, r.cfg.MatchingEngine.URL)
@@ -123,8 +120,9 @@ func (r *Router) setupRoutes() {
 	// API v1
 	v1 := r.engine.Group("/api/v1")
 
-	// Auth endpoints (no authentication required)
+	// Auth endpoints (no authentication required, but rate limited to prevent brute force)
 	auth := v1.Group("/auth")
+	auth.Use(r.rateLimiter.RateLimitMiddleware("public"))
 	{
 		auth.POST("/nonce", authHandler.GetNonce)
 		auth.POST("/login", authHandler.Login)
@@ -157,7 +155,8 @@ func (r *Router) setupRoutes() {
 	token := v1.Group("/token")
 	token.Use(r.rateLimiter.RateLimitMiddleware("public"))
 	{
-		token.POST("/metadata", tokenHandler.CreateTokenMetadata)
+		// AUDIT-FIX GO-C03: POST /metadata 需要鉴权，防止任意 token 创建 + XSS
+		token.POST("/metadata", middleware.AuthMiddleware(r.db), tokenHandler.CreateTokenMetadata)
 		token.GET("/metadata", tokenHandler.GetTokenMetadata)
 		token.GET("/metadata/all", tokenHandler.GetAllTokenMetadata)
 	}
@@ -177,59 +176,6 @@ func (r *Router) setupRoutes() {
 		account.POST("/position/margin-balance", accountHandler.AdjustMargin)
 		account.GET("/bills", accountHandler.GetBills)
 		account.GET("/liquidations", positionHandler.GetLiquidationHistory)
-	}
-
-	// Trade - Historical queries only
-	// ARCHITECTURAL DECISION: Real-time order submission is handled by Matching Engine (port 8081)
-	// This service (Go Backend) now serves as an Indexer for historical data and queries.
-	// See ARCHITECTURE_DECISION.md for details.
-	//
-	// Real-time order operations (use Matching Engine directly):
-	//   - POST /api/order/submit (Matching Engine:8081)
-	//   - POST /api/order/{id}/cancel (Matching Engine:8081)
-	//
-	// Historical queries (this service):
-	//   - GET /api/v1/trade/orders-history
-	//   - GET /api/v1/trade/orders-pending (read-only from DB)
-	trade := v1.Group("/trade")
-	trade.Use(r.rateLimiter.RateLimitMiddleware("order"))
-	trade.Use(middleware.AuthMiddleware(r.db))
-	{
-		// REMOVED: Real-time order submission endpoints (now in Matching Engine)
-		// trade.POST("/order", tradeHandler.PlaceOrder)
-		// trade.POST("/cancel-order", tradeHandler.CancelOrder)
-		// trade.POST("/amend-order", tradeHandler.AmendOrder)
-		// trade.POST("/close-position", tradeHandler.ClosePosition)
-		// trade.POST("/order-algo", tradeHandler.PlaceAlgoOrder)
-		// trade.POST("/cancel-algos", tradeHandler.CancelAlgoOrder)
-
-		// KEPT: Historical and read-only query endpoints
-		trade.GET("/order", tradeHandler.GetOrder)
-		trade.GET("/orders-pending", tradeHandler.GetPendingOrders)
-		trade.GET("/orders-history", tradeHandler.GetOrderHistory)
-		trade.GET("/orders-algo-pending", tradeHandler.GetPendingAlgoOrders)
-	}
-
-	// Relayer endpoints (meta transactions - gasless deposits/withdrawals)
-	// Initialize relayer service if Settlement contract is configured
-	if r.cfg.Blockchain.SettlementAddr != "" {
-		relayerService, err := service.NewRelayerService(&r.cfg.Blockchain, r.logger)
-		if err != nil {
-			r.logger.Error("Failed to initialize relayer service", zap.Error(err))
-		} else {
-			relayerHandler := handler.NewRelayerHandler(relayerService, r.logger)
-			relay := v1.Group("/relay")
-			relay.Use(r.rateLimiter.RateLimitMiddleware("public"))
-			{
-				relay.POST("/deposit-eth", relayerHandler.DepositETH)
-				relay.POST("/withdraw", relayerHandler.Withdraw)
-				relay.GET("/nonce/:address", relayerHandler.GetNonce)
-				relay.GET("/balance/:address", relayerHandler.GetBalance)
-				relay.GET("/status", relayerHandler.GetRelayerStatus)
-			}
-			r.logger.Info("Relayer service initialized",
-				zap.String("settlementAddress", r.cfg.Blockchain.SettlementAddr))
-		}
 	}
 
 	// Health check endpoints

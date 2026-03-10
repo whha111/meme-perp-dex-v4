@@ -53,11 +53,12 @@ func AutoMigrate(db *gorm.DB) error {
 func InitializeInstruments(db *gorm.DB) error {
 	instruments := []model.Instrument{
 		{
-			InstID:    "MEME-BNB-PERP",
+			// AUDIT-FIX M-15: Base 链用 ETH 结算，不是 BNB
+			InstID:    "MEME-ETH-PERP",
 			InstType:  "PERP",
 			BaseCcy:   "MEME",
-			QuoteCcy:  "BNB",
-			SettleCcy: "BNB",
+			QuoteCcy:  "ETH",
+			SettleCcy: "ETH",
 			TickSz:    decimalFromString("0.000000001"),
 			LotSz:     decimalFromString("1"),
 			MinSz:     decimalFromString("1"),

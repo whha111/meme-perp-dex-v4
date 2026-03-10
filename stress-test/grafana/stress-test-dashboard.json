@@ -1,0 +1,118 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Trading TPS",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "rate(stress_test_spot_trades_total[1m])", "legendFormat": "Spot TPS" },
+        { "expr": "rate(stress_test_perp_orders_total[1m])", "legendFormat": "Perp TPS" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ops" }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Active Wallets",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "stress_test_active_wallets", "legendFormat": "Active" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Fund Conservation Deviation",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "stress_test_fund_deviation_eth", "legendFormat": "Deviation (ETH)" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ETH",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.001 },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Insurance Fund Balance",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "stress_test_insurance_fund_eth", "legendFormat": "Insurance Fund" },
+        { "expr": "stress_test_vault_balance_eth", "legendFormat": "Vault" },
+        { "expr": "stress_test_settlement_balance_eth", "legendFormat": "Settlement" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ETH" } }
+    },
+    {
+      "id": 5,
+      "title": "Liquidation Events",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "stress_test_liquidations_total", "legendFormat": "Total Liquidations" },
+        { "expr": "stress_test_liquidations_succeeded", "legendFormat": "Succeeded" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Scenario Injections",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "stress_test_scenario_count", "legendFormat": "{{scenario}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "RPC Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        { "expr": "rate(stress_test_rpc_requests_total[1m])", "legendFormat": "Requests/s" },
+        { "expr": "rate(stress_test_rpc_retries_total[1m])", "legendFormat": "Retries/s" },
+        { "expr": "rate(stress_test_rpc_failures_total[1m])", "legendFormat": "Failures/s" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 8,
+      "title": "PnL Distribution",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        { "expr": "stress_test_wallet_pnl_eth", "legendFormat": "{{wallet}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ETH" } }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["stress-test", "meme-perp"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Meme-Perp-DEX Stress Test",
+  "uid": "stress-test-48h",
+  "version": 1
+}

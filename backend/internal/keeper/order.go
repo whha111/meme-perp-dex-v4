@@ -120,6 +120,11 @@ func (k *OrderKeeper) checkTriggers(order *model.AlgoOrder, markPrice model.Deci
 	return false, ""
 }
 
+// P3-P3: NOTE — This is a secondary/redundant TP/SL checker.
+// Primary TP/SL execution happens in the matching engine (server.ts checkTakeProfitStopLoss L2866).
+// This keeper only updates DB state to "triggered" — it does NOT execute actual trades.
+// The matching engine handles real-time price monitoring and position closure.
+// This code remains as a safety net for DB-only mode (when engine is unavailable).
 func (k *OrderKeeper) executeAlgoOrder(order *model.AlgoOrder, markPrice model.Decimal, triggerType string) error {
 	now := time.Now().UnixMilli()
 
@@ -136,10 +141,7 @@ func (k *OrderKeeper) executeAlgoOrder(order *model.AlgoOrder, markPrice model.D
 		ordPx = markPrice
 	}
 
-	// Create the actual order
-	// In production, this would call the smart contract
-	// For now, update the algo order state
-
+	// DB state update only — actual trade execution is in matching engine
 	order.State = model.AlgoStateTriggered
 	order.TriggerPx = markPrice
 	order.ActualPx = ordPx

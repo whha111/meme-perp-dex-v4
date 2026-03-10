@@ -20,7 +20,7 @@ import { keccak256, encodePacked, type Address, type Hex } from "viem";
  */
 export interface UserEquity {
   user: Address;
-  equity: bigint; // 1e6 precision (USDT)
+  equity: bigint; // 1e18 precision (WETH)
 }
 
 /**
@@ -164,6 +164,10 @@ export class MerkleTreeManager {
   private snapshotHistory: Map<number, SnapshotState> = new Map();
   private snapshotCounter = 0;
 
+  // M-09 FIX: Merkle tree 缓存 — 避免每次 getProof 都重建整棵树
+  private cachedTree: Hex[][] | null = null;
+  private cachedTreeSnapshotId: number | null = null;
+
   /**
    * Create a new snapshot from user equities
    */
@@ -176,9 +180,10 @@ export class MerkleTreeManager {
     const root = getMerkleRoot(tree);
 
     // Create snapshot
+    // L-04 FIX: 使用 Unix 秒而非毫秒 — 与链上 block.timestamp 保持一致
     const snapshot: SnapshotState = {
       snapshotId: ++this.snapshotCounter,
-      timestamp: Date.now(),
+      timestamp: Math.floor(Date.now() / 1000),
       root,
       leaves,
       equities,
@@ -226,9 +231,12 @@ export class MerkleTreeManager {
       return null;
     }
 
-    // Build tree and generate proof
-    const tree = buildMerkleTree(this.currentSnapshot.leaves);
-    const proof = generateProof(tree, leafIndex);
+    // M-09 FIX: 使用缓存的 Merkle tree，避免每次 getProof 都 O(n) 重建
+    if (this.cachedTreeSnapshotId !== this.currentSnapshot.snapshotId || !this.cachedTree) {
+      this.cachedTree = buildMerkleTree(this.currentSnapshot.leaves);
+      this.cachedTreeSnapshotId = this.currentSnapshot.snapshotId;
+    }
+    const proof = generateProof(this.cachedTree, leafIndex);
 
     return {
       user: equity.user,
@@ -249,13 +257,30 @@ export class MerkleTreeManager {
       return null;
     }
 
-    // Temporarily set as current and get proof
-    const originalSnapshot = this.currentSnapshot;
-    this.currentSnapshot = snapshot;
-    const proof = this.getProof(user);
-    this.currentSnapshot = originalSnapshot;
-
-    return proof;
+    // AUDIT-FIX ME-H02: 不再临时替换 currentSnapshot（并发请求会互相腐蚀）
+    // 直接从目标 snapshot 计算 proof，无需修改任何共享状态
+    const normalizedUser = user.toLowerCase() as Address;
+    const equityIndex = snapshot.equities.findIndex(
+      eq => eq.user.toLowerCase() === normalizedUser
+    );
+    if (equityIndex === -1) {
+      console.warn(`[Merkle] User ${user.slice(0, 10)} not in snapshot #${snapshotId}`);
+      return null;
+    }
+    const equity = snapshot.equities[equityIndex];
+    const leaf = calculateLeaf(equity.user, equity.equity);
+    const sortedLeaves = [...snapshot.leaves].sort();
+    const leafIndex = sortedLeaves.findIndex(l => l === leaf);
+    if (leafIndex === -1) return null;
+    const tree = buildMerkleTree(snapshot.leaves);
+    const proof = generateProof(tree, leafIndex);
+    return {
+      user: equity.user,
+      equity: equity.equity,
+      proof,
+      leaf,
+      root: snapshot.root,
+    };
   }
 
   /**

@@ -1394,4 +1394,189 @@ contract SettlementTest is Test {
         console.log("  Tier 2 (>=$10K): 10% margin, 5x max");
         console.log("  [PASS] Margin tiers work correctly");
     }
+
+    // ============================================================
+    // 测试27-32: batchSettlePnL (链下→链上 PnL 同步)
+    // ============================================================
+
+    function test_batchSettlePnL_success() public {
+        console.log("\n=== Test 27: batchSettlePnL Success ===");
+
+        // 初始余额：longTrader 50,000 USDT (18位精度), shortTrader 50,000 USDT
+        (uint256 longBefore,) = settlement.getUserBalance(longTrader);
+        (uint256 shortBefore,) = settlement.getUserBalance(shortTrader);
+
+        // 模拟链下撮合结果：shortTrader 亏损 1000 USDT，longTrader 盈利 1000 USDT
+        address[] memory from = new address[](1);
+        address[] memory to = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+
+        from[0] = shortTrader;       // 亏损方
+        to[0] = longTrader;          // 盈利方
+        amounts[0] = 1_000 * 1e18;   // 1000 USDT (18位精度)
+
+        vm.prank(matcher);
+        settlement.batchSettlePnL(from, to, amounts);
+
+        (uint256 longAfter,) = settlement.getUserBalance(longTrader);
+        (uint256 shortAfter,) = settlement.getUserBalance(shortTrader);
+
+        assertEq(longAfter, longBefore + 1_000 * 1e18, "Long should gain 1000");
+        assertEq(shortAfter, shortBefore - 1_000 * 1e18, "Short should lose 1000");
+
+        console.log("  Long: +1000 USDT, Short: -1000 USDT");
+        console.log("  [PASS] batchSettlePnL transferred balances correctly");
+    }
+
+    function test_batchSettlePnL_multiplePairs() public {
+        console.log("\n=== Test 27b: batchSettlePnL Multiple Pairs ===");
+
+        // 创建第三个交易者
+        address trader3 = makeAddr("trader3");
+        usdt.mint(trader3, 10_000 * USDT_DECIMALS);
+        vm.startPrank(trader3);
+        usdt.approve(address(settlement), type(uint256).max);
+        settlement.deposit(address(usdt), 10_000 * USDT_DECIMALS);
+        vm.stopPrank();
+
+        // 批量结算 2 对
+        address[] memory from = new address[](2);
+        address[] memory to = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        from[0] = shortTrader;  to[0] = longTrader;  amounts[0] = 500 * 1e18;
+        from[1] = trader3;      to[1] = longTrader;   amounts[1] = 300 * 1e18;
+
+        (uint256 longBefore,) = settlement.getUserBalance(longTrader);
+
+        vm.prank(matcher);
+        settlement.batchSettlePnL(from, to, amounts);
+
+        (uint256 longAfter,) = settlement.getUserBalance(longTrader);
+        assertEq(longAfter, longBefore + 800 * 1e18, "Long should gain 800 total");
+
+        console.log("  [PASS] Multiple pairs settled correctly");
+    }
+
+    function test_batchSettlePnL_onlyMatcher() public {
+        console.log("\n=== Test 28: batchSettlePnL Only Matcher ===");
+
+        address[] memory from = new address[](1);
+        address[] memory to = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+
+        from[0] = shortTrader;
+        to[0] = longTrader;
+        amounts[0] = 100 * 1e18;
+
+        // 未授权的地址调用
+        vm.prank(longTrader);
+        vm.expectRevert(Settlement.Unauthorized.selector);
+        settlement.batchSettlePnL(from, to, amounts);
+
+        console.log("  [PASS] Non-matcher correctly rejected");
+
+        // 随机地址调用
+        address random = makeAddr("random");
+        vm.prank(random);
+        vm.expectRevert(Settlement.Unauthorized.selector);
+        settlement.batchSettlePnL(from, to, amounts);
+
+        console.log("  [PASS] Random address correctly rejected");
+    }
+
+    function test_batchSettlePnL_insufficientBalance() public {
+        console.log("\n=== Test 29: batchSettlePnL Insufficient Balance ===");
+
+        address[] memory from = new address[](1);
+        address[] memory to = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+
+        from[0] = shortTrader;
+        to[0] = longTrader;
+        amounts[0] = 999_999 * 1e18;  // 远超 shortTrader 的余额
+
+        vm.prank(matcher);
+        vm.expectRevert("Insufficient from balance");
+        settlement.batchSettlePnL(from, to, amounts);
+
+        console.log("  [PASS] Insufficient balance correctly reverted");
+    }
+
+    function test_batchSettlePnL_emptyBatch() public {
+        console.log("\n=== Test 30: batchSettlePnL Empty Batch ===");
+
+        address[] memory from = new address[](0);
+        address[] memory to = new address[](0);
+        uint256[] memory amounts = new uint256[](0);
+
+        vm.prank(matcher);
+        vm.expectRevert("Empty batch");
+        settlement.batchSettlePnL(from, to, amounts);
+
+        console.log("  [PASS] Empty batch correctly rejected");
+    }
+
+    function test_batchSettlePnL_tooLarge() public {
+        console.log("\n=== Test 31: batchSettlePnL Too Large ===");
+
+        // 创建 201 对的数组（超过 200 上限）
+        address[] memory from = new address[](201);
+        address[] memory to = new address[](201);
+        uint256[] memory amounts = new uint256[](201);
+
+        for (uint i = 0; i < 201; i++) {
+            from[i] = shortTrader;
+            to[i] = longTrader;
+            amounts[i] = 1 * 1e18;
+        }
+
+        vm.prank(matcher);
+        vm.expectRevert("Batch too large");
+        settlement.batchSettlePnL(from, to, amounts);
+
+        console.log("  [PASS] Oversized batch (201) correctly rejected");
+    }
+
+    function test_batchSettlePnL_afterSettle_withdrawable() public {
+        console.log("\n=== Test 32: batchSettlePnL -> Withdraw ===");
+
+        // 记录初始余额
+        (uint256 longBefore,) = settlement.getUserBalance(longTrader);
+
+        // 结算：shortTrader 亏 2000，longTrader 盈 2000
+        address[] memory from = new address[](1);
+        address[] memory to = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+
+        from[0] = shortTrader;
+        to[0] = longTrader;
+        amounts[0] = 2_000 * 1e18;
+
+        vm.prank(matcher);
+        settlement.batchSettlePnL(from, to, amounts);
+
+        // 盈利方提款 — 应能提取包含盈利的全额
+        uint256 withdrawAmount = 2_000 * 1e18;
+
+        // 合约需要有足够的 USDT 流动性
+        // longTrader 会通过 withdraw 提取 2000 * 1e18 (18位) → _fromStandardDecimals → 2000 * 1e6 (6位)
+        // 合约本身已有 longTrader + shortTrader 各 50,000 USDT 的存款 = 100,000 USDT
+        // 所以流动性足够
+
+        vm.prank(longTrader);
+        settlement.withdraw(address(usdt), withdrawAmount);
+
+        // 验证提款后余额
+        (uint256 longAfter,) = settlement.getUserBalance(longTrader);
+        assertEq(longAfter, longBefore + 2_000 * 1e18 - withdrawAmount, "Balance should reflect settlement + withdrawal");
+
+        // 验证 USDT 已到账
+        uint256 longUsdtBalance = usdt.balanceOf(longTrader);
+        assertEq(longUsdtBalance, 2_000 * USDT_DECIMALS, "Should have received 2000 USDT");
+
+        console.log("  Settled +2000 USDT on-chain");
+        console.log("  Withdrew 2000 USDT successfully");
+        console.log("  [PASS] Post-settlement withdrawal works correctly");
+    }
 }

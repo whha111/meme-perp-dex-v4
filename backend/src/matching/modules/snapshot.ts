@@ -15,6 +15,7 @@
 
 import { type Address, type Hex } from "viem";
 import { merkleTreeManager, type UserEquity, type SnapshotState, type MerkleProof } from "./merkle";
+import { getPendingWithdrawalAmount } from "./withdraw";
 
 // Import from server.ts (will be provided via injection)
 type BalanceGetter = (trader: Address) => {
@@ -110,11 +111,18 @@ function calculateUserEquity(trader: Address): bigint {
   // Total balance from Settlement + wallet
   let equity = balance.totalBalance;
 
-  // Add unrealized PnL from all positions
+  // AUDIT-FIX ME-H07: Only include OPEN positions (size > 0)
+  // Closed positions (size=0) may have stale unrealizedPnL that inflates equity
   for (const pos of positions) {
+    if (BigInt(pos.size || "0") === 0n) continue;
     const upnl = BigInt(pos.unrealizedPnL || "0");
     equity += upnl;
   }
+
+  // M-08 FIX: 扣减待处理提款金额 — 防止用户用已请求提款的金额再次提款
+  // 如果用户已请求提款 X ETH，其 Merkle equity 应减去 X
+  const pendingWithdrawal = getPendingWithdrawalAmount(trader);
+  equity -= pendingWithdrawal;
 
   return equity;
 }
@@ -231,16 +239,29 @@ export function startSnapshotJob(config: Partial<SnapshotConfig> = {}): void {
     return;
   }
 
+  // P0-2: Snapshot 失败需要重试 + 报警（用户依赖 Merkle proof 提款）
+  const MAX_SNAPSHOT_RETRIES = 3;
+  const runWithRetry = async (config: typeof mergedConfig) => {
+    for (let attempt = 1; attempt <= MAX_SNAPSHOT_RETRIES; attempt++) {
+      try {
+        await runSnapshotCycle(config);
+        return;
+      } catch (e) {
+        console.error(`[Snapshot] Attempt ${attempt}/${MAX_SNAPSHOT_RETRIES} failed:`, e);
+        if (attempt < MAX_SNAPSHOT_RETRIES) {
+          await new Promise(r => setTimeout(r, 5000 * attempt)); // 退避重试
+        }
+      }
+    }
+    console.error("[Snapshot] 🚨 ALL RETRIES EXHAUSTED — users may be unable to verify withdrawals!");
+  };
+
   // Run immediately
-  runSnapshotCycle(mergedConfig).catch(e => {
-    console.error("[Snapshot] Initial snapshot failed:", e);
-  });
+  runWithRetry(mergedConfig);
 
   // Schedule periodic runs
   jobState.intervalId = setInterval(() => {
-    runSnapshotCycle(mergedConfig).catch(e => {
-      console.error("[Snapshot] Scheduled snapshot failed:", e);
-    });
+    runWithRetry(mergedConfig);
   }, mergedConfig.intervalMs);
 
   console.log(`[Snapshot] Job started with ${mergedConfig.intervalMs}ms interval`);

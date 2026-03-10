@@ -452,6 +452,7 @@ export const SpotStatsRepo = {
     volume24h: string;
     high24h: string;
     low24h: string;
+    open24h: string;
     change24h: string;
     trades24h: number;
   } | null> {
@@ -465,6 +466,7 @@ export const SpotStatsRepo = {
       volume24h: data.volume24h,
       high24h: data.high24h,
       low24h: data.low24h,
+      open24h: data.open24h || "0",
       change24h: data.change24h,
       trades24h: parseInt(data.trades24h || "0"),
     };
@@ -575,17 +577,17 @@ export async function backfillHistoricalTrades(
   ethPriceUsd: number = 2500
 ): Promise<number> {
   const { createPublicClient, http, parseAbiItem } = await import("viem");
-  const { baseSepolia } = await import("viem/chains");
+  const { bsc: bscChain } = await import("viem/chains");
 
-  // Always use publicnode.com for backfill - Alchemy free tier only allows 10 blocks!
-  const RPC_URL = "https://base-sepolia-rpc.publicnode.com";
+  // BSC Mainnet RPC for backfill
+  const RPC_URL = process.env.RPC_URL || "https://bsc-dataseed.binance.org/";
   // 使用部署的 TokenFactory 地址
-  const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0x8de2Ce2a0f974b4CB00EC5B56BD89382690b5523") as Address;
+  const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8") as Address;
 
   logger.info("SpotHistory", `Using TokenFactory: ${TOKEN_FACTORY_ADDRESS}`);
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: bscChain,
     transport: http(RPC_URL),
   });
 

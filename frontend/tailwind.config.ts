@@ -38,9 +38,27 @@ const config: Config = {
           accent: "var(--okx-accent)",
           warning: "var(--okx-warning)",
         },
+        // MEMEPERP 品牌直接颜色
+        meme: {
+          lime: "#BFFF00",
+          dark: "#111111",
+          darker: "#0a0a0a",
+          black: "#000000",
+        },
+        // 合约交易 Binance 配色
+        perp: {
+          bg: "#0B0E11",
+          surface: "#1E2329",
+          hover: "#2B3139",
+          border: "#2B3139",
+          yellow: "#F0B90B",
+          green: "#0ECB81",
+          red: "#F6465D",
+        },
       },
       fontFamily: {
         sans: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+        mono: ["JetBrains Mono", "Fira Code", "SF Mono", "Consolas", "monospace"],
       },
       borderRadius: {
         card: "12px",

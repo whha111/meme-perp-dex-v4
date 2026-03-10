@@ -27,6 +27,7 @@ import { TradeEvent, useInstrumentTradeStream } from "@/hooks/common/streaming/u
 import { useAppStore } from "@/lib/stores/appStore";
 import { useTranslations } from "next-intl";
 import { useWebSocketKlines } from "@/hooks/common/useWebSocketKlines"; // ✅ 唯一数据源
+import { usePoolState } from "@/hooks/spot/usePoolState"; // 链上价格兜底
 
 interface TokenPriceChartProps {
   symbol: string;  // 交易对符号或合约地址
@@ -221,19 +222,16 @@ function formatPrice(price: number): string {
 }
 
 function formatVolume(vol: number): string {
-  if (vol >= 1000000) return (vol / 1000000).toFixed(2) + "M ETH";
-  if (vol >= 1000) return (vol / 1000).toFixed(2) + "K ETH";
-  if (vol >= 1) return vol.toFixed(2) + " ETH";
-  return vol.toFixed(4) + " ETH";
+  if (vol >= 1000000) return (vol / 1000000).toFixed(2) + "M BNB";
+  if (vol >= 1000) return (vol / 1000).toFixed(2) + "K BNB";
+  if (vol >= 1) return vol.toFixed(2) + " BNB";
+  return vol.toFixed(4) + " BNB";
 }
 
 // 注意: 后端现已统一返回小数格式，不再需要精度转换
 // 参考: backend/src/matching/server.ts handleGetKlines() 和 handlers.ts broadcastKline()
 
 export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade }: TokenPriceChartProps) {
-  console.log("========== [TokenPriceChart] 组件渲染 ==========");
-  console.log("[TokenPriceChart] symbol:", symbol);
-
   // 使用 symbol 作为 instId
   const instId = symbol;
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -259,7 +257,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
   const theme = useAppStore((state) => state.preferences.theme);
 
   // ✅ 获取实时 ETH 价格
-  const { price: ethPriceUsd } = useETHPrice();
+  const { price: bnbPriceUsd } = useETHPrice();
 
   // i18n
   const t = useTranslations("trading");
@@ -274,7 +272,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
   const pureTokenAddress = isTokenAddress ? instId.split("-")[0] : null;
   const isValidTokenAddress = pureTokenAddress && pureTokenAddress.length === 42;
 
-  console.log(`[TokenPriceChart] instId=${instId}, pureTokenAddress=${pureTokenAddress}, isValidTokenAddress=${isValidTokenAddress}`);
+  // pureTokenAddress 和 isValidTokenAddress 用于判断是否可以调用链上合约和订阅 WS
 
   // ✅ 使用 WebSocket K线推送代替链上事件监听
   const {
@@ -288,9 +286,37 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     200
   );
 
-  console.log(`[TokenPriceChart] wsLoading=${wsLoading}, wsChartData.length=${wsChartData?.length || 0}`);
+  // wsChartData: WS K线数据，wsLoading: K线加载状态
 
-  // 链上数据已移除，完全使用 WebSocket K线数据
+  // ✅ 链上价格兜底：当 WS K 线数据为空时，用 on-chain 价格生成种子蜡烛
+  const poolData = usePoolState(isValidTokenAddress ? pureTokenAddress! : undefined);
+
+  // 合并数据源：优先 WS K线，fallback 用链上价格生成种子蜡烛
+  const effectiveChartData = useMemo(() => {
+    // WS 有数据，直接用
+    if (wsChartData && wsChartData.length > 0) return wsChartData;
+
+    // WS 无数据 + 还在加载，返回空
+    if (wsLoading) return [];
+
+    // WS 无数据 + 不加载了，看链上价格
+    if (poolData.currentPrice > 0n) {
+      const priceETH = Number(poolData.currentPrice) / 1e18;
+      const now = Math.floor(Date.now() / 1000);
+      const bucket = Math.floor(now / RESOLUTION_SECONDS[resolution]) * RESOLUTION_SECONDS[resolution];
+
+      return [{
+        time: bucket,
+        open: priceETH,
+        high: priceETH,
+        low: priceETH,
+        close: priceETH,
+        volume: 0,
+      }];
+    }
+
+    return [];
+  }, [wsChartData, wsLoading, poolData.currentPrice, resolution]);
 
   // 是否自动滚动到最新K线
   const autoScrollRef = useRef(true);
@@ -301,7 +327,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     onTrade: (trade) => {
       // 实时更新 K 线
       if (aggregatorRef.current && candleSeriesRef.current && volumeSeriesRef.current && chartRef.current) {
-        const bar = aggregatorRef.current.addTrade(trade, ethPriceUsd);
+        const bar = aggregatorRef.current.addTrade(trade, bnbPriceUsd);
         setTradeCount(aggregatorRef.current.size);
 
         // 应用与历史数据相同的缩放因子
@@ -365,23 +391,18 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
   useEffect(() => { isHoveringRef.current = isHovering; }, [isHovering]);
   useEffect(() => { chartColorsRef.current = chartColors; }, [chartColors]);
 
-  // ✅ WebSocket K线实时更新 (唯一数据源)
-  // 使用 hook 预格式化的 wsChartData，符合 TradingView Lightweight Charts 官方规范:
+  // ✅ K线数据渲染 (优先 WS 数据，fallback 用链上种子蜡烛)
+  // 使用 effectiveChartData，符合 TradingView Lightweight Charts 官方规范:
   // - time: UTCTimestamp (秒)
   // - open/high/low/close: number
   // 参考: https://tradingview.github.io/lightweight-charts/docs/api/interfaces/CandlestickData
   useEffect(() => {
-    if (!wsChartData || wsChartData.length === 0) {
-      console.log(`[TokenPriceChart] 等待K线数据...`);
+    if (!effectiveChartData || effectiveChartData.length === 0) {
       return;
     }
 
-    // DEBUG: 打印实际数据格式以便调试
-    console.log(`[TokenPriceChart] K线数据更新: ${wsChartData.length} 条, chart ready: ${!!candleSeriesRef.current}`);
-
     // 如果图表还没初始化，延迟重试
     if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) {
-      console.log(`[TokenPriceChart] 图表未就绪，等待初始化...`);
       // 延迟 100ms 后重试（通过更新状态触发 re-render）
       const timer = setTimeout(() => {
         setIsLoadingHistory(prev => prev); // 触发 re-render
@@ -390,18 +411,15 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     }
 
     // 检查价格范围，如果跨度太大则只显示最近的数据
-    const prices = wsChartData.map(c => c.close);
+    const prices = effectiveChartData.map(c => c.close);
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const priceRatio = maxPrice / minPrice;
 
-    console.log(`[TokenPriceChart] 价格范围: ${minPrice.toExponential(2)} ~ ${maxPrice.toExponential(2)}, 比率: ${priceRatio.toFixed(0)}x`);
-
     // 选择要显示的数据
-    let displayData = wsChartData;
-    if (priceRatio > 100 && wsChartData.length > 50) {
-      console.log(`[TokenPriceChart] 价格跨度过大，只显示最近 50 根K线`);
-      displayData = wsChartData.slice(-50);
+    let displayData = effectiveChartData;
+    if (priceRatio > 100 && effectiveChartData.length > 50) {
+      displayData = effectiveChartData.slice(-50);
     }
 
     // ★ 关键：对于极小的价格（如 1e-9），需要缩放以避免浮点精度问题
@@ -415,7 +433,6 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
       // 找到合适的缩放因子（10 的幂次）
       const exponent = Math.floor(Math.log10(refPrice));
       scaleFactor = Math.pow(10, -exponent); // 例如 refPrice=2e-9 => exponent=-9 => scaleFactor=1e9
-      console.log(`[TokenPriceChart] 使用缩放因子: ${scaleFactor.toExponential(0)}`);
     }
 
     // 存储缩放因子到 ref，供 crosshair handler 使用
@@ -429,12 +446,6 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
       low: k.low * scaleFactor,
       close: k.close * scaleFactor,
     }));
-
-    // DEBUG: 打印缩放后的数据样本
-    if (candles.length > 0) {
-      const sample = candles[candles.length - 1];
-      console.log(`[TokenPriceChart] 缩放后K线样本: O=${sample.open.toFixed(6)} H=${sample.high.toFixed(6)} L=${sample.low.toFixed(6)} C=${sample.close.toFixed(6)}`);
-    }
 
     // 检查是否有实际成交量数据
     const hasVolume = displayData.some(k => k.volume > 0);
@@ -453,9 +464,6 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
             };
           })
       : [];
-
-    // 更新图表数据
-    console.log(`[TokenPriceChart] 设置图表数据: ${candles.length} 根K线`);
 
     // 更新价格轴格式化以显示原始价格（除以缩放因子）
     if (scaleFactor !== 1) {
@@ -512,8 +520,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     setIsLoadingHistory(false);
     // ✅ 标记首次数据加载成功，后续切换分辨率时不再显示全屏遮罩
     historicalDataLoadedRef.current = true;
-    console.log(`[TokenPriceChart] ✅ K线渲染完成，显示 ${candles.length} 根`);
-  }, [wsChartData]); // 只依赖 wsChartData，后端已返回 ETH 本位价格
+  }, [effectiveChartData]); // 依赖 effectiveChartData (WS K线 + 链上兜底)
 
   // UTC 时间更新
   useEffect(() => {
@@ -532,17 +539,13 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
   // 初始化图表
   useEffect(() => {
     if (!chartContainerRef.current) {
-      console.log(`[TokenPriceChart] 图表容器不存在`);
       return;
     }
 
     const containerWidth = chartContainerRef.current.clientWidth;
     const containerHeight = chartContainerRef.current.clientHeight;
-    console.log(`[TokenPriceChart] 初始化图表, 容器尺寸: ${containerWidth}x${containerHeight}`);
-
     // 如果容器尺寸为0，等待下一帧
     if (containerWidth === 0 || containerHeight === 0) {
-      console.log(`[TokenPriceChart] 容器尺寸为0，等待布局完成...`);
       const timer = requestAnimationFrame(() => {
         // 强制重新渲染
         setIsLoadingHistory(prev => prev);
@@ -603,6 +606,16 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
           },
         },
       },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: true,
+      },
+      kineticScroll: {
+        mouse: true,
+        touch: true,
+      },
     };
 
     const chart = createChart(chartContainerRef.current, chartOptions);
@@ -653,8 +666,6 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     candleSeriesRef.current = candlestickSeries;
     volumeSeriesRef.current = histogramSeries;
     setChartReady(true);
-    console.log(`[TokenPriceChart] ✅ 图表初始化完成, 尺寸: ${containerWidth}x${containerHeight}`);
-
     // 监听时间轴滚动 - 检测用户是否手动滚动
     chart.timeScale().subscribeVisibleTimeRangeChange(() => {
       // 检查是否滚动到了最右边（最新数据）
@@ -779,10 +790,10 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     <div className={`flex flex-col w-full h-full ${className}`} style={{ backgroundColor: chartColors.background }}>
       {/* 顶部价格信息栏 */}
       <div className="h-[48px] flex items-center px-4" style={{ backgroundColor: chartColors.background, borderBottom: `1px solid ${chartColors.borderColor}` }}>
-        {/* 左侧：交易对 - TOKEN/WETH 格式，大小一致 */}
+        {/* 左侧：交易对 - TOKEN/WBNB 格式，大小一致 */}
         <div className="flex items-center">
           <span className="text-okx-text-primary font-bold text-[14px]">{tokenSymbol}</span>
-          <span className="text-okx-text-primary font-bold text-[14px]">/WETH</span>
+          <span className="text-okx-text-primary font-bold text-[14px]">/WBNB</span>
         </div>
 
         {displayOHLC && (

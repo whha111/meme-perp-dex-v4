@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -23,7 +24,7 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
  * Similar to dYdX, Injective, Hyperliquid approach where blockchain is
  * the "notary" and "final settlement house", not a real-time database.
  */
-contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
+contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
     using ECDSA for bytes32;
     using SafeERC20 for IERC20;
 
@@ -31,7 +32,7 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
     // Constants
     // ============================================================
 
-    uint256 public constant PRECISION = 1e6; // USDT has 6 decimals
+    uint256 public constant PRECISION = 1e18; // WETH has 18 decimals
 
     // EIP-712 type hash for withdrawal authorization
     bytes32 public constant WITHDRAWAL_TYPEHASH = keccak256(
@@ -45,8 +46,8 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
     // Platform signer for withdrawal authorizations
     address public platformSigner;
 
-    // Supported collateral token (USDT)
-    IERC20 public collateralToken;
+    // Supported collateral token (WETH or any ERC-20)
+    IERC20 public immutable collateralToken;
 
     // User deposits (total amount deposited, before any withdrawals)
     mapping(address => uint256) public userDeposits;
@@ -77,6 +78,14 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
     mapping(address => bool) public authorizedUpdaters;
 
     // ============================================================
+    // Deposit Caps (risk mitigation before audit)
+    // ============================================================
+
+    uint256 public depositCapPerUser;   // Per-user deposit limit (0 = unlimited)
+    uint256 public depositCapTotal;      // Global TVL limit (0 = unlimited)
+    uint256 public totalDeposited;       // Current total deposits
+
+    // ============================================================
     // Events
     // ============================================================
 
@@ -86,6 +95,10 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
     event StateRootUpdated(bytes32 indexed root, uint256 timestamp, uint256 snapshotId);
     event PlatformSignerUpdated(address indexed oldSigner, address indexed newSigner);
     event UpdaterAuthorized(address indexed updater, bool authorized);
+    event DepositCapPerUserUpdated(uint256 oldCap, uint256 newCap);
+    event DepositCapTotalUpdated(uint256 oldCap, uint256 newCap);
+    event EmergencyPaused(address indexed by);
+    event EmergencyUnpaused(address indexed by);
 
     // ============================================================
     // Errors
@@ -99,6 +112,8 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
     error InsufficientEquity();
     error UnauthorizedUpdater();
     error ZeroAddress();
+    error UserDepositCapExceeded();
+    error TotalDepositCapExceeded();
 
     // ============================================================
     // Constructor
@@ -107,8 +122,8 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
     constructor(
         address _collateralToken,
         address _platformSigner,
-        address _owner
-    ) Ownable(_owner) EIP712("SettlementV2", "1") {
+        address initialOwner
+    ) Ownable(initialOwner) EIP712("SettlementV2", "1") {
         if (_collateralToken == address(0)) revert ZeroAddress();
         if (_platformSigner == address(0)) revert ZeroAddress();
 
@@ -124,11 +139,20 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
      * @notice Deposit collateral tokens
      * @param amount Amount to deposit (in token's native decimals)
      */
-    function deposit(uint256 amount) external nonReentrant {
+    function deposit(uint256 amount) external nonReentrant whenNotPaused {
         if (amount == 0) revert InvalidAmount();
+
+        // Deposit cap checks
+        if (depositCapPerUser > 0 && userDeposits[msg.sender] + amount > depositCapPerUser) {
+            revert UserDepositCapExceeded();
+        }
+        if (depositCapTotal > 0 && totalDeposited + amount > depositCapTotal) {
+            revert TotalDepositCapExceeded();
+        }
 
         collateralToken.safeTransferFrom(msg.sender, address(this), amount);
         userDeposits[msg.sender] += amount;
+        totalDeposited += amount;
 
         emit Deposited(msg.sender, amount, userDeposits[msg.sender]);
     }
@@ -138,12 +162,21 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
      * @param user The user to credit
      * @param amount Amount to deposit
      */
-    function depositFor(address user, uint256 amount) external nonReentrant {
+    function depositFor(address user, uint256 amount) external nonReentrant whenNotPaused {
         if (amount == 0) revert InvalidAmount();
         if (user == address(0)) revert ZeroAddress();
 
+        // Deposit cap checks
+        if (depositCapPerUser > 0 && userDeposits[user] + amount > depositCapPerUser) {
+            revert UserDepositCapExceeded();
+        }
+        if (depositCapTotal > 0 && totalDeposited + amount > depositCapTotal) {
+            revert TotalDepositCapExceeded();
+        }
+
         collateralToken.safeTransferFrom(msg.sender, address(this), amount);
         userDeposits[user] += amount;
+        totalDeposited += amount;
 
         emit DepositedFor(user, msg.sender, amount);
     }
@@ -173,7 +206,7 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
         bytes32[] calldata merkleProof,
         uint256 deadline,
         bytes calldata signature
-    ) external nonReentrant {
+    ) external nonReentrant whenNotPaused {
         if (amount == 0) revert InvalidAmount();
         if (block.timestamp > deadline) revert DeadlineExpired();
 
@@ -211,6 +244,12 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
         // 4. Update state
         withdrawalNonces[user] = nonce + 1;
         totalWithdrawn[user] += amount;
+        // AUDIT-FIX SC-C01: decrement totalDeposited on withdraw to prevent permanent deposit DoS
+        if (totalDeposited >= amount) {
+            totalDeposited -= amount;
+        } else {
+            totalDeposited = 0;
+        }
 
         // 5. Transfer tokens
         collateralToken.safeTransfer(user, amount);
@@ -290,6 +329,40 @@ contract SettlementV2 is Ownable, ReentrancyGuard, EIP712 {
         if (updater == address(0)) revert ZeroAddress();
         authorizedUpdaters[updater] = authorized;
         emit UpdaterAuthorized(updater, authorized);
+    }
+
+    /**
+     * @notice Emergency pause — halts all deposits and withdrawals
+     */
+    function pause() external onlyOwner {
+        _pause();
+        emit EmergencyPaused(msg.sender);
+    }
+
+    /**
+     * @notice Resume normal operations after emergency
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+        emit EmergencyUnpaused(msg.sender);
+    }
+
+    /**
+     * @notice Set per-user deposit cap (0 = unlimited)
+     */
+    function setDepositCapPerUser(uint256 cap) external onlyOwner {
+        uint256 oldCap = depositCapPerUser;
+        depositCapPerUser = cap;
+        emit DepositCapPerUserUpdated(oldCap, cap);
+    }
+
+    /**
+     * @notice Set global TVL deposit cap (0 = unlimited)
+     */
+    function setDepositCapTotal(uint256 cap) external onlyOwner {
+        uint256 oldCap = depositCapTotal;
+        depositCapTotal = cap;
+        emit DepositCapTotalUpdated(oldCap, cap);
     }
 
     // ============================================================
