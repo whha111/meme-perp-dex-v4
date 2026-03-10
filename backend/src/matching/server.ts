@@ -6355,6 +6355,11 @@ function closePositionByMatch(
     if (returnAmount > 0n) {
       adjustUserBalance(normalizedTrader, returnAmount, "CLOSE_POSITION");
     }
+    // ★ Mode2: PnL + closeFee 必须通过 addMode2Adjustment 追踪
+    // collateral 部分由仓位移除隐式处理 (positionMargin 减少 → available 增加)
+    // 但 PnL 和 closeFee 必须显式记录，否则 API 余额不包含平仓盈亏
+    addMode2Adjustment(normalizedTrader, pnl - closeFee, "CLOSE_PNL");
+
     // 解锁已用保证金
     const traderBalance = userBalances.get(normalizedTrader);
     if (traderBalance) {
@@ -6376,6 +6381,9 @@ function closePositionByMatch(
     if (returnAmount > 0n) {
       adjustUserBalance(normalizedTrader, returnAmount, "PARTIAL_CLOSE");
     }
+    // ★ Mode2: PnL + closeFee 追踪 (部分平仓)
+    addMode2Adjustment(normalizedTrader, pnl - closeFee, "PARTIAL_CLOSE_PNL");
+
     // 部分解锁已用保证金
     const traderBalance = userBalances.get(normalizedTrader);
     if (traderBalance) {
