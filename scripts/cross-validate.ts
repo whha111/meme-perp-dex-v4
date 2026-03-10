@@ -223,6 +223,38 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 function log(msg: string) { console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`); }
 
+/** Get orderbook for a token. Returns total number of resting orders (longs + shorts). */
+async function getOrderbookDepth(token: Address): Promise<number> {
+  try {
+    const r = await apiGet(`/api/orderbook/${token}`);
+    // Engine returns { longs: [...], shorts: [...] } — not bids/asks
+    const longs = r.longs || r.data?.longs || [];
+    const shorts = r.shorts || r.data?.shorts || [];
+    return longs.length + shorts.length;
+  } catch { return 0; }
+}
+
+/** Track tokens used within this Method F run to avoid reuse within the same invocation */
+const usedFuzzTokens = new Set<number>();
+
+/** Find a token from the pool with an empty orderbook (no stale orders from previous runs). */
+async function findCleanToken(startFrom: number, direction: -1 | 1 = -1): Promise<{ token: Address; idx: number } | null> {
+  let idx = startFrom;
+  let attempts = 0;
+  while (idx >= 0 && idx < tokenPool.length && attempts < 30) {
+    attempts++;
+    if (usedFuzzTokens.has(idx)) { idx += direction; continue; }
+    const token = tokenPool[idx];
+    const depth = await getOrderbookDepth(token);
+    if (depth === 0) {
+      usedFuzzTokens.add(idx);
+      return { token, idx };
+    }
+    idx += direction;
+  }
+  return null;
+}
+
 // ════════════════════════════════════════════════════════════════
 //  TEST FRAMEWORK
 // ════════════════════════════════════════════════════════════════
@@ -610,73 +642,44 @@ async function methodF_fuzz() {
   log("\n═══ Method F: Fuzz Testing (random inputs) ═══");
   const FUZZ_ROUNDS = 5;
   const deposit = parseEther("1");
-  // Use proven base price from Methods A-D (10 gwei = 1e10 wei)
-  const basePrice = parseEther("0.00000001");
+  const basePrice = parseEther("0.00000001"); // 1e10 wei
 
   for (let round = 0; round < FUZZ_ROUNDS; round++) {
-    // Use cvWallet at high indices (30+) — proven to work in Methods A-D
-    // Each round gets its own dedicated pair: buyer=[30+2r], seller=[31+2r]
-    const buyer = cvWallet(30 + round * 2);
-    const seller = cvWallet(31 + round * 2);
+    // Use SAME wallet+token scheme as Methods A-D (proven 100% reliable)
+    // Wallets: same pair for all fuzz rounds (like Method A uses same pair per leverage)
+    const buyer = cvWallet(0 + round + 20);   // offset by 20 to avoid A-D wallet overlap
+    const seller = cvWallet(10 + round + 20);  // matching offset pattern
+    const token = nextToken();                 // continuous from where A-D left off
 
     // Random parameters
     const leverage = [1, 2, 3, 5, 10][Math.floor(Math.random() * 5)];
-    // Sizes from 0.01 to 0.08 ETH
     const sizeWei = BigInt(Math.floor(Math.random() * 70000 + 10000)) * 10n ** 12n;
-    // Price change: ±5% max (same safe range as Method A which is 100% reliable)
-    // This is conservative but catches real bugs; leverage * |change| stays < 50%
-    const changeBps = Math.floor(Math.random() * 1000 - 500); // -500bp to +500bp
+    const changeBps = Math.floor(Math.random() * 1000 - 500);
     const exitPrice = basePrice + (basePrice * BigInt(changeBps) / 10000n);
     if (exitPrice <= 0n) continue;
 
-    // Use tokens from the END of the pool — avoids accumulation from repeated runs
-    // (nextToken starts from idx 0 and overlaps between runs)
-    const tokenIdx = tokenPool.length - 1 - round;
-    if (tokenIdx < 0) break;
-    const token = tokenPool[tokenIdx];
     await fakeDeposit(buyer.address, deposit);
     await fakeDeposit(seller.address, deposit);
-    await setPrice(token, basePrice);
-    await sleep(500);
+    const size = sizeWei;
+    const price = basePrice;
+    await setPrice(token, price);
 
-    const bbBefore = (await getBalance(buyer.address)).available;
-    const sbBefore = (await getBalance(seller.address)).available;
+    // Use openAndClose — exact same helper as Methods A-D
+    const result = await openAndClose(buyer, seller, token, size, leverage, price, exitPrice);
+    // Reset price back to base
+    await setPrice(token, price);
 
-    // Step 1: Open
-    const sellerOpenR = await submitOrder(seller, token, false, sizeWei, leverage, basePrice, 1);
-    await sleep(300);
-    const buyerOpenR = await submitOrder(buyer, token, true, sizeWei, leverage, basePrice, 1);
-    await sleep(4000);
-
-    const buyerOpenStatus = buyerOpenR?.status;
-    const sellerOpenStatus = sellerOpenR?.status;
-    const buyerFilled = buyerOpenR?.filledSize || "0";
-    const sellerFilled = sellerOpenR?.filledSize || "0";
-
-    // Step 2: Close
-    await setPrice(token, exitPrice);
-    const buyerCloseR = await submitOrder(buyer, token, false, sizeWei, 1, exitPrice, 1, { reduceOnly: true });
-    await sleep(300);
-    const sellerCloseR = await submitOrder(seller, token, true, sizeWei, 1, exitPrice, 1, { reduceOnly: true });
-    await sleep(4000);
-    await setPrice(token, basePrice);
-
-    const bbAfter = (await getBalance(buyer.address)).available;
-    const sbAfter = (await getBalance(seller.address)).available;
-    const buyerChange = bbAfter - bbBefore;
-    const sellerChange = sbAfter - sbBefore;
+    const buyerChange = result.buyerBalAfter - result.buyerBalBefore;
+    const sellerChange = result.sellerBalAfter - result.sellerBalBefore;
     const net = buyerChange + sellerChange;
 
     await runTest("F", `Fuzz #${round}: size=${formatEther(sizeWei)}, lev=${leverage}x, Δprice=${changeBps}bp`, async () => {
       const maxFees = sizeWei * 20n / 10000n;
       const absNet = net < 0n ? -net : net;
       const pass = net <= 0n && absNet <= maxFees;
-      const debugInfo = !pass
-        ? ` | OPEN: seller=${sellerOpenStatus}/fill=${sellerFilled}, buyer=${buyerOpenStatus}/fill=${buyerFilled}, CLOSE: buyer=${buyerCloseR?.status||buyerCloseR?.error}, seller=${sellerCloseR?.status||sellerCloseR?.error}`
-        : "";
       return {
         pass,
-        detail: `buyer=${formatEther(buyerChange)}, seller=${formatEther(sellerChange)}, net=${formatEther(net)}, maxFees=${formatEther(maxFees)}${debugInfo}`,
+        detail: `buyer=${formatEther(buyerChange)}, seller=${formatEther(sellerChange)}, net=${formatEther(net)}, maxFees=${formatEther(maxFees)}`,
       };
     });
   }
