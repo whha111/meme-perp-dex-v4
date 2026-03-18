@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { ChevronDown, Search, X } from "lucide-react";
+import { ChevronDown, Search, X, ExternalLink } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { WssOnChainToken } from "@/lib/stores/tradingDataStore";
 import { formatTokenPrice } from "@/utils/formatters";
+import { getPancakeSwapUrl } from "@/lib/contracts";
 
 type FilterTab = "all" | "active" | "graduated";
 
@@ -136,11 +137,11 @@ export function TokenSelector({
             {selectedToken?.symbol || t("selectToken")}
           </span>
           {selectedToken?.isGraduated && (
-            <span className="px-1.5 py-0.5 text-[10px] bg-okx-warning/20 text-okx-warning rounded font-medium">
+            <span className="px-1.5 py-0.5 text-xs bg-okx-warning/20 text-okx-warning rounded font-medium">
               DEX
             </span>
           )}
-          <span className="text-okx-text-tertiary text-[12px]">/BNB</span>
+          <span className="text-okx-text-tertiary text-xs">/BNB</span>
         </div>
 
         <ChevronDown
@@ -182,7 +183,7 @@ export function TokenSelector({
               <button
                 key={tab.key}
                 onClick={() => setActiveFilter(tab.key)}
-                className={`px-3 py-1 text-[12px] rounded-md whitespace-nowrap transition-colors ${
+                className={`px-3 py-1 text-xs rounded-md whitespace-nowrap transition-colors ${
                   activeFilter === tab.key
                     ? "bg-okx-bg-hover text-okx-text-primary font-medium"
                     : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -194,7 +195,7 @@ export function TokenSelector({
           </div>
 
           {/* 表头 */}
-          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[11px] text-okx-text-tertiary border-b border-okx-border-primary">
+          <div className="grid grid-cols-12 gap-2 px-3 py-2 text-xs text-okx-text-tertiary border-b border-okx-border-primary">
             <div className="col-span-6">{t("selectToken")}</div>
             <div className="col-span-3 text-right">{t("price")}</div>
             <div className="col-span-3 text-right">{t("bnbReserve")}</div>
@@ -259,20 +260,27 @@ function TokenRow({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <p className="text-[13px] font-medium text-okx-text-primary truncate">
+            <p className="text-sm font-medium text-okx-text-primary truncate">
               {token.symbol}
             </p>
             {token.isGraduated ? (
-              <span className="px-1.5 py-0.5 text-[9px] bg-okx-warning/20 text-okx-warning rounded font-medium flex-shrink-0">
-                DEX
-              </span>
+              <a
+                href={getPancakeSwapUrl(token.address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-okx-warning/20 text-okx-warning rounded font-medium flex-shrink-0 hover:bg-okx-warning/30 transition-colors"
+                title="Trade on PancakeSwap"
+              >
+                DEX <ExternalLink className="w-2.5 h-2.5" />
+              </a>
             ) : token.isActive ? (
-              <span className="px-1.5 py-0.5 text-[9px] bg-okx-up/20 text-okx-up rounded font-medium flex-shrink-0">
+              <span className="px-1.5 py-0.5 text-xs bg-okx-up/20 text-okx-up rounded font-medium flex-shrink-0">
                 Live
               </span>
             ) : null}
           </div>
-          <p className="text-[10px] text-okx-text-tertiary truncate">
+          <p className="text-xs text-okx-text-tertiary truncate">
             {token.name}
           </p>
         </div>
@@ -280,14 +288,14 @@ function TokenRow({
 
       {/* 价格 (ETH) */}
       <div className="col-span-3 text-right">
-        <p className="text-[12px] text-okx-text-primary font-mono">
+        <p className="text-xs text-okx-text-primary font-mono">
           {formatPrice(token.price)}
         </p>
       </div>
 
       {/* ETH Reserve */}
       <div className="col-span-3 text-right">
-        <p className="text-[12px] text-okx-text-secondary font-mono">
+        <p className="text-xs text-okx-text-secondary font-mono">
           {parseFloat(token.realETHReserve).toFixed(2)}
         </p>
       </div>

@@ -76,9 +76,10 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 /**
  * 格式化价格 (ETH 本位: 1e18精度, Token/ETH 比率) - 使用下标格式，避免科学计数法
  */
-export function formatPrice(price: string | number): string {
+export function formatPrice(price: string | number | undefined | null): string {
+  if (price === undefined || price === null || price === "") return "0";
   const p = typeof price === "string" ? Number(price) / 1e18 : price;
-  if (p <= 0) return "0";
+  if (isNaN(p) || p <= 0) return "0";
   if (p >= 1) return p.toFixed(4);
   if (p >= 0.01) return p.toFixed(6);
   if (p >= 0.0001) return p.toFixed(8);
@@ -99,8 +100,10 @@ export function formatPrice(price: string | number): string {
 /**
  * 格式化ETH金额 (ETH 本位: 1e18精度)
  */
-export function formatEthAmount(amount: string | number): string {
+export function formatEthAmount(amount: string | number | undefined | null): string {
+  if (amount === undefined || amount === null || amount === "") return "BNB 0.0000";
   const a = typeof amount === "string" ? Number(amount) / 1e18 : amount;
+  if (isNaN(a)) return "BNB 0.0000";
   if (a >= 1) return `BNB ${a.toFixed(4)}`;
   return `BNB ${a.toFixed(6)}`;
 }

@@ -24,9 +24,9 @@ function Column({ title, assets, noTokensText, ethPrice }: { title: string; asse
         <h2 className="text-okx-text-primary font-bold text-[16px]">{title}</h2>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <input type="text" placeholder="..." className="bg-okx-bg-hover border border-okx-border-primary rounded px-2 py-1 text-[11px] text-okx-text-primary w-24 focus:outline-none" />
+            <input type="text" placeholder="..." className="bg-okx-bg-hover border border-okx-border-primary rounded px-2 py-1 text-xs text-okx-text-primary w-24 focus:outline-none" />
           </div>
-          <button className="text-okx-text-secondary text-[11px]">10</button>
+          <button className="text-okx-text-secondary text-xs">10</button>
         </div>
       </div>
       <div className="overflow-y-auto">
@@ -385,7 +385,7 @@ export function MarketOverview() {
 
       <div className="max-w-[1440px] mx-auto px-4 py-4">
         {/* 工具栏 */}
-        <div className="flex items-center gap-4 mb-4 text-[12px]">
+        <div className="flex items-center gap-4 mb-4 text-xs">
           <span className="bg-okx-bg-hover text-okx-up px-2 py-1 rounded border border-okx-up flex items-center gap-1">
             <span className="w-2 h-2 bg-okx-up rounded-full"></span> {t('classicMode')}
           </span>
@@ -452,7 +452,7 @@ export function MarketOverview() {
       </div>
 
       {/* 底部悬浮栏 */}
-      <div className="fixed bottom-0 left-0 right-0 h-10 bg-okx-bg-secondary border-t border-okx-border-primary z-40 px-4 flex items-center justify-end text-[11px] text-okx-text-secondary">
+      <div className="fixed bottom-0 left-0 right-0 h-10 bg-okx-bg-secondary border-t border-okx-border-primary z-40 px-4 flex items-center justify-end text-xs text-okx-text-secondary">
         <div className="flex gap-4 items-center">
           <button
             onClick={() => setFaqPanelOpen(true)}

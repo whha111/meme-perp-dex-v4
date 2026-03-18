@@ -62,14 +62,57 @@ function formatValue(value: number, prefix: string = "$"): string {
   return prefix + "0";
 }
 
-// 格式化代币价格
+// 格式化代币价格 — price 是 1e18 精度的 wei 字符串，需先转为 ETH 单位
 function formatPrice(priceWei: string, ethPrice: number): string {
-  const priceEth = parseFloat(priceWei) || 0;
+  const priceEth = (parseFloat(priceWei) / 1e18) || 0;
   const priceUsd = priceEth * ethPrice;
   if (priceUsd >= 1) return "$" + priceUsd.toFixed(4);
   if (priceUsd >= 0.001) return "$" + priceUsd.toFixed(6);
   return "$" + priceUsd.toFixed(8);
 }
+
+/**
+ * Deterministic mini sparkline using token address as seed.
+ * Generates unique-per-token paths — not real 7d data (no API yet),
+ * but visually distinct per token. Color reflects real 24h direction.
+ */
+const MiniSparkline = React.memo(function MiniSparkline({
+  address,
+  isUp,
+}: {
+  address: string;
+  isUp: boolean;
+}) {
+  // Simple hash from address chars to generate 8 pseudo-random y-values
+  const points = useMemo(() => {
+    const seed = address.slice(2, 18); // 16 hex chars
+    const ys: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const hex = seed.slice(i * 2, i * 2 + 2);
+      ys.push(4 + (parseInt(hex, 16) / 255) * 16); // y between 4-20
+    }
+    // If up trend, sort to generally go down (y decreases = line goes up)
+    // If down trend, sort to generally go up
+    if (isUp) {
+      // Nudge: make later points lower (higher on screen = lower y)
+      for (let i = 4; i < 8; i++) ys[i] = Math.max(4, ys[i] - 4);
+    } else {
+      for (let i = 4; i < 8; i++) ys[i] = Math.min(20, ys[i] + 4);
+    }
+    return ys.map((y, i) => `${i === 0 ? "M" : "L"}${i * 11.4} ${y.toFixed(1)}`).join(" ");
+  }, [address, isUp]);
+
+  return (
+    <svg width="80" height="24" viewBox="0 0 80 24">
+      <path
+        d={points}
+        stroke={isUp ? "var(--okx-up)" : "var(--okx-down)"}
+        strokeWidth="1.5"
+        fill="none"
+      />
+    </svg>
+  );
+});
 
 function PerpContent() {
   trackRender("PerpContent");
@@ -80,14 +123,17 @@ function PerpContent() {
   const t = useTranslations();
   const tPerp = useTranslations("perp");
 
-  const { price: ethPrice } = useETHPrice();
-  const ETH_PRICE_USD = ethPrice || 2000;
+  const { price: bnbPrice } = useETHPrice();
+  // useETHPrice (alias useBNBPrice) already provides $600 fallback — no need to override
+  const BNB_PRICE_USD = bnbPrice;
 
   const { isConnected: wsConnected } = useUnifiedWebSocket({ enabled: true });
 
   const allTokens = useTradingDataStore((state) => state.allTokens);
   const allTokensLoaded = useTradingDataStore((state) => state.allTokensLoaded);
   const tokenStatsMap = useTradingDataStore((state) => state.tokenStats);
+  const fundingRatesMap = useTradingDataStore((state) => state.fundingRates);
+  const insuranceFund = useTradingDataStore((state) => state.insuranceFund);
 
   const tokens = useMemo(() => {
     return [...allTokens].sort((a, b) => b.createdAt - a.createdAt);
@@ -116,15 +162,22 @@ function PerpContent() {
   // 为每个代币计算交易统计数据
   const tokensWithStats = useMemo(() => {
     return tokens.map((token) => {
-      const marketCapFloat = parseFloat(token.marketCap) || 0;
-      const marketCapUsd = marketCapFloat * ETH_PRICE_USD;
+      const marketCapFloat = (parseFloat(token.marketCap) / 1e18) || 0;
+      const marketCapUsd = marketCapFloat * BNB_PRICE_USD;
       const stats = tokenStatsMap.get(token.address.toLowerCase() as Address);
       const priceChange24h = parseFloat(stats?.priceChangePercent24h || "0");
-      // volume24h from matching engine is in ETH — convert to USD
+      // volume24h from matching engine is in BNB — convert to USD
       const volumeRaw = parseFloat(stats?.volume24h || "0");
       // Sanity check: if value looks like wei (>1e12), normalize
-      const volumeEth = volumeRaw > 1e12 ? volumeRaw / 1e18 : volumeRaw;
-      const volume24h = volumeEth * ETH_PRICE_USD;
+      const volumeBnb = volumeRaw > 1e12 ? volumeRaw / 1e18 : volumeRaw;
+      const volume24h = volumeBnb * BNB_PRICE_USD;
+      // OI from matching engine (BNB, 1e18 precision)
+      const oiRaw = parseFloat(stats?.openInterest || "0");
+      const oiBnb = oiRaw > 1e12 ? oiRaw / 1e18 : oiRaw;
+      const openInterestUsd = oiBnb * BNB_PRICE_USD;
+      // Funding rate from store
+      const fr = fundingRatesMap.get(token.address.toLowerCase() as Address);
+      const fundingRate = fr ? parseFloat(fr.rate) / 10000 : null; // rate is in basis points (1e4)
       const hotScore = marketCapUsd * 0.5 + volume24h * 0.3 + (token.isGraduated ? 1000 : 0);
 
       return {
@@ -132,10 +185,12 @@ function PerpContent() {
         marketCapUsd,
         priceChange24h,
         volume24h,
+        openInterestUsd,
+        fundingRate,
         hotScore,
       };
     });
-  }, [tokens, tokenStatsMap, ETH_PRICE_USD]);
+  }, [tokens, tokenStatsMap, fundingRatesMap, BNB_PRICE_USD]);
 
   // 按分类和搜索过滤
   const filteredTokens = useMemo(() => {
@@ -169,8 +224,19 @@ function PerpContent() {
 
   // 统计数据
   const totalVolume24h = tokensWithStats.reduce((sum, t) => sum + t.volume24h, 0);
-  const totalMarketCap = tokensWithStats.reduce((sum, t) => sum + t.marketCapUsd, 0);
+  const totalOI = tokensWithStats.reduce((sum, t) => sum + t.openInterestUsd, 0);
   const activeTokens = tokensWithStats.filter((t) => t.isActive !== false).length;
+  // Insurance fund from PerpVault — prefer display.balance (pre-formatted), fallback to raw / 1e18
+  const insuranceFundDisplay = useMemo(() => {
+    if (!insuranceFund) return "-- BNB";
+    if (insuranceFund.display?.balance) {
+      const val = parseFloat(insuranceFund.display.balance);
+      return val > 0 ? `${val.toFixed(2)} BNB` : "-- BNB";
+    }
+    const raw = parseFloat(insuranceFund.balance);
+    const bnb = raw > 1e12 ? raw / 1e18 : raw; // Handle both wei and normal formats
+    return bnb > 0 ? `${bnb.toFixed(2)} BNB` : "-- BNB";
+  }, [insuranceFund]);
 
   if (!mounted || isLoading) {
     return (
@@ -217,7 +283,7 @@ function PerpContent() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <h1 className="text-lg md:text-[22px] font-bold text-okx-text-primary">{tPerp("marketTitle")}</h1>
-            <p className="text-[12px] md:text-[13px] text-okx-text-tertiary">{tPerp("marketSubtitle")}</p>
+            <p className="text-xs md:text-sm text-okx-text-tertiary">{tPerp("marketSubtitle")}</p>
           </div>
 
           {/* Search */}
@@ -228,7 +294,7 @@ function PerpContent() {
               placeholder={tPerp("searchPairs")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1 bg-transparent text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none"
+              className="flex-1 bg-transparent text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none"
             />
           </div>
         </div>
@@ -237,12 +303,12 @@ function PerpContent() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {[
             { label: tPerp("totalVolume24h"), value: formatValue(totalVolume24h), color: "text-okx-text-primary" },
-            { label: tPerp("totalOI"), value: formatValue(totalMarketCap), color: "text-okx-text-primary" },
+            { label: tPerp("totalOI"), value: formatValue(totalOI), color: "text-okx-text-primary" },
             { label: tPerp("activePairs"), value: `${activeTokens} ${tPerp("pairsUnit")}`, color: "text-okx-text-primary" },
-            { label: tPerp("insuranceFund"), value: "2.00 ETH", color: "text-okx-up" },
+            { label: tPerp("insuranceFund"), value: insuranceFundDisplay, color: "text-okx-up" },
           ].map((stat, idx) => (
             <div key={idx} className="bg-okx-bg-card rounded-lg py-3 px-4 md:py-4 md:px-5">
-              <div className="text-[11px] md:text-[12px] text-okx-text-tertiary mb-1">{stat.label}</div>
+              <div className="text-xs md:text-xs text-okx-text-tertiary mb-1">{stat.label}</div>
               <div className={`text-[15px] md:text-[18px] font-bold font-mono ${stat.color}`}>{stat.value}</div>
             </div>
           ))}
@@ -257,7 +323,7 @@ function PerpContent() {
             <button
               key={cat.key}
               onClick={() => setActiveCategory(cat.key)}
-              className={`px-5 py-2 rounded-md text-[13px] font-medium transition-all ${
+              className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${
                 activeCategory === cat.key
                   ? "bg-okx-accent text-black font-bold"
                   : "text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-card"
@@ -272,7 +338,7 @@ function PerpContent() {
         <div className="overflow-x-auto">
         <div className="min-w-[960px]">
         {/* Table Header */}
-        <div className="flex items-center bg-okx-bg-card rounded-t-md px-4 py-3 text-[12px] font-semibold text-okx-text-tertiary">
+        <div className="flex items-center bg-okx-bg-card rounded-t-md px-4 py-3 text-xs font-semibold text-okx-text-tertiary">
           <div className="w-[200px]">{tPerp("pair")}</div>
           <div className="w-[130px] text-right">{tPerp("latestPrice")}</div>
           <div className="w-[100px] text-right">{tPerp("change24h")}</div>
@@ -287,7 +353,7 @@ function PerpContent() {
         <div>
           {filteredTokens.map((token) => {
             const isOnChain = token.isActive !== false;
-            const priceStr = formatPrice(token.price || "0", ETH_PRICE_USD);
+            const priceStr = formatPrice(token.price || "0", BNB_PRICE_USD);
             const changeClass = token.priceChange24h >= 0 ? "text-okx-up" : "text-okx-down";
             const changeSign = token.priceChange24h >= 0 ? "+" : "";
             const isNew = Date.now() / 1000 - token.createdAt < 86400 * 3; // 3 days
@@ -317,12 +383,12 @@ function PerpContent() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-okx-text-primary">{token.symbol}/USDT</span>
                       {isNew && (
-                        <span className="text-[10px] bg-okx-accent/20 text-okx-accent px-1.5 py-0.5 rounded font-bold">
+                        <span className="text-xs bg-okx-accent/20 text-okx-accent px-1.5 py-0.5 rounded font-bold">
                           NEW
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-okx-text-tertiary">{tPerp("perpetualLabel")}</div>
+                    <div className="text-xs text-okx-text-tertiary">{tPerp("perpetualLabel")}</div>
                   </div>
                 </div>
 
@@ -350,27 +416,24 @@ function PerpContent() {
                 {/* Open Interest */}
                 <div className="w-[140px] text-right">
                   <span className="text-sm font-mono text-okx-text-primary">
-                    {formatValue(token.marketCapUsd)}
+                    {token.openInterestUsd > 0 ? formatValue(token.openInterestUsd) : "--"}
                   </span>
                 </div>
 
                 {/* Funding Rate */}
                 <div className="w-[100px] text-right">
-                  <span className="text-sm font-mono text-okx-up">+0.01%</span>
+                  {token.fundingRate !== null ? (
+                    <span className={`text-sm font-mono ${token.fundingRate >= 0 ? "text-okx-up" : "text-okx-down"}`}>
+                      {token.fundingRate >= 0 ? "+" : ""}{(token.fundingRate * 100).toFixed(4)}%
+                    </span>
+                  ) : (
+                    <span className="text-sm font-mono text-okx-text-tertiary">--</span>
+                  )}
                 </div>
 
-                {/* 7d Trend (simple placeholder) */}
+                {/* 7d Trend — deterministic sparkline from token address hash (no real 7d history API yet) */}
                 <div className="w-[120px] flex justify-center">
-                  <svg width="80" height="24" viewBox="0 0 80 24">
-                    <path
-                      d={token.priceChange24h >= 0
-                        ? "M0 20 L10 16 L20 18 L30 12 L40 14 L50 8 L60 10 L70 4 L80 6"
-                        : "M0 4 L10 8 L20 6 L30 12 L40 10 L50 16 L60 14 L70 20 L80 18"}
-                      stroke={token.priceChange24h >= 0 ? "var(--okx-up)" : "var(--okx-down)"}
-                      strokeWidth="1.5"
-                      fill="none"
-                    />
-                  </svg>
+                  <MiniSparkline address={token.address} isUp={token.priceChange24h >= 0} />
                 </div>
 
                 {/* Trade Button */}

@@ -31,7 +31,7 @@ export function HeatmapControls({
           <button
             key={option.key}
             onClick={() => onTimeRangeChange(option.key as TimeRange)}
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
               timeRange === option.key
                 ? "bg-blue-600 text-white"
                 : "text-gray-400 hover:text-white"

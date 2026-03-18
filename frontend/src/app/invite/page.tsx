@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAccount, useSignMessage } from "wagmi";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
@@ -37,6 +38,7 @@ export default function InvitePage() {
   const [error, setError] = useState<string | null>(null);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+  const router = useRouter();
 
   // C-2: 邀请链接指向 /invite/[code] (Next.js 路由真实存在)
   const inviteLink = info?.code
@@ -136,7 +138,6 @@ export default function InvitePage() {
         throw new Error(data.error || `Withdraw failed: ${res.status}`);
       }
       setWithdrawSuccess(true);
-      setTimeout(() => setWithdrawSuccess(false), 3000);
       // Refresh data
       fetchReferrerInfo(address);
     } catch (e) {
@@ -211,7 +212,7 @@ export default function InvitePage() {
           <div className="flex gap-5 px-16 py-6">
             {/* Card 1: Total Invited */}
             <div className="flex-1 bg-okx-bg-card border border-okx-border-primary rounded-xl p-6">
-              <div className="text-[13px] text-okx-text-secondary mb-2">{t("totalInvited")}</div>
+              <div className="text-sm text-okx-text-secondary mb-2">{t("totalInvited")}</div>
               <div className="flex items-baseline gap-1">
                 <span className="text-[32px] font-extrabold font-mono text-meme-lime">
                   {info?.totalInvites ?? 0}
@@ -222,37 +223,51 @@ export default function InvitePage() {
 
             {/* Card 2: Total Rebate */}
             <div className="flex-1 bg-okx-bg-card border border-okx-border-primary rounded-xl p-6">
-              <div className="text-[13px] text-okx-text-secondary mb-2">{t("totalRebate")}</div>
+              <div className="text-sm text-okx-text-secondary mb-2">{t("totalRebate")}</div>
               <div className="flex items-baseline gap-1">
                 <span className="text-[32px] font-extrabold font-mono text-okx-text-primary">
                   {info?.totalEarned ?? "0"}
                 </span>
-                <span className="text-sm text-okx-text-tertiary">ETH</span>
+                <span className="text-sm text-okx-text-tertiary">BNB</span>
               </div>
             </div>
 
             {/* Card 3: Pending Rebate + Withdraw */}
             <div className="flex-1 bg-okx-bg-card border border-okx-border-primary rounded-xl p-6">
-              <div className="text-[13px] text-okx-text-secondary mb-2">{t("monthlyRebate")}</div>
+              <div className="text-sm text-okx-text-secondary mb-2">{t("monthlyRebate")}</div>
               <div className="flex items-baseline gap-1">
                 <span className="text-[32px] font-extrabold font-mono text-okx-text-primary">
                   {info?.monthlyEarned ?? "0"}
                 </span>
-                <span className="text-sm text-okx-text-tertiary">ETH</span>
+                <span className="text-sm text-okx-text-tertiary">BNB</span>
               </div>
               {/* C-4: Withdraw button */}
-              <button
-                onClick={handleWithdraw}
-                disabled={withdrawing || !info?.monthlyEarned || info.monthlyEarned === "0" || info.monthlyEarned === "0.0000"}
-                className="mt-3 w-full px-3 py-2 bg-meme-lime text-black text-xs font-bold rounded-lg hover:brightness-110 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                {withdrawing ? t("withdrawing") || "Withdrawing..." : withdrawSuccess ? (t("withdrawSuccess") || "✓ Withdrawn!") : (t("withdraw") || "Withdraw")}
-              </button>
+              {withdrawSuccess ? (
+                <div className="mt-3 space-y-2">
+                  <div className="w-full px-3 py-2 bg-okx-up/20 border border-okx-up/40 text-okx-up text-xs font-bold rounded-lg text-center">
+                    {t("withdrawToAccountSuccess") || "佣金已转入交易账户"}
+                  </div>
+                  <button
+                    onClick={() => router.push("/deposit")}
+                    className="w-full px-3 py-2 bg-meme-lime text-black text-xs font-bold rounded-lg hover:brightness-110 transition-colors"
+                  >
+                    {t("goToWithdraw") || "去提现到钱包 →"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleWithdraw}
+                  disabled={withdrawing || !info?.monthlyEarned || info.monthlyEarned === "0" || info.monthlyEarned === "0.0000"}
+                  className="mt-3 w-full px-3 py-2 bg-meme-lime text-black text-xs font-bold rounded-lg hover:brightness-110 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  {withdrawing ? (t("withdrawing") || "Withdrawing...") : (t("withdrawToAccount") || "提取到交易账户")}
+                </button>
+              )}
             </div>
 
             {/* Card 4: Commission Rate */}
             <div className="flex-1 bg-okx-bg-card border border-okx-border-primary rounded-xl p-6">
-              <div className="text-[13px] text-okx-text-secondary mb-2">{t("currentLevel")}</div>
+              <div className="text-sm text-okx-text-secondary mb-2">{t("currentLevel")}</div>
               <div className="flex items-baseline gap-1">
                 <span className="text-[32px] font-extrabold font-mono text-meme-lime">
                   {COMMISSION_RATES.level1}%
@@ -277,7 +292,7 @@ export default function InvitePage() {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-okx-text-primary">{t("level1Label")}</span>
-                      <span className="text-[9px] font-bold text-black bg-meme-lime px-1.5 py-0.5 rounded">
+                      <span className="text-xs font-bold text-black bg-meme-lime px-1.5 py-0.5 rounded">
                         L1
                       </span>
                     </div>
@@ -293,7 +308,7 @@ export default function InvitePage() {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-okx-text-primary">{t("level2Label")}</span>
-                      <span className="text-[9px] font-bold text-meme-lime border border-meme-lime px-1.5 py-0.5 rounded">
+                      <span className="text-xs font-bold text-meme-lime border border-meme-lime px-1.5 py-0.5 rounded">
                         L2
                       </span>
                     </div>
@@ -334,7 +349,7 @@ export default function InvitePage() {
                   >
                     <span className="flex-1 text-xs font-mono text-okx-text-primary">{inv.address}</span>
                     <span className="flex-1 text-xs font-mono text-okx-text-secondary text-center">{inv.joinedDate}</span>
-                    <span className="flex-1 text-xs font-mono text-okx-text-primary text-center">{inv.volume} ETH</span>
+                    <span className="flex-1 text-xs font-mono text-okx-text-primary text-center">{inv.volume} BNB</span>
                     <span className="flex-1 text-xs font-mono text-meme-lime text-right">+{inv.rebate}</span>
                   </div>
                 ))

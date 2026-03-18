@@ -85,7 +85,7 @@ export function TradeHistoryTable({ token, maxRows = 10, className = "" }: Trade
                   <td className="py-3 text-right">
                     {trade.txHash ? (
                       <a
-                        href={`https://sepolia.basescan.org/tx/${trade.txHash}`}
+                        href={`https://testnet.bscscan.com/tx/${trade.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-okx-accent hover:underline font-mono"

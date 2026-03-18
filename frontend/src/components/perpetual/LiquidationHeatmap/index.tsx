@@ -102,14 +102,14 @@ export function LiquidationHeatmap({ token }: Props) {
       <div className="mt-2 pt-2 border-t border-gray-700">
         {/* 颜色图例 */}
         <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="text-[10px] text-gray-400">{t("low") || "Low"}</span>
+          <span className="text-xs text-gray-400">{t("low") || "Low"}</span>
           <div
             className="w-24 h-2 rounded"
             style={{
               background: "linear-gradient(to right, #581c87, #5b21b6, #2563eb, #10b981, #facc15, #fde047)",
             }}
           />
-          <span className="text-[10px] text-gray-400">{t("high") || "High"}</span>
+          <span className="text-xs text-gray-400">{t("high") || "High"}</span>
         </div>
 
         {/* 多空统计 - 紧凑版 */}
@@ -120,14 +120,14 @@ export function LiquidationHeatmap({ token }: Props) {
               <span className="text-red-400 font-medium">
                 {formatUsdAmount(data.longTotal)}
               </span>
-              <span className="text-gray-500 text-[10px]">({data.longAccountTotal})</span>
+              <span className="text-gray-500 text-xs">({data.longAccountTotal})</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 bg-green-500 rounded-full" />
               <span className="text-green-400 font-medium">
                 {formatUsdAmount(data.shortTotal)}
               </span>
-              <span className="text-gray-500 text-[10px]">({data.shortAccountTotal})</span>
+              <span className="text-gray-500 text-xs">({data.shortAccountTotal})</span>
             </div>
           </div>
         )}

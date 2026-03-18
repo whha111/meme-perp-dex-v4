@@ -373,7 +373,7 @@ export default function WalletPage() {
                   <div className="mt-4 p-3 bg-okx-up/10 border border-okx-up/30 rounded-xl">
                     <p className="text-okx-text-secondary text-sm mb-1">{t("transactionSent")}</p>
                     <a
-                      href={`https://sepolia.basescan.org/tx/${txHash}`}
+                      href={`https://testnet.bscscan.com/tx/${txHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-okx-up text-sm font-mono hover:underline break-all"

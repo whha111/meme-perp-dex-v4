@@ -146,7 +146,7 @@ export function RewardHistory({ address }: RewardHistoryProps) {
           {reward.txHash && (
             <div className="mt-2 pt-2 border-t border-okx-border-primary">
               <a
-                href={`https://sepolia.basescan.org/tx/${reward.txHash}`}
+                href={`https://testnet.bscscan.com/tx/${reward.txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-okx-accent hover:underline"

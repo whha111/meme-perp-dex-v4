@@ -1,56 +1,22 @@
 {
-  "network": "bsc-testnet",
   "chainId": 97,
-  "deployedAt": "2026-03-03",
+  "chainName": "BSC Testnet",
+  "deployedAt": "2026-03-18T00:00:00Z",
+  "deployer": "0xAecb229194314999E396468eb091b42E44Bc3c8c",
   "contracts": {
-    "TokenFactory": {
-      "address": "0x22276744bAF24eD503dB50Cc999a9c5AD62728cb",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "Settlement": {
-      "address": "0x63df8d6acF3f99Ae59Bee6184A5EB6beA8663eb7",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "SettlementV2": {
-      "address": "0x7fF9d60aE49F14bB604FeF1961910D7931067873",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "PriceFeed": {
-      "address": "0xe2b22673fFBeB7A2a4617125E885C12EC072ee48",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "PositionManager": {
-      "address": "0x04C515CcFac80BFFF27E0c5A9113e515171057b6",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "Vault": {
-      "address": "0xACE7014F60eF9c367E7fA5Dd80601A9945E6F4d1",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "PerpVault": {
-      "address": "0x7F98ed779c3352f39b041C57d5B2C73F84dcAA75",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "InsuranceFund": {
-      "address": "0x162CEbAe2013545D191360d13ceA5083E6fcE1a7",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "ContractRegistry": {
-      "address": "0x6956c982aec9Ad08040b91417a313003879d0f48",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "FundingRate": {
-      "address": "0x0a513bf3DE079Bf2439A5884583712bD014487aa",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "Liquidation": {
-      "address": "0x322AeeD67C12c10684B134e1727866425dc75F1c",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    },
-    "RiskManager": {
-      "address": "0xd4fbB0f140d8909e73e3D91C897EBe66f01B15F9",
-      "deployer": "0x5AF11d4784c3739cf2FD51Fdc272ae4957ADf7fE"
-    }
-  },
-  "explorer": "https://testnet.bscscan.com/address/0x22276744bAF24eD503dB50Cc999a9c5AD62728cb"
+    "TokenFactory": "0xd75be83c73fb331cc566e3d58563f74058e4ca0b",
+    "Settlement": "0xe866e042dc6ec594c7534974cff0f9eaeebc2a1a",
+    "SettlementV2": "0xac85c7ed31fa521bfdb7ae63d6e9385e4af79f1b",
+    "PriceFeed": "0x5c727ea9ac9be9036e538064e7db245cc09545fd",
+    "PositionManager": "0x5176a9f4093dede515c3a524f218cb4324500d22",
+    "Vault": "0xf00a94a1ae8a276c3aed24f5b542f4ec5e1f373c",
+    "PerpVault": "0xeafa2fad2bb336da8cd8309669b0c16f597decdb",
+    "RiskManager": "0x6338608189d8153608d1d014e928490a33cfabf4",
+    "FundingRate": "0x05a2bb4ad567f2b078a7028d4ca47998fb7f88d6",
+    "Liquidation": "0x6c9a628219501c3271ea5b95b5aab8d1b593383e",
+    "InsuranceFund": "0x6140b2f99a95b4e056d0bc6360c17232f1a8ab91",
+    "ContractRegistry": "0x4bd177026918c774feaad56aa6ce3d69e0d67021",
+    "WBNB": "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
+    "PancakeRouterV2": "0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
+  }
 }

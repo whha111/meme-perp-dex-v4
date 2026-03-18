@@ -132,12 +132,12 @@ export function LendingActionPanel({
       {/* ── Panel Header ── */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-okx-border-primary">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-okx-bg-hover to-okx-border-primary flex items-center justify-center text-[10px] font-bold">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-okx-bg-hover to-okx-border-primary flex items-center justify-center text-xs font-bold">
             {pool.tokenSymbol.slice(0, 2).toUpperCase()}
           </div>
           <div>
             <span className="font-bold text-sm">{pool.tokenSymbol}</span>
-            <span className="text-okx-text-tertiary text-[11px] ml-2">{pool.tokenName}</span>
+            <span className="text-okx-text-tertiary text-xs ml-2">{pool.tokenName}</span>
           </div>
         </div>
         <button
@@ -155,16 +155,16 @@ export function LendingActionPanel({
         <div className="lg:col-span-5 p-5 space-y-4">
           {/* Market Overview */}
           <div>
-            <h3 className="text-[11px] text-okx-text-tertiary font-medium uppercase tracking-wider mb-3">
+            <h3 className="text-xs text-okx-text-tertiary font-medium uppercase tracking-wider mb-3">
               {t("marketOverview")}
             </h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-okx-bg-primary rounded-lg p-3">
-                <div className="text-[10px] text-okx-text-tertiary mb-1">{t("supplyAPY")}</div>
+                <div className="text-xs text-okx-text-tertiary mb-1">{t("supplyAPY")}</div>
                 <div className="text-lg font-bold text-okx-up">{pool.supplyAPY}%</div>
               </div>
               <div className="bg-okx-bg-primary rounded-lg p-3">
-                <div className="text-[10px] text-okx-text-tertiary mb-1">{t("borrowAPY")}</div>
+                <div className="text-xs text-okx-text-tertiary mb-1">{t("borrowAPY")}</div>
                 <div className="text-lg font-bold">{pool.borrowAPY}%</div>
               </div>
             </div>
@@ -172,22 +172,22 @@ export function LendingActionPanel({
 
           {/* Pool Stats */}
           <div className="space-y-2.5">
-            <div className="flex justify-between items-center text-[12px]">
+            <div className="flex justify-between items-center text-xs">
               <span className="text-okx-text-tertiary">{t("tvl")}</span>
               <span className="font-medium">{pool.totalDepositsFormatted} {pool.tokenSymbol}</span>
             </div>
-            <div className="flex justify-between items-center text-[12px]">
+            <div className="flex justify-between items-center text-xs">
               <span className="text-okx-text-tertiary">{t("colTotalBorrowed")}</span>
               <span className="font-medium">{pool.totalBorrowedFormatted} {pool.tokenSymbol}</span>
             </div>
-            <div className="flex justify-between items-center text-[12px]">
+            <div className="flex justify-between items-center text-xs">
               <span className="text-okx-text-tertiary">{t("availableLiquidity")}</span>
               <span className="font-medium">{pool.availableLiquidityFormatted} {pool.tokenSymbol}</span>
             </div>
 
             {/* Utilization Bar — prominent */}
             <div>
-              <div className="flex justify-between items-center text-[12px] mb-1.5">
+              <div className="flex justify-between items-center text-xs mb-1.5">
                 <span className="text-okx-text-tertiary">{t("utilization")}</span>
                 <span className={`font-bold ${
                   utilNum >= 90 ? "text-okx-down" : utilNum >= 80 ? "text-yellow-500" : "text-okx-up"
@@ -205,7 +205,7 @@ export function LendingActionPanel({
               </div>
               {/* Optimal marker */}
               <div className="relative mt-0.5">
-                <div className="absolute left-[80%] -translate-x-1/2 text-[9px] text-okx-text-tertiary">
+                <div className="absolute left-[80%] -translate-x-1/2 text-xs text-okx-text-tertiary">
                   80%
                 </div>
               </div>
@@ -214,34 +214,34 @@ export function LendingActionPanel({
 
           {/* Interest Rate Model */}
           <details className="group">
-            <summary className="text-[11px] text-okx-text-tertiary cursor-pointer hover:text-okx-text-secondary flex items-center gap-1">
+            <summary className="text-xs text-okx-text-tertiary cursor-pointer hover:text-okx-text-secondary flex items-center gap-1">
               <svg className="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
               {t("rateModel")}
             </summary>
             <div className="mt-2 bg-okx-bg-primary rounded-lg p-3 space-y-1.5">
-              <div className="flex justify-between text-[10px]">
+              <div className="flex justify-between text-xs">
                 <span className="text-okx-text-tertiary">{t("baseRate")}</span>
                 <span>2%</span>
               </div>
-              <div className="flex justify-between text-[10px]">
+              <div className="flex justify-between text-xs">
                 <span className="text-okx-text-tertiary">{t("optimalUtil")}</span>
                 <span>80%</span>
               </div>
-              <div className="flex justify-between text-[10px]">
+              <div className="flex justify-between text-xs">
                 <span className="text-okx-text-tertiary">{t("slopeBelow")}</span>
                 <span>4%</span>
               </div>
-              <div className="flex justify-between text-[10px]">
+              <div className="flex justify-between text-xs">
                 <span className="text-okx-text-tertiary">{t("slopeAbove")}</span>
                 <span>75%</span>
               </div>
-              <div className="flex justify-between text-[10px]">
+              <div className="flex justify-between text-xs">
                 <span className="text-okx-text-tertiary">{t("maxUtil")}</span>
                 <span>90%</span>
               </div>
-              <div className="flex justify-between text-[10px]">
+              <div className="flex justify-between text-xs">
                 <span className="text-okx-text-tertiary">{t("reserveFactor")}</span>
                 <span>10%</span>
               </div>
@@ -251,26 +251,26 @@ export function LendingActionPanel({
 
         {/* ── Middle: Your Position (3 cols) ── */}
         <div className="lg:col-span-3 p-5 space-y-4">
-          <h3 className="text-[11px] text-okx-text-tertiary font-medium uppercase tracking-wider mb-3">
+          <h3 className="text-xs text-okx-text-tertiary font-medium uppercase tracking-wider mb-3">
             {t("yourPosition")}
           </h3>
 
           {userPosition ? (
             <>
               <div className="bg-okx-bg-primary rounded-lg p-4 text-center">
-                <div className="text-[10px] text-okx-text-tertiary mb-1">{t("currentDeposit")}</div>
+                <div className="text-xs text-okx-text-tertiary mb-1">{t("currentDeposit")}</div>
                 <div className="text-xl font-bold">{userPosition.depositAmountFormatted}</div>
-                <div className="text-[11px] text-okx-text-secondary">{pool.tokenSymbol}</div>
+                <div className="text-xs text-okx-text-secondary">{pool.tokenSymbol}</div>
               </div>
 
               {/* Pending Interest — claimable */}
               <div className="bg-okx-bg-primary rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <div className="text-[10px] text-okx-text-tertiary">{t("claimableInterest")}</div>
+                    <div className="text-xs text-okx-text-tertiary">{t("claimableInterest")}</div>
                     <div className="text-lg font-bold text-okx-up">
                       +{userPosition.pendingInterestFormatted}
-                      <span className="text-[11px] text-okx-text-secondary ml-1">{pool.tokenSymbol}</span>
+                      <span className="text-xs text-okx-text-secondary ml-1">{pool.tokenSymbol}</span>
                     </div>
                   </div>
                 </div>
@@ -281,7 +281,7 @@ export function LendingActionPanel({
                       ? false
                       : userPosition.pendingInterest === 0n || isClaiming
                   }
-                  className={`w-full py-2 rounded-lg text-[11px] font-bold transition-colors ${
+                  className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
                     userPosition.pendingInterest > 0n && !isClaiming
                       ? "bg-okx-up text-black hover:opacity-90"
                       : "bg-okx-bg-hover text-okx-text-tertiary cursor-not-allowed"
@@ -293,11 +293,11 @@ export function LendingActionPanel({
 
               {/* Position stats */}
               <div className="space-y-2">
-                <div className="flex justify-between text-[11px]">
+                <div className="flex justify-between text-xs">
                   <span className="text-okx-text-tertiary">{t("supplyAPY")}</span>
                   <span className="text-okx-up font-medium">{pool.supplyAPY}%</span>
                 </div>
-                <div className="flex justify-between text-[11px]">
+                <div className="flex justify-between text-xs">
                   <span className="text-okx-text-tertiary">{t("walletBalance")}</span>
                   <span className="font-medium">{formatUnits(tokenBalance, 18).slice(0, 10)} {pool.tokenSymbol}</span>
                 </div>
@@ -310,8 +310,8 @@ export function LendingActionPanel({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </div>
-              <p className="text-okx-text-secondary text-[12px] mb-1">{t("noPosition")}</p>
-              <p className="text-okx-text-tertiary text-[10px]">{t("noPositionDesc")}</p>
+              <p className="text-okx-text-secondary text-xs mb-1">{t("noPosition")}</p>
+              <p className="text-okx-text-tertiary text-xs">{t("noPositionDesc")}</p>
             </div>
           )}
         </div>
@@ -324,7 +324,7 @@ export function LendingActionPanel({
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-2 rounded-md text-[12px] font-medium transition-all ${
+                className={`flex-1 py-2 rounded-md text-xs font-medium transition-all ${
                   activeTab === tab
                     ? "bg-okx-bg-card text-okx-text-primary shadow-sm"
                     : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -341,8 +341,8 @@ export function LendingActionPanel({
               {/* Amount Input */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-[11px] text-okx-text-tertiary">{t("depositAmount")}</span>
-                  <span className="text-[10px] text-okx-text-tertiary">
+                  <span className="text-xs text-okx-text-tertiary">{t("depositAmount")}</span>
+                  <span className="text-xs text-okx-text-tertiary">
                     {t("walletBalance")}: {parseFloat(formatUnits(tokenBalance, 18)).toFixed(4)}
                   </span>
                 </div>
@@ -355,11 +355,11 @@ export function LendingActionPanel({
                       placeholder="0.00"
                       className="bg-transparent text-[16px] font-bold outline-none w-full text-okx-text-primary placeholder:text-okx-text-tertiary"
                     />
-                    <span className="text-[12px] text-okx-text-secondary font-medium shrink-0">{pool.tokenSymbol}</span>
+                    <span className="text-xs text-okx-text-secondary font-medium shrink-0">{pool.tokenSymbol}</span>
                   </div>
                 </div>
                 {depositError && (
-                  <p className="text-[10px] text-okx-down mt-1">{depositError}</p>
+                  <p className="text-xs text-okx-down mt-1">{depositError}</p>
                 )}
               </div>
 
@@ -369,7 +369,7 @@ export function LendingActionPanel({
                   <button
                     key={pct}
                     onClick={() => setDepositPercent(pct)}
-                    className="flex-1 py-1.5 text-[10px] font-medium bg-okx-bg-primary border border-okx-border-primary rounded-lg hover:border-okx-border-secondary transition-colors text-okx-text-secondary"
+                    className="flex-1 py-1.5 text-xs font-medium bg-okx-bg-primary border border-okx-border-primary rounded-lg hover:border-okx-border-secondary transition-colors text-okx-text-secondary"
                   >
                     {pct === 100 ? "MAX" : `${pct}%`}
                   </button>
@@ -379,7 +379,7 @@ export function LendingActionPanel({
               {/* Estimated return */}
               {depositAmount > 0n && !depositError && (
                 <div className="bg-okx-bg-primary rounded-lg p-2.5">
-                  <div className="flex justify-between text-[10px]">
+                  <div className="flex justify-between text-xs">
                     <span className="text-okx-text-tertiary">{t("estAnnualReturn")}</span>
                     <span className="text-okx-up font-medium">
                       +{(parseFloat(formatUnits(depositAmount, 18)) * parseFloat(pool.supplyAPY) / 100).toFixed(4)} {pool.tokenSymbol}
@@ -394,7 +394,7 @@ export function LendingActionPanel({
                 disabled={
                   !isConnected ? false : depositAmount === 0n || !!depositError || isDepositing || isApproving
                 }
-                className={`w-full py-3 rounded-lg text-[13px] font-bold transition-all ${
+                className={`w-full py-3 rounded-lg text-sm font-bold transition-all ${
                   !isConnected || (depositAmount > 0n && !depositError && !isDepositing && !isApproving)
                     ? "bg-okx-accent text-black hover:opacity-90"
                     : "bg-okx-bg-hover text-okx-text-tertiary cursor-not-allowed"
@@ -418,7 +418,7 @@ export function LendingActionPanel({
             <div className="space-y-3">
               {/* Current position reminder */}
               {userPosition && (
-                <div className="bg-okx-bg-primary rounded-lg p-2.5 flex justify-between text-[11px]">
+                <div className="bg-okx-bg-primary rounded-lg p-2.5 flex justify-between text-xs">
                   <span className="text-okx-text-tertiary">{t("currentDeposit")}</span>
                   <span className="font-medium">{userPosition.depositAmountFormatted} {pool.tokenSymbol}</span>
                 </div>
@@ -427,7 +427,7 @@ export function LendingActionPanel({
               {/* Amount Input */}
               <div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-[11px] text-okx-text-tertiary">{t("withdrawAmount")}</span>
+                  <span className="text-xs text-okx-text-tertiary">{t("withdrawAmount")}</span>
                 </div>
                 <div className="bg-okx-bg-primary border border-okx-border-primary rounded-lg p-3 focus-within:border-okx-accent transition-colors">
                   <div className="flex items-center gap-2">
@@ -438,11 +438,11 @@ export function LendingActionPanel({
                       placeholder="0.00"
                       className="bg-transparent text-[16px] font-bold outline-none w-full text-okx-text-primary placeholder:text-okx-text-tertiary"
                     />
-                    <span className="text-[12px] text-okx-text-secondary font-medium shrink-0">{pool.tokenSymbol}</span>
+                    <span className="text-xs text-okx-text-secondary font-medium shrink-0">{pool.tokenSymbol}</span>
                   </div>
                 </div>
                 {withdrawError && (
-                  <p className="text-[10px] text-okx-down mt-1">{withdrawError}</p>
+                  <p className="text-xs text-okx-down mt-1">{withdrawError}</p>
                 )}
               </div>
 
@@ -452,7 +452,7 @@ export function LendingActionPanel({
                   <button
                     key={pct}
                     onClick={() => setWithdrawPercent(pct)}
-                    className="flex-1 py-1.5 text-[10px] font-medium bg-okx-bg-primary border border-okx-border-primary rounded-lg hover:border-okx-border-secondary transition-colors text-okx-text-secondary"
+                    className="flex-1 py-1.5 text-xs font-medium bg-okx-bg-primary border border-okx-border-primary rounded-lg hover:border-okx-border-secondary transition-colors text-okx-text-secondary"
                   >
                     {pct === 100 ? "MAX" : `${pct}%`}
                   </button>
@@ -465,7 +465,7 @@ export function LendingActionPanel({
                 disabled={
                   !isConnected ? false : withdrawShares === 0n || !!withdrawError || isWithdrawing
                 }
-                className={`w-full py-3 rounded-lg text-[13px] font-bold transition-all ${
+                className={`w-full py-3 rounded-lg text-sm font-bold transition-all ${
                   !isConnected || (withdrawShares > 0n && !withdrawError && !isWithdrawing)
                     ? "bg-okx-down text-white hover:opacity-90"
                     : "bg-okx-bg-hover text-okx-text-tertiary cursor-not-allowed"

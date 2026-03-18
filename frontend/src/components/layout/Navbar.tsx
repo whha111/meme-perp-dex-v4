@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: '/perp', key: 'perpetual' },
   { href: '/create', key: 'launch' },
   { href: '/account', key: 'assets' },
+  { href: '/earnings', key: 'invite' },
   { href: '/leaderboard', key: 'leaderboard' },
 ] as const;
 
@@ -93,7 +94,7 @@ export function Navbar() {
             <span className="text-meme-lime text-lg">✦</span>
             <span className="tracking-tight">MEMEPERP</span>
           </Link>
-          <div className="flex items-center gap-6 text-[13px] font-mono">
+          <div className="flex items-center gap-6 text-sm font-mono">
             {NAV_ITEMS.map(({ href, key }) => {
               const isActive = pathname === href || pathname.startsWith(href + '/');
               return (
@@ -131,7 +132,7 @@ export function Navbar() {
                 if (e.key === 'Escape') setSearchFocused(false);
               }}
               placeholder={t('searchPlaceholder')}
-              className="bg-okx-bg-hover border border-okx-border-primary rounded-full px-4 py-1.5 text-[12px] text-okx-text-primary w-64 focus:outline-none focus:border-okx-border-secondary placeholder:text-okx-text-tertiary"
+              className="bg-okx-bg-hover border border-okx-border-primary rounded-full px-4 py-1.5 text-xs text-okx-text-primary w-64 focus:outline-none focus:border-okx-border-secondary placeholder:text-okx-text-tertiary"
             />
             {searchFocused && searchQuery.trim() && (
               <div className="absolute top-full mt-1 left-0 w-80 bg-okx-bg-card border border-okx-border-primary rounded-lg shadow-xl z-50 max-h-[320px] overflow-y-auto">
@@ -146,14 +147,14 @@ export function Navbar() {
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-okx-bg-hover text-left transition-colors"
                     >
-                      <div className="w-7 h-7 rounded-full bg-meme-lime/20 flex items-center justify-center text-meme-lime text-[11px] font-bold flex-shrink-0">
+                      <div className="w-7 h-7 rounded-full bg-meme-lime/20 flex items-center justify-center text-meme-lime text-xs font-bold flex-shrink-0">
                         {token.symbol?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div className="flex flex-col gap-px flex-1 min-w-0">
-                        <span className="text-[13px] font-semibold text-okx-text-primary">{token.symbol}</span>
-                        <span className="text-[10px] text-okx-text-tertiary truncate">{token.name}</span>
+                        <span className="text-sm font-semibold text-okx-text-primary">{token.symbol}</span>
+                        <span className="text-xs text-okx-text-tertiary truncate">{token.name}</span>
                       </div>
-                      <span className="font-mono text-[11px] text-okx-text-secondary">
+                      <span className="font-mono text-xs text-okx-text-secondary">
                         {Number(token.price || '0') > 0
                           ? `${(Number(token.price) / 1e18).toFixed(8)}`
                           : '--'}
@@ -161,7 +162,7 @@ export function Navbar() {
                     </button>
                   ))
                 ) : (
-                  <div className="px-4 py-6 text-center text-okx-text-tertiary text-[12px]">
+                  <div className="px-4 py-6 text-center text-okx-text-tertiary text-xs">
                     {t('noResults')}
                   </div>
                 )}
@@ -189,14 +190,14 @@ export function Navbar() {
 
           {/* 钱包按钮 */}
           {!mounted ? (
-            <div className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-[13px] font-bold opacity-50">
+            <div className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-sm font-bold opacity-50">
               {tWallet('connect')}
             </div>
           ) : !isConnected || !address ? (
             <button
               onClick={openConnectModal}
               data-testid="connect-wallet-btn"
-              className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-[13px] font-bold hover:opacity-90 transition-opacity"
+              className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity"
             >
               {tWallet('connect')}
             </button>
@@ -211,7 +212,7 @@ export function Navbar() {
                       return (
                         <button
                           onClick={openChainModal}
-                          className="bg-okx-down text-white px-4 py-1.5 rounded-full text-[13px] font-bold hover:opacity-90 transition-opacity"
+                          className="bg-okx-down text-white px-4 py-1.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity"
                         >
                           {tWallet('switchNetwork')}
                         </button>
@@ -229,12 +230,12 @@ export function Navbar() {
                         <button
                           onClick={openChainModal}
                           data-testid="network-badge"
-                          className="flex items-center gap-2 bg-okx-bg-hover border border-okx-border-primary text-okx-text-primary px-3 py-1.5 rounded-full text-[12px] hover:border-okx-border-secondary transition-colors"
+                          className="flex items-center gap-2 bg-okx-bg-hover border border-okx-border-primary text-okx-text-primary px-3 py-1.5 rounded-full text-xs hover:border-okx-border-secondary transition-colors"
                         >
                           {chain.name && (
                             <>
                               <span className="font-bold hidden sm:inline">{chain.name}</span>
-                              <span className="text-[10px] text-okx-text-tertiary">▼</span>
+                              <span className="text-xs text-okx-text-tertiary">▼</span>
                             </>
                           )}
                         </button>
@@ -247,17 +248,17 @@ export function Navbar() {
                           >
                             {formattedBalance && (
                               <span
-                                className="px-3 py-1.5 text-okx-text-primary text-[12px] font-bold border-r border-okx-border-primary"
+                                className="px-3 py-1.5 text-okx-text-primary text-xs font-bold border-r border-okx-border-primary"
                                 data-testid="wallet-balance"
                               >
                                 {formattedBalance}
                               </span>
                             )}
                             <div className="px-3 py-1.5 flex items-center gap-2">
-                              <span className="text-okx-text-primary text-[12px] font-medium">
+                              <span className="text-okx-text-primary text-xs font-medium">
                                 {formattedAddress}
                               </span>
-                              <span className="text-[10px] text-okx-text-tertiary">▼</span>
+                              <span className="text-xs text-okx-text-tertiary">▼</span>
                             </div>
                           </button>
 
@@ -337,7 +338,7 @@ export function Navbar() {
                   key={href}
                   href={href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`py-3 px-3 rounded-lg text-[14px] font-mono transition-colors ${
+                  className={`py-3 px-3 rounded-lg text-sm font-mono transition-colors ${
                     isActive
                       ? 'text-meme-lime font-medium bg-meme-lime/5'
                       : 'text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-hover'
@@ -351,7 +352,7 @@ export function Navbar() {
             <Link
               href="/settings"
               onClick={() => setMobileMenuOpen(false)}
-              className={`py-3 px-3 rounded-lg text-[14px] font-mono transition-colors ${
+              className={`py-3 px-3 rounded-lg text-sm font-mono transition-colors ${
                 pathname === '/settings'
                   ? 'text-meme-lime font-medium bg-meme-lime/5'
                   : 'text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-hover'

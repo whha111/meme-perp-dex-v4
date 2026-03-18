@@ -67,20 +67,20 @@ export function TokenCard({
         {/* 名称和基本信息 */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="text-okx-text-primary font-bold text-[13px] truncate">{name}</span>
-            <span className="text-okx-text-tertiary text-[11px]">{ticker}</span>
+            <span className="text-okx-text-primary font-bold text-sm truncate">{name}</span>
+            <span className="text-okx-text-tertiary text-xs">{ticker}</span>
           </div>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-okx-text-tertiary text-[10px]">{timeAgo}</span>
+            <span className="text-okx-text-tertiary text-xs">{timeAgo}</span>
             <span className="text-okx-border-secondary">|</span>
-            <span className="text-okx-text-tertiary text-[10px] font-mono">{address}</span>
+            <span className="text-okx-text-tertiary text-xs font-mono">{address}</span>
           </div>
         </div>
 
         {/* 市值和涨跌 */}
         <div className="text-right flex-shrink-0">
-          <div className="text-okx-text-primary font-bold text-[13px]">{marketCap}</div>
-          <div className={`text-[11px] ${changeColor}`}>
+          <div className="text-okx-text-primary font-bold text-sm">{marketCap}</div>
+          <div className={`text-xs ${changeColor}`}>
             {changeSign}{priceChange24h.toFixed(2)}%
           </div>
         </div>
@@ -88,7 +88,7 @@ export function TokenCard({
 
       {/* 底部信息栏 */}
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-okx-border-primary">
-        <div className="flex items-center gap-3 text-[10px] text-okx-text-tertiary">
+        <div className="flex items-center gap-3 text-xs text-okx-text-tertiary">
           <span>{t('token.volume')} <span className="text-okx-text-primary">{volume}</span></span>
           <span>{t('token.traders')} <span className="text-okx-text-primary">{traders >= 1000 ? (traders/1000).toFixed(1)+'K' : traders}</span></span>
         </div>
@@ -101,7 +101,7 @@ export function TokenCard({
               style={{ width: `${Math.min(progress, 100)}%` }}
             />
           </div>
-          <span className="text-[10px] text-meme-lime font-bold">{progress.toFixed(0)}%</span>
+          <span className="text-xs text-meme-lime font-bold">{progress.toFixed(0)}%</span>
         </div>
       </div>
     </div>

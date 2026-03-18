@@ -100,7 +100,7 @@ function RiskAlerts({ alerts, onClear, maxDisplay = 5 }: RiskAlertsProps) {
             {getAlertIcon(alert.type)}
             <div className="flex-1 min-w-0">
               <p className="truncate">{alert.message}</p>
-              <p className="text-[10px] opacity-70 mt-0.5">
+              <p className="text-xs opacity-70 mt-0.5">
                 {new Date(alert.timestamp).toLocaleTimeString()}
               </p>
             </div>
@@ -139,7 +139,7 @@ function ADLIndicator({ ranking, score }: ADLIndicatorProps) {
           }`}
         />
       ))}
-      <span className="text-[10px] text-okx-text-tertiary ml-1">
+      <span className="text-xs text-okx-text-tertiary ml-1">
         {score.toFixed(2)}
       </span>
     </div>
@@ -196,7 +196,7 @@ function InsuranceFundDisplay({ balance, totalContributions, totalPayouts }: Ins
 
         {/* Usage Bar */}
         <div className="mt-2">
-          <div className="flex justify-between text-[10px] text-okx-text-tertiary mb-1">
+          <div className="flex justify-between text-xs text-okx-text-tertiary mb-1">
             <span>{t("usage")}</span>
             <span>{usagePercent.toFixed(1)}%</span>
           </div>
@@ -261,7 +261,7 @@ function PositionRiskCard({ position, currentPrice }: PositionRiskCardProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
             position.isLong ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"
           }`}>
             {position.isLong ? t("long") : t("short")}
@@ -270,7 +270,7 @@ function PositionRiskCard({ position, currentPrice }: PositionRiskCardProps) {
             {position.leverage}x
           </span>
         </div>
-        <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${getRiskColor(position.riskLevel)}`}>
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getRiskColor(position.riskLevel)}`}>
           {t(position.riskLevel)}
         </span>
       </div>
@@ -366,7 +366,7 @@ export function RiskPanel({ trader, token, compact = false, className = "" }: Ri
                 <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
               </svg>
             </button>
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
               {alerts.length > 9 ? "9+" : alerts.length}
             </span>
           </div>
@@ -374,7 +374,7 @@ export function RiskPanel({ trader, token, compact = false, className = "" }: Ri
 
         {/* Overall Risk Indicator */}
         {positionRisks.length > 0 && (
-          <div className={`px-2 py-1 rounded text-[10px] font-medium ${
+          <div className={`px-2 py-1 rounded text-xs font-medium ${
             overallRisk === "critical" ? "bg-red-900/50 text-red-400" :
             overallRisk === "high" ? "bg-orange-900/50 text-orange-400" :
             overallRisk === "medium" ? "bg-yellow-900/50 text-yellow-400" :
@@ -408,7 +408,7 @@ export function RiskPanel({ trader, token, compact = false, className = "" }: Ri
           {t("riskControl")}
         </h3>
         {lastUpdated && (
-          <span className="text-[10px] text-okx-text-tertiary">
+          <span className="text-xs text-okx-text-tertiary">
             {t("updated")}: {new Date(lastUpdated).toLocaleTimeString()}
           </span>
         )}

@@ -153,9 +153,9 @@ export function usePoolState(tokenAddress: string | undefined): PoolData {
     contracts: contractConfigs.length > 0 ? contractConfigs : undefined,
     query: {
       enabled: isEnabled && contractConfigs.length > 0,
-      staleTime: 10000, // Cache for 10 seconds
+      staleTime: 1000, // Cache for 1 second — near-instant refresh after trades
       gcTime: 30000, // Keep in cache for 30 seconds
-      refetchInterval: 15000, // Auto-refresh every 15 seconds
+      refetchInterval: 3000, // Auto-refresh every 3 seconds
       refetchOnWindowFocus: true,
       refetchOnMount: true,
       refetchOnReconnect: true,

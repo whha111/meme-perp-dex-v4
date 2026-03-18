@@ -95,7 +95,7 @@ export function MyHoldings({
   if (!isConnected) {
     return (
       <div className={`flex flex-col items-center justify-center py-10 ${className}`}>
-        <div className="text-okx-text-tertiary text-[13px] mb-3">{t("trading.connectWalletToView")}</div>
+        <div className="text-okx-text-tertiary text-sm mb-3">{t("trading.connectWalletToView")}</div>
       </div>
     );
   }
@@ -128,14 +128,14 @@ export function MyHoldings({
       <div className="px-4 py-3 border-b border-okx-border-primary">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] text-okx-text-tertiary">{t("trading.myBalance")}</div>
+            <div className="text-xs text-okx-text-tertiary">{t("trading.myBalance")}</div>
             <div className="text-[18px] font-bold text-okx-text-primary mt-0.5">
               {hasBalance ? fmtAmount(balNum) : "0"}{" "}
-              <span className="text-[12px] text-okx-text-secondary">{displaySymbol}</span>
+              <span className="text-xs text-okx-text-secondary">{displaySymbol}</span>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[11px] text-okx-text-tertiary">{t("trading.totalValue")}</div>
+            <div className="text-xs text-okx-text-tertiary">{t("trading.totalValue")}</div>
             <div className="text-[16px] font-bold text-okx-text-primary mt-0.5">
               {fmtUsdPrice(valueUsd)}
             </div>
@@ -152,10 +152,10 @@ export function MyHoldings({
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-8 px-4">
-          <div className="text-okx-text-tertiary text-[12px] text-center">
+          <div className="text-okx-text-tertiary text-xs text-center">
             {t("holders.noHolders")}
           </div>
-          <div className="text-okx-text-secondary text-[11px] mt-2 text-center">
+          <div className="text-okx-text-secondary text-xs mt-2 text-center">
             {t("common.price")}: {fmtUsdPrice(priceUsd)}
           </div>
         </div>
@@ -166,11 +166,11 @@ export function MyHoldings({
 
 function InfoRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="flex items-center justify-between text-[12px]">
+    <div className="flex items-center justify-between text-xs">
       <span className="text-okx-text-tertiary">{label}</span>
       <div className="text-right">
         <span className="text-okx-text-primary">{value}</span>
-        {sub && <span className="text-okx-text-tertiary text-[10px] ml-1.5">{sub}</span>}
+        {sub && <span className="text-okx-text-tertiary text-xs ml-1.5">{sub}</span>}
       </div>
     </div>
   );

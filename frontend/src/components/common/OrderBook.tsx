@@ -175,14 +175,14 @@ export function OrderBook({
     <div className={`flex flex-col bg-okx-bg-primary h-full ${className}`}>
       {/* ===== 头部: 订单簿标题 + 精度选择 ===== */}
       <div className="px-3 py-2 border-b border-okx-border-primary flex items-center justify-between shrink-0">
-        <span className="text-[12px] font-medium text-okx-text-primary">
+        <span className="text-xs font-medium text-okx-text-primary">
           {t("title")}
         </span>
         {/* 精度选择器 */}
         <div className="relative">
           <button
             onClick={() => setShowPrecisionDropdown(!showPrecisionDropdown)}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] text-okx-text-secondary bg-okx-bg-hover rounded hover:bg-okx-bg-tertiary transition-colors"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-okx-text-secondary bg-okx-bg-hover rounded hover:bg-okx-bg-tertiary transition-colors"
           >
             <span>{precisionLabel}</span>
             <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
@@ -203,7 +203,7 @@ export function OrderBook({
                       setPrecision(option.value);
                       setShowPrecisionDropdown(false);
                     }}
-                    className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-okx-bg-tertiary transition-colors ${
+                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-okx-bg-tertiary transition-colors ${
                       precision === option.value ? "text-okx-brand" : "text-okx-text-secondary"
                     }`}
                   >
@@ -217,7 +217,7 @@ export function OrderBook({
       </div>
 
       {/* ===== 订单簿列标题 ===== */}
-      <div className="px-3 py-1 flex text-[10px] text-okx-text-tertiary border-b border-okx-border-primary/50 shrink-0">
+      <div className="px-3 py-1 flex text-xs text-okx-text-tertiary border-b border-okx-border-primary/50 shrink-0">
         <span className="flex-1">{t("priceUsdt")}</span>
         <span className="w-[60px] text-right">{t("sizeContracts")}</span>
         <span className="w-[55px] text-right">{t("totalContracts")}</span>
@@ -229,7 +229,7 @@ export function OrderBook({
         style={{ height: `${maxRows * 20}px` }}
       >
         {asks.length === 0 ? (
-          <div className="text-center text-okx-text-tertiary text-[11px] py-4">
+          <div className="text-center text-okx-text-tertiary text-xs py-4">
             {t("noAsks")}
           </div>
         ) : (
@@ -244,7 +244,7 @@ export function OrderBook({
               return (
                 <div
                   key={`ask-${index}`}
-                  className="relative flex items-center text-[11px] h-[20px] px-3 hover:bg-okx-bg-hover cursor-pointer"
+                  className="relative flex items-center text-xs h-[20px] px-3 hover:bg-okx-bg-hover cursor-pointer"
                   onClick={() => onPriceClick?.(price)}
                 >
                   <div
@@ -282,7 +282,7 @@ export function OrderBook({
               <span className="text-[15px] font-bold text-okx-text-primary">--</span>
             )}
           </div>
-          <span className="text-[10px] text-okx-text-tertiary">BNB</span>
+          <span className="text-xs text-okx-text-tertiary">BNB</span>
         </div>
       </div>
 
@@ -292,7 +292,7 @@ export function OrderBook({
         style={{ height: `${maxRows * 20}px` }}
       >
         {bids.length === 0 ? (
-          <div className="text-center text-okx-text-tertiary text-[11px] py-4">
+          <div className="text-center text-okx-text-tertiary text-xs py-4">
             {t("noBids")}
           </div>
         ) : (
@@ -307,7 +307,7 @@ export function OrderBook({
               return (
                 <div
                   key={`bid-${index}`}
-                  className="relative flex items-center text-[11px] h-[20px] px-3 hover:bg-okx-bg-hover cursor-pointer"
+                  className="relative flex items-center text-xs h-[20px] px-3 hover:bg-okx-bg-hover cursor-pointer"
                   onClick={() => onPriceClick?.(price)}
                 >
                   <div
@@ -327,14 +327,14 @@ export function OrderBook({
       {/* ===== 买卖力量比例条 ===== */}
       <div className="px-3 py-1.5 border-t border-okx-border-primary shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-okx-up font-medium w-[45px]">
+          <span className="text-xs text-okx-up font-medium w-[45px]">
             {t("buyRatio")} {buyRatio.toFixed(1)}%
           </span>
           <div className="flex-1 h-[3px] bg-okx-border-primary rounded overflow-hidden flex">
             <div className="h-full bg-okx-up" style={{ width: `${buyRatio}%` }} />
             <div className="h-full bg-okx-down" style={{ width: `${sellRatio}%` }} />
           </div>
-          <span className="text-[10px] text-okx-down font-medium w-[45px] text-right">
+          <span className="text-xs text-okx-down font-medium w-[45px] text-right">
             {sellRatio.toFixed(1)}% {t("sellRatio")}
           </span>
         </div>
@@ -343,7 +343,7 @@ export function OrderBook({
       {/* ===== 最新成交区域 - 占据剩余空间 ===== */}
       <div className="flex-1 flex flex-col min-h-0 border-t border-okx-border-primary">
         {/* 最新成交标题 */}
-        <div className="px-3 py-1.5 flex text-[10px] text-okx-text-tertiary border-b border-okx-border-primary/50 shrink-0">
+        <div className="px-3 py-1.5 flex text-xs text-okx-text-tertiary border-b border-okx-border-primary/50 shrink-0">
           <span className="flex-1">{t("recentTrades")}</span>
           <span className="w-[55px] text-right">{t("sizeContracts")}</span>
           <span className="w-[50px] text-right">{t("time")}</span>
@@ -352,7 +352,7 @@ export function OrderBook({
         {/* 成交列表 - 滚动 */}
         <div className="flex-1 overflow-y-auto min-h-0">
           {recentTrades.length === 0 ? (
-            <div className="text-center text-okx-text-tertiary text-[11px] py-4">
+            <div className="text-center text-okx-text-tertiary text-xs py-4">
               --
             </div>
           ) : (
@@ -364,7 +364,7 @@ export function OrderBook({
               return (
                 <div
                   key={`trade-${trade.timestamp}-${index}`}
-                  className="flex items-center text-[11px] h-[20px] px-3 hover:bg-okx-bg-hover animate-trade-flash"
+                  className="flex items-center text-xs h-[20px] px-3 hover:bg-okx-bg-hover animate-trade-flash"
                 >
                   <span className={`flex-1 font-mono tabular-nums ${isBuy ? "text-okx-up" : "text-okx-down"}`}>
                     {price}
@@ -372,7 +372,7 @@ export function OrderBook({
                   <span className="w-[55px] text-right text-okx-text-secondary font-mono tabular-nums">
                     {size}
                   </span>
-                  <span className="w-[50px] text-right text-okx-text-tertiary font-mono tabular-nums text-[10px]">
+                  <span className="w-[50px] text-right text-okx-text-tertiary font-mono tabular-nums text-xs">
                     {time}
                   </span>
                 </div>

@@ -21,8 +21,8 @@ import { useETHPrice } from "@/hooks/common/useETHPrice";
 import { LiquidityPanel } from "@/components/spot/LiquidityPanel";
 import { MyHoldings } from "@/components/spot/MyHoldings";
 import { ProfitableAddresses } from "@/components/spot/ProfitableAddresses";
-import { useTokenMetadata } from "@/hooks/common/useTokenMetadata";
 import { useTokenInfo, getTokenDisplayName } from "@/hooks/common/useTokenInfo";
+import { MATCHING_ENGINE_URL } from "@/config/api";
 import { usePoolState, calculatePriceUsd, calculateMarketCapUsd } from "@/hooks/spot/usePoolState";
 import { useOnChainTrades, OnChainTrade } from "@/hooks/perpetual/useOnChainTrades";
 import { tradeEventEmitter } from "@/lib/tradeEvents";
@@ -111,6 +111,23 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
   // 获取实时 BNB 价格
   const { price: bnbPriceUsd } = useETHPrice();
   const poolData = usePoolState(isValidTokenAddress ? pureTokenAddress : undefined);
+
+  // 获取代币元数据（描述、社交链接等）
+  const { data: tokenMetadataInfo } = useQuery({
+    queryKey: ["tokenMetadata", pureTokenAddress],
+    queryFn: async () => {
+      const res = await fetch(`${MATCHING_ENGINE_URL}/api/v1/token/metadata/all`);
+      if (!res.ok) return null;
+      const json = await res.json();
+      if (json.code !== "0" || !Array.isArray(json.data)) return null;
+      const addr = pureTokenAddress?.toLowerCase();
+      return json.data.find(
+        (m: { tokenAddress?: string }) => m.tokenAddress?.toLowerCase() === addr
+      ) ?? null;
+    },
+    enabled: !!pureTokenAddress,
+    staleTime: 60_000,
+  });
 
   // 获取链上交易记录
   const {
@@ -356,7 +373,8 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
     },
     enabled: !!instId,
     staleTime: 5000,
-    refetchOnWindowFocus: false, // [DEBUG] 禁用
+    refetchInterval: 10_000, // Auto-refresh trade history every 10s
+    refetchOnWindowFocus: true,
     retry: 2,
   });
 
@@ -426,12 +444,12 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
       {headerSlot ? (
         <div className="bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-2">
           {headerSlot}
-          <span className="ml-2 text-[11px] text-okx-text-secondary">
+          <span className="ml-2 text-xs text-okx-text-secondary">
             ${formatUsdCompact(Number(formatUnits(marketCap, 18)) * bnbPriceUsd)}
           </span>
         </div>
       ) : (
-        <div className="h-8 bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-4 gap-2 text-[11px] text-okx-text-secondary">
+        <div className="h-8 bg-okx-bg-primary border-b border-okx-border-primary flex items-center px-4 gap-2 text-xs text-okx-text-secondary">
            <span>★</span>
            <span className="text-okx-text-primary font-bold">{displaySymbol}</span>
            <span className="mx-1">——</span>
@@ -479,7 +497,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
                     <button
                       key={tab.key}
                       onClick={() => setActiveTab(tab.key)}
-                      className={`py-2 px-4 text-[12px] transition-colors relative ${activeTab === tab.key ? 'text-okx-text-primary font-bold' : 'text-okx-text-secondary'}`}
+                      className={`py-2 px-4 text-xs transition-colors relative ${activeTab === tab.key ? 'text-okx-text-primary font-bold' : 'text-okx-text-secondary'}`}
                     >
                       {tab.label}
                       {activeTab === tab.key && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-meme-lime"></div>}
@@ -489,7 +507,7 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
               <div className="flex-1 overflow-y-auto">
                  {activeTab === "tradeActivity" && (
                    <>
-                     <div className="p-3 flex gap-3 text-[11px] border-b border-okx-border-primary">
+                     <div className="p-3 flex gap-3 text-xs border-b border-okx-border-primary">
                         <span className="bg-okx-bg-hover text-okx-text-primary px-2 py-0.5 rounded cursor-pointer">{t('common.all')}</span>
                         {[
                           { key: "kol", label: t('holders.kol') },
@@ -555,10 +573,76 @@ export function TradingTerminal({ symbol, className, headerSlot }: TradingTermin
                    </>
                  )}
                  {activeTab === "about" && (
-                   <div className="p-4">
-                     <div className="text-center text-okx-text-tertiary">
-                       <p>{t('trading.noDescription')}</p>
-                     </div>
+                   <div className="p-4 space-y-4">
+                     {tokenMetadataInfo ? (
+                       <>
+                         {/* 基本信息: 名称 + 创建者 — metadata 存在就显示 */}
+                         <div className="flex items-center gap-3 mb-2">
+                           {tokenMetadataInfo.imageUrl && (
+                             <img src={tokenMetadataInfo.imageUrl} alt={tokenMetadataInfo.name}
+                               className="w-10 h-10 rounded-full object-cover" />
+                           )}
+                           <div>
+                             <div className="text-sm font-semibold text-okx-text-primary">{tokenMetadataInfo.name} ({tokenMetadataInfo.symbol})</div>
+                             {tokenMetadataInfo.creatorAddress && (
+                               <div className="text-xs text-okx-text-tertiary font-mono">
+                                 {t('trading.creator')}: {tokenMetadataInfo.creatorAddress.slice(0, 6)}...{tokenMetadataInfo.creatorAddress.slice(-4)}
+                               </div>
+                             )}
+                           </div>
+                         </div>
+
+                         {/* 描述 */}
+                         {tokenMetadataInfo.description ? (
+                           <div>
+                             <h4 className="text-sm font-medium text-okx-text-secondary mb-1">{t('trading.description')}</h4>
+                             <p className="text-sm text-okx-text-primary whitespace-pre-wrap">{tokenMetadataInfo.description}</p>
+                           </div>
+                         ) : (
+                           <div className="text-xs text-okx-text-tertiary italic">{t('trading.noDescription')}</div>
+                         )}
+
+                         {/* 社交链接 */}
+                         {(tokenMetadataInfo.website || tokenMetadataInfo.twitter || tokenMetadataInfo.telegram || tokenMetadataInfo.discord) && (
+                           <div>
+                             <h4 className="text-sm font-medium text-okx-text-secondary mb-2">{t('trading.socialLinks')}</h4>
+                             <div className="flex flex-wrap gap-2">
+                               {tokenMetadataInfo.website && (
+                                 <a href={tokenMetadataInfo.website} target="_blank" rel="noopener noreferrer"
+                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-okx-bg-input text-xs text-okx-text-secondary hover:text-okx-brand transition-colors">
+                                   🌐 Website
+                                 </a>
+                               )}
+                               {tokenMetadataInfo.twitter && (
+                                 <a href={tokenMetadataInfo.twitter.startsWith("http") ? tokenMetadataInfo.twitter : `https://x.com/${tokenMetadataInfo.twitter.replace("@", "")}`}
+                                   target="_blank" rel="noopener noreferrer"
+                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-okx-bg-input text-xs text-okx-text-secondary hover:text-okx-brand transition-colors">
+                                   𝕏 Twitter
+                                 </a>
+                               )}
+                               {tokenMetadataInfo.telegram && (
+                                 <a href={tokenMetadataInfo.telegram.startsWith("http") ? tokenMetadataInfo.telegram : `https://t.me/${tokenMetadataInfo.telegram}`}
+                                   target="_blank" rel="noopener noreferrer"
+                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-okx-bg-input text-xs text-okx-text-secondary hover:text-okx-brand transition-colors">
+                                   ✈️ Telegram
+                                 </a>
+                               )}
+                               {tokenMetadataInfo.discord && (
+                                 <a href={tokenMetadataInfo.discord.startsWith("http") ? tokenMetadataInfo.discord : `https://discord.gg/${tokenMetadataInfo.discord}`}
+                                   target="_blank" rel="noopener noreferrer"
+                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-okx-bg-input text-xs text-okx-text-secondary hover:text-okx-brand transition-colors">
+                                   💬 Discord
+                                 </a>
+                               )}
+                             </div>
+                           </div>
+                         )}
+                       </>
+                     ) : (
+                       <div className="text-center text-okx-text-tertiary">
+                         <p>{t('trading.noDescription')}</p>
+                       </div>
+                     )}
                    </div>
                  )}
                  {activeTab === "holdingAddresses" && (

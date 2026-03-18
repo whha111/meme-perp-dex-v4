@@ -22,9 +22,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Address, Hex } from "viem";
 import { createWalletClient, createPublicClient, http, keccak256, parseEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { bsc } from "viem/chains";
+import { bsc, bscTestnet } from "viem/chains";
 import { MATCHING_ENGINE_URL, SETTLEMENT_ADDRESS, SETTLEMENT_V2_ADDRESS } from "@/config/api";
-import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI } from "@/lib/contracts";
+import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI, NETWORK_CONFIG } from "@/lib/contracts";
 import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
 import { getWebSocketManager } from "@/hooks/common/useUnifiedWebSocket";
 import {
@@ -304,10 +304,11 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     try {
       const privateKey = keccak256(tradingWalletSignature);
       const account = privateKeyToAccount(privateKey);
+      const targetChain = NETWORK_CONFIG.CHAIN_ID === 56 ? bsc : bscTestnet;
       return createWalletClient({
         account,
-        chain: bsc,
-        transport: http(),
+        chain: targetChain,
+        transport: http(NETWORK_CONFIG.RPC_URL),
       });
     } catch (e) {
       console.error("[usePerpetualV2] Failed to create trading wallet client:", e);
@@ -316,9 +317,10 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
   }, [tradingWalletSignature]);
 
   // Public client for reading chain state and waiting for tx receipts
+  const targetChain = NETWORK_CONFIG.CHAIN_ID === 56 ? bsc : bscTestnet;
   const publicClient = useMemo(() => createPublicClient({
-    chain: bsc,
-    transport: http(),
+    chain: targetChain,
+    transport: http(NETWORK_CONFIG.RPC_URL),
   }), []);
 
   // Resolve settlement address: env var → hardcoded from contracts.ts
@@ -342,10 +344,11 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     manager.authenticate(
       tradingWalletAddress,
       async (msg: string) => {
+        const wsChain = NETWORK_CONFIG.CHAIN_ID === 56 ? bsc : bscTestnet;
         const walletClient = createWalletClient({
           account,
-          chain: bsc,
-          transport: http(),
+          chain: wsChain,
+          transport: http(NETWORK_CONFIG.RPC_URL),
         });
         return walletClient.signMessage({ account, message: msg });
       }
@@ -723,8 +726,14 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
           })
         : undefined;
 
-      // Step 1: 请求后端生成 Merkle proof + EIP-712 签名
-      let data: { success: boolean; error?: string; authorization?: { userEquity: string; merkleProof: string[]; deadline: string; signature: string } };
+      // Step 1: 请求后端签名提款授权
+      // Engine returns fastWithdraw params (TradingVault) or Merkle proof (legacy)
+      let data: {
+        success: boolean;
+        error?: string;
+        fastWithdraw?: { amount: string; nonce: string; deadline: string; signature: string };
+        authorization?: { userEquity: string; merkleProof: string[]; deadline: string; signature: string };
+      };
       try {
         const res = await fetch(`${MATCHING_ENGINE_URL}/api/wallet/withdraw`, {
           method: "POST",
@@ -743,14 +752,44 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       }
       if (!data.success) throw new Error(data.error || "提现失败");
 
-      // Step 2: 如果后端返回 Merkle 授权信息，提交到链上 SettlementV2
-      let withdrawTxHash: string | null = null;
-      if (data.authorization && settlementV2Address && tradingWalletClient) {
-        const { userEquity, merkleProof, deadline, signature } = data.authorization;
+      if (!settlementV2Address) {
+        throw new Error("TradingVault 合约地址未配置");
+      }
+      if (!tradingWalletClient) {
+        throw new Error("交易钱包未激活，请先连接钱包");
+      }
 
-        // AUDIT-FIX FE-C03: 验证 Merkle proof 元素格式，避免无效数据导致不可读的合约错误
-        if (!Array.isArray(merkleProof) || merkleProof.length === 0) {
-          throw new Error("Invalid merkle proof: empty or not an array");
+      let withdrawTxHash: string | null = null;
+
+      if (data.fastWithdraw) {
+        // ═══════════════════════════════════════════════════════════
+        // TradingVault fastWithdraw path (primary — no Merkle proof needed)
+        // ═══════════════════════════════════════════════════════════
+        const { amount: fwAmount, nonce, deadline, signature: fwSig } = data.fastWithdraw;
+        if (typeof fwSig !== 'string' || !fwSig.match(/^0x[0-9a-fA-F]+$/)) {
+          throw new Error("Invalid signature format from server");
+        }
+
+        const txHash = await tradingWalletClient.writeContract({
+          address: settlementV2Address,
+          abi: SETTLEMENT_V2_ABI,
+          functionName: "fastWithdraw",
+          args: [
+            BigInt(fwAmount),
+            BigInt(nonce),
+            BigInt(deadline),
+            fwSig as `0x${string}`,
+          ],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        withdrawTxHash = txHash;
+      } else if (data.authorization) {
+        // ═══════════════════════════════════════════════════════════
+        // Legacy Merkle proof path (fallback for old SettlementV2)
+        // ═══════════════════════════════════════════════════════════
+        const { userEquity, merkleProof, deadline, signature } = data.authorization;
+        if (!Array.isArray(merkleProof)) {
+          throw new Error("Invalid merkle proof: not an array");
         }
         const validatedProof = merkleProof.map((p: unknown, i: number) => {
           if (typeof p !== 'string' || !p.match(/^0x[0-9a-fA-F]{64}$/)) {
@@ -776,6 +815,8 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
         });
         await publicClient.waitForTransactionReceipt({ hash: txHash });
         withdrawTxHash = txHash;
+      } else {
+        throw new Error("提现授权数据缺失，请重试");
       }
 
       refreshBalance();

@@ -402,7 +402,7 @@ export function PerpetualOrderPanelV2({
     <div className={`bg-okx-bg-secondary rounded-lg ${className}`}>
       {/* V2 Architecture Badge */}
       <div className="p-2 bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-b border-purple-500/30">
-        <div className="flex items-center justify-center gap-2 text-[11px] text-purple-300">
+        <div className="flex items-center justify-center gap-2 text-xs text-purple-300">
           <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
           <span>Peer-to-Peer Trading (V2)</span>
         </div>
@@ -414,7 +414,7 @@ export function PerpetualOrderPanelV2({
           // 未连接钱包
           <button
             onClick={() => openConnectModal?.()}
-            className="w-full py-2.5 text-[13px] font-medium bg-meme-lime hover:brightness-110 text-black rounded transition-colors"
+            className="w-full py-2.5 text-sm font-medium bg-meme-lime hover:brightness-110 text-black rounded transition-colors"
           >
             {tc("connectWallet") || "Connect Wallet"}
           </button>
@@ -422,16 +422,16 @@ export function PerpetualOrderPanelV2({
           // 未创建交易钱包 - 简洁的初始化按钮
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-okx-text-secondary text-[12px]">{tw("account")}</span>
-              <span className="text-okx-text-tertiary text-[12px]">{tw("notActivated")}</span>
+              <span className="text-okx-text-secondary text-xs">{tw("account")}</span>
+              <span className="text-okx-text-tertiary text-xs">{tw("notActivated")}</span>
             </div>
             {tradingWalletError && (
-              <p className="text-red-400 text-[11px] mb-2">{tradingWalletError}</p>
+              <p className="text-red-400 text-xs mb-2">{tradingWalletError}</p>
             )}
             <button
               onClick={generateWallet}
               disabled={isTradingWalletLoading}
-              className="w-full py-2 text-[12px] font-medium bg-meme-lime hover:brightness-110 disabled:bg-gray-600 text-black rounded transition-colors"
+              className="w-full py-2 text-xs font-medium bg-meme-lime hover:brightness-110 disabled:bg-gray-600 text-black rounded transition-colors"
             >
               {isTradingWalletLoading ? tw("activating") : tw("activateAccount")}
             </button>
@@ -440,29 +440,12 @@ export function PerpetualOrderPanelV2({
           // 已激活 - 显示 ETH 余额
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-okx-text-secondary text-[12px]">{tw("account")}</span>
+              <span className="text-okx-text-secondary text-xs">{tw("account")}</span>
               <div className="flex items-center gap-2">
-                <span className="text-okx-text-primary text-[14px] font-semibold">
+                <span className="text-okx-text-primary text-sm font-semibold">
                   BNB {availableBalanceETH.toFixed(4)}
                 </span>
               </div>
-            </div>
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => setShowDepositModal(true)}
-                className="flex-1 py-2 text-[12px] font-medium bg-meme-lime hover:brightness-110 text-black rounded transition-colors"
-              >
-                充值 BNB/WBNB
-              </button>
-              <button
-                onClick={() => setShowSettings(true)}
-                className="px-3 py-2 text-[12px] text-okx-text-tertiary hover:text-okx-text-primary bg-okx-bg-hover rounded transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
             </div>
           </div>
         )}
@@ -498,8 +481,8 @@ export function PerpetualOrderPanelV2({
             <div className="p-4 space-y-3">
               {/* Wallet Address */}
               <div className="bg-okx-bg-primary rounded-lg p-3 border border-okx-border-primary">
-                <p className="text-[11px] text-okx-text-tertiary mb-1">{tw("walletAddress")}</p>
-                <p className="text-[12px] text-okx-text-primary font-mono truncate">{tradingWalletAddress}</p>
+                <p className="text-xs text-okx-text-tertiary mb-1">{tw("walletAddress")}</p>
+                <p className="text-xs text-okx-text-primary font-mono truncate">{tradingWalletAddress}</p>
               </div>
 
               {/* Export Private Key */}
@@ -516,7 +499,7 @@ export function PerpetualOrderPanelV2({
               >
                 <div className="flex items-center gap-2">
                   <Key className="w-4 h-4 text-yellow-500" />
-                  <span className="text-[13px] text-okx-text-primary">{tw("exportPrivateKey")}</span>
+                  <span className="text-sm text-okx-text-primary">{tw("exportPrivateKey")}</span>
                 </div>
                 <svg className="w-4 h-4 text-okx-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -529,7 +512,7 @@ export function PerpetualOrderPanelV2({
                   disconnectTradingWallet();
                   setShowSettings(false);
                 }}
-                className="w-full py-2.5 text-[13px] font-medium text-okx-down hover:text-okx-down/80 border border-okx-down/50 hover:border-okx-down/70 rounded-lg transition-colors"
+                className="w-full py-2.5 text-sm font-medium text-okx-down hover:text-okx-down/80 border border-okx-down/50 hover:border-okx-down/70 rounded-lg transition-colors"
               >
                 {tw("disconnectAccount")}
               </button>
@@ -565,20 +548,20 @@ export function PerpetualOrderPanelV2({
             <div className="p-4 space-y-4">
               {/* Warning */}
               <div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3">
-                <p className="text-red-400 text-[11px] flex items-start gap-1"><svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg> {tw("privateKeyWarning")}</p>
+                <p className="text-red-400 text-xs flex items-start gap-1"><svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg> {tw("privateKeyWarning")}</p>
               </div>
 
               {/* Private Key */}
               <div className="bg-okx-bg-primary rounded-lg p-3 border border-okx-border-primary">
-                <p className="text-okx-text-primary font-mono text-[11px] break-all select-all">
+                <p className="text-okx-text-primary font-mono text-xs break-all select-all">
                   {privateKeyData.privateKey}
                 </p>
               </div>
 
               {/* 私钥对应的地址 — 用于验证 */}
               <div className="bg-okx-bg-primary rounded-lg p-3 border border-okx-border-primary">
-                <p className="text-[11px] text-okx-text-tertiary mb-1">对应地址 (应与交易钱包一致):</p>
-                <p className="text-[11px] text-okx-text-primary font-mono break-all">
+                <p className="text-xs text-okx-text-tertiary mb-1">对应地址 (应与交易钱包一致):</p>
+                <p className="text-xs text-okx-text-primary font-mono break-all">
                   {(() => {
                     try {
                       return privateKeyToAccount(privateKeyData.privateKey as `0x${string}`).address;
@@ -592,7 +575,7 @@ export function PerpetualOrderPanelV2({
                     const derived = privateKeyToAccount(privateKeyData.privateKey as `0x${string}`).address;
                     const match = derived.toLowerCase() === tradingWalletAddress.toLowerCase();
                     return (
-                      <p className={`text-[10px] mt-1 ${match ? "text-green-400" : "text-red-400"}`}>
+                      <p className={`text-xs mt-1 ${match ? "text-green-400" : "text-red-400"}`}>
                         {match ? "✓ 地址匹配" : "✗ 地址不匹配 — 请检查"}
                       </p>
                     );
@@ -608,7 +591,7 @@ export function PerpetualOrderPanelV2({
                   navigator.clipboard.writeText(privateKeyData.privateKey);
                   showToast(tc("copied"), "success");
                 }}
-                className="w-full py-2.5 text-[13px] font-medium bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
+                className="w-full py-2.5 text-sm font-medium bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
               >
                 {tw("copyPrivateKey")}
               </button>
@@ -622,7 +605,7 @@ export function PerpetualOrderPanelV2({
         <div className="flex gap-2 mb-3">
           <button
             onClick={() => setMarginMode("cross")}
-            className={`flex-1 py-1.5 text-[12px] rounded transition-colors ${
+            className={`flex-1 py-1.5 text-xs rounded transition-colors ${
               marginMode === "cross"
                 ? "bg-okx-bg-hover text-okx-text-primary"
                 : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -632,7 +615,7 @@ export function PerpetualOrderPanelV2({
           </button>
           <button
             onClick={() => setMarginMode("isolated")}
-            className={`flex-1 py-1.5 text-[12px] rounded transition-colors ${
+            className={`flex-1 py-1.5 text-xs rounded transition-colors ${
               marginMode === "isolated"
                 ? "bg-okx-bg-hover text-okx-text-primary"
                 : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -644,12 +627,12 @@ export function PerpetualOrderPanelV2({
 
         {/* Leverage */}
         <div className="flex items-center justify-between">
-          <span className="text-okx-text-secondary text-[12px]">
+          <span className="text-okx-text-secondary text-xs">
             {t("leverage") || "Leverage"}
           </span>
           <button
             onClick={() => setShowLeverageSlider(!showLeverageSlider)}
-            className="flex items-center gap-1 text-[14px] text-okx-text-primary font-medium hover:text-meme-lime transition-colors"
+            className="flex items-center gap-1 text-sm text-okx-text-primary font-medium hover:text-meme-lime transition-colors"
           >
             {leverage}x
             <svg
@@ -674,12 +657,12 @@ export function PerpetualOrderPanelV2({
             <input
               type="range"
               min="1"
-              max="100"
+              max="10"
               value={leverage}
               onChange={(e) => setLeverage(parseInt(e.target.value))}
               className="w-full h-1 bg-okx-bg-hover rounded-lg appearance-none cursor-pointer accent-[#A3E635]"
             />
-            <div className="flex justify-between text-[10px] text-okx-text-tertiary">
+            <div className="flex justify-between text-xs text-okx-text-tertiary">
               {LEVERAGE_OPTIONS.map((lev) => (
                 <button
                   key={lev}
@@ -702,7 +685,7 @@ export function PerpetualOrderPanelV2({
       <div className="flex border-b border-okx-border-primary">
         <button
           onClick={() => setSide("long")}
-          className={`flex-1 py-3 text-[14px] font-medium transition-colors ${
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${
             side === "long"
               ? "text-okx-up border-b-2 border-okx-up bg-okx-up/10"
               : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -712,7 +695,7 @@ export function PerpetualOrderPanelV2({
         </button>
         <button
           onClick={() => setSide("short")}
-          className={`flex-1 py-3 text-[14px] font-medium transition-colors ${
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${
             side === "short"
               ? "text-okx-down border-b-2 border-okx-down bg-okx-down/10"
               : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -728,7 +711,7 @@ export function PerpetualOrderPanelV2({
         <div className="flex gap-1 bg-okx-bg-hover rounded p-0.5">
           <button
             onClick={() => setOrderType("market")}
-            className={`flex-1 py-1.5 text-[12px] rounded transition-colors ${
+            className={`flex-1 py-1.5 text-xs rounded transition-colors ${
               orderType === "market"
                 ? "bg-okx-bg-primary text-okx-text-primary font-medium"
                 : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -738,7 +721,7 @@ export function PerpetualOrderPanelV2({
           </button>
           <button
             onClick={() => setOrderType("limit")}
-            className={`flex-1 py-1.5 text-[12px] rounded transition-colors ${
+            className={`flex-1 py-1.5 text-xs rounded transition-colors ${
               orderType === "limit"
                 ? "bg-okx-bg-primary text-okx-text-primary font-medium"
                 : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -751,7 +734,7 @@ export function PerpetualOrderPanelV2({
         {/* Limit Price Input - 限价单价格 */}
         {orderType === "limit" && (
           <div>
-            <div className="flex justify-between text-[11px] mb-1">
+            <div className="flex justify-between text-xs mb-1">
               <span className="text-okx-text-tertiary">
                 {t("price") || "Price"}
               </span>
@@ -762,14 +745,14 @@ export function PerpetualOrderPanelV2({
               value={limitPrice}
               onChange={(e) => setLimitPrice(e.target.value)}
               placeholder="0.00"
-              className="w-full bg-okx-bg-hover border border-okx-border-primary rounded px-3 py-2 text-[14px] text-okx-text-primary placeholder:text-okx-text-tertiary outline-none focus:border-meme-lime"
+              className="w-full bg-okx-bg-hover border border-okx-border-primary rounded px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary outline-none focus:border-meme-lime"
             />
           </div>
         )}
 
         {/* Amount Input - 用户可选择单位 */}
         <div>
-          <div className="flex justify-between items-center text-[11px] mb-1">
+          <div className="flex justify-between items-center text-xs mb-1">
             <span className="text-okx-text-tertiary">开仓数量</span>
             {/* 单位切换按钮 (ETH 本位) */}
             <div className="flex gap-1 bg-okx-bg-tertiary rounded p-0.5">
@@ -780,7 +763,7 @@ export function PerpetualOrderPanelV2({
                     setAmountUnit(unit);
                     setAmount(""); // 切换时清空输入
                   }}
-                  className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                  className={`px-2 py-0.5 text-xs rounded transition-colors ${
                     amountUnit === unit
                       ? "bg-meme-lime text-black font-medium"
                       : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -800,18 +783,18 @@ export function PerpetualOrderPanelV2({
                 amountUnit === "BNB" ? "输入 BNB 数量" :
                 "输入代币数量"
               }
-              className={`w-full bg-okx-bg-hover border rounded px-3 py-2 pr-20 text-[14px] text-okx-text-primary placeholder:text-okx-text-tertiary outline-none ${
+              className={`w-full bg-okx-bg-hover border rounded px-3 py-2 pr-20 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary outline-none ${
                 amountError
                   ? "border-okx-down focus:border-okx-down"
                   : "border-okx-border-primary focus:border-meme-lime"
               }`}
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-meme-lime font-medium">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-meme-lime font-medium">
               {amountUnit === "TOKEN" ? "代币" : amountUnit}
             </span>
           </div>
           {amountError && (
-            <div className="text-[10px] text-okx-down mt-1">{amountError}</div>
+            <div className="text-xs text-okx-down mt-1">{amountError}</div>
           )}
           {/* 快捷按钮 - 根据单位显示不同选项 (ETH 本位) */}
           <div className="flex gap-2 mt-2">
@@ -819,7 +802,7 @@ export function PerpetualOrderPanelV2({
               <button
                 key={val}
                 onClick={() => setAmount(val.toString())}
-                className="flex-1 py-1 text-[11px] text-okx-text-tertiary bg-okx-bg-hover rounded hover:text-okx-text-secondary transition-colors"
+                className="flex-1 py-1 text-xs text-okx-text-tertiary bg-okx-bg-hover rounded hover:text-okx-text-secondary transition-colors"
               >
                 {val}
               </button>
@@ -828,7 +811,7 @@ export function PerpetualOrderPanelV2({
               <button
                 key={label}
                 onClick={() => setAmount([1000, 10000, 100000, 1000000][idx].toString())}
-                className="flex-1 py-1 text-[11px] text-okx-text-tertiary bg-okx-bg-hover rounded hover:text-okx-text-secondary transition-colors"
+                className="flex-1 py-1 text-xs text-okx-text-tertiary bg-okx-bg-hover rounded hover:text-okx-text-secondary transition-colors"
               >
                 {label}
               </button>
@@ -840,7 +823,7 @@ export function PerpetualOrderPanelV2({
         <div>
           <button
             onClick={() => setShowTpSl(!showTpSl)}
-            className="flex items-center gap-2 text-[12px] text-okx-text-secondary hover:text-okx-text-primary transition-colors"
+            className="flex items-center gap-2 text-xs text-okx-text-secondary hover:text-okx-text-primary transition-colors"
           >
             <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
               showTpSl ? "bg-meme-lime border-meme-lime" : "border-okx-border-primary"
@@ -852,14 +835,14 @@ export function PerpetualOrderPanelV2({
               )}
             </div>
             <span>TP/SL</span>
-            <span className="text-[10px] text-okx-text-tertiary">({t("takeProfitStopLoss") || "Take Profit / Stop Loss"})</span>
+            <span className="text-xs text-okx-text-tertiary">({t("takeProfitStopLoss") || "Take Profit / Stop Loss"})</span>
           </button>
 
           {showTpSl && (
             <div className="mt-2 space-y-2 p-3 bg-okx-bg-hover/50 rounded border border-okx-border-primary">
               {/* Take Profit */}
               <div>
-                <div className="flex justify-between text-[11px] mb-1">
+                <div className="flex justify-between text-xs mb-1">
                   <span className="text-okx-up">{t("takeProfit") || "Take Profit"}</span>
                   <span className="text-okx-text-tertiary">BNB</span>
                 </div>
@@ -868,12 +851,12 @@ export function PerpetualOrderPanelV2({
                   value={takeProfit}
                   onChange={(e) => setTakeProfit(e.target.value)}
                   placeholder={t("tpPrice") || "TP Price"}
-                  className="w-full bg-okx-bg-primary border border-okx-border-primary rounded px-3 py-1.5 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary outline-none focus:border-okx-up"
+                  className="w-full bg-okx-bg-primary border border-okx-border-primary rounded px-3 py-1.5 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary outline-none focus:border-okx-up"
                 />
               </div>
               {/* Stop Loss */}
               <div>
-                <div className="flex justify-between text-[11px] mb-1">
+                <div className="flex justify-between text-xs mb-1">
                   <span className="text-okx-down">{t("stopLoss") || "Stop Loss"}</span>
                   <span className="text-okx-text-tertiary">BNB</span>
                 </div>
@@ -882,105 +865,80 @@ export function PerpetualOrderPanelV2({
                   value={stopLoss}
                   onChange={(e) => setStopLoss(e.target.value)}
                   placeholder={t("slPrice") || "SL Price"}
-                  className="w-full bg-okx-bg-primary border border-okx-border-primary rounded px-3 py-1.5 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary outline-none focus:border-okx-down"
+                  className="w-full bg-okx-bg-primary border border-okx-border-primary rounded px-3 py-1.5 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary outline-none focus:border-okx-down"
                 />
               </div>
             </div>
           )}
         </div>
 
-        {/* Order Summary - 根据用户选择的单位显示 (ETH 本位) */}
-        <div className="bg-okx-bg-hover rounded p-3 space-y-2 text-[12px]">
-          {/* 用户输入 */}
-          <div className="flex justify-between">
-            <span className="text-okx-text-tertiary">开仓数量</span>
-            <span className="text-okx-text-primary">
-              {parseFloat(amount) || 0} {amountUnit === "TOKEN" ? "代币" : amountUnit}
-            </span>
-          </div>
-          {/* 仓位价值 (ETH 本位) */}
-          <div className="flex justify-between">
-            <span className="text-okx-text-tertiary">仓位价值</span>
-            <span className="text-okx-text-primary">
-              ≈ BNB {positionValueETH.toFixed(4)} (~${positionValueUSD.toFixed(2)})
-            </span>
-          </div>
-          {/* 代币价格（如果选择代币单位时显示）- ETH 本位: Token/ETH 比率 */}
-          {amountUnit === "TOKEN" && tokenPriceETH > 0 && (
+        {/* Order Summary - 仅在用户输入了数量后显示 (参考 OKX) */}
+        {parseFloat(amount) > 0 && positionValueETH > 0 && (
+          <div className="bg-okx-bg-hover rounded p-3 space-y-2 text-xs">
+            {/* 仓位价值 (ETH 本位) */}
             <div className="flex justify-between">
-              <span className="text-okx-text-tertiary">代币价格</span>
-              <span className="text-okx-text-secondary">
-                {formatTokenPrice(tokenPriceETH)} BNB
+              <span className="text-okx-text-tertiary">仓位价值</span>
+              <span className="text-okx-text-primary">
+                ≈ BNB {positionValueETH.toFixed(4)} (~${positionValueUSD.toFixed(2)})
               </span>
             </div>
-          )}
-          {/* 委托量 (代币数量) */}
-          <div className="flex justify-between">
-            <span className="text-okx-text-tertiary">委托量</span>
-            <span className="text-okx-text-primary">
-              {positionSizeToken >= 1000000
-                ? `${(positionSizeToken / 1000000).toFixed(2)}M`
-                : positionSizeToken >= 1000
-                ? `${(positionSizeToken / 1000).toFixed(2)}K`
-                : positionSizeToken.toFixed(2)} {tokenSymbol}
-            </span>
+            {/* 委托量 (代币数量) */}
+            <div className="flex justify-between">
+              <span className="text-okx-text-tertiary">委托量</span>
+              <span className="text-okx-text-primary">
+                {positionSizeToken >= 1000000
+                  ? `${(positionSizeToken / 1000000).toFixed(2)}M`
+                  : positionSizeToken >= 1000
+                  ? `${(positionSizeToken / 1000).toFixed(2)}K`
+                  : positionSizeToken.toFixed(2)} {tokenSymbol}
+              </span>
+            </div>
+            {/* 所需保证金 (ETH 本位) */}
+            <div className="flex justify-between">
+              <span className="text-okx-text-tertiary">所需保证金</span>
+              <span className="text-okx-text-primary">
+                {requiredMarginDisplay}
+              </span>
+            </div>
+            {/* 手续费 (ETH 本位) */}
+            <div className="flex justify-between">
+              <span className="text-okx-text-tertiary">手续费 (0.1%)</span>
+              <span className="text-okx-text-primary">
+                BNB {(positionValueETH * 0.001).toFixed(6)}
+              </span>
+            </div>
+            {/* 合计所需 */}
+            <div className="flex justify-between border-t border-okx-border-primary pt-2">
+              <span className="text-okx-text-secondary font-medium">合计所需</span>
+              <span className="text-okx-text-primary font-medium">
+                {requiredMarginDisplay}
+              </span>
+            </div>
           </div>
-          {/* 所需保证金 (ETH 本位) */}
-          <div className="flex justify-between">
-            <span className="text-okx-text-tertiary">所需保证金</span>
-            <span className="text-okx-text-primary">
-              {requiredMarginDisplay}
-            </span>
-          </div>
-          {/* 手续费 (ETH 本位) */}
-          <div className="flex justify-between">
-            <span className="text-okx-text-tertiary">手续费 (0.1%)</span>
-            <span className="text-okx-text-primary">
-              BNB {(positionValueETH * 0.001).toFixed(6)}
-            </span>
-          </div>
-          {/* 合计所需 */}
-          <div className="flex justify-between border-t border-okx-border-primary pt-2">
-            <span className="text-okx-text-secondary font-medium">合计所需</span>
-            <span className="text-okx-text-primary font-medium">
-              {requiredMarginDisplay}
-            </span>
-          </div>
-          {/* 账户余额 (ETH 本位) */}
-          <div className="flex justify-between pt-1">
-            <span className="text-okx-text-tertiary">账户余额</span>
-            <span
-              className={`font-medium ${
-                hasSufficientBalance ? "text-okx-text-primary" : "text-okx-down"
-              }`}
-            >
-              BNB {availableBalanceETH.toFixed(4)}
-            </span>
-          </div>
-        </div>
+        )}
 
         {/* Info Banner */}
-        <div className="bg-purple-900/20 border border-purple-500/30 rounded p-2 text-[11px] text-purple-300">
+        <div className="bg-purple-900/20 border border-purple-500/30 rounded p-2 text-xs text-purple-300">
           {tw("p2pInfo")}
         </div>
 
         {/* Insufficient Balance Warning */}
         {!hasSufficientBalance && parseFloat(amount) > 0 && (
-          <div className="bg-okx-down/10 border border-okx-down/30 rounded p-2 text-[11px] text-okx-down">
+          <div className="bg-okx-down/10 border border-okx-down/30 rounded p-2 text-xs text-okx-down">
             {tw("insufficientBalance")}
           </div>
         )}
 
         {/* Trading Wallet Not Initialized Warning */}
         {!isTradingWalletInitialized && (
-          <div className="bg-yellow-900/30 border border-yellow-500/30 rounded p-2 text-[11px] text-yellow-300">
+          <div className="bg-yellow-900/30 border border-yellow-500/30 rounded p-2 text-xs text-yellow-300">
             {tw("createTradingWalletFirst")}
           </div>
         )}
 
         {/* Perp Not Enabled Warning */}
         {!isPerpEnabled && (
-          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded p-2 text-[11px] text-yellow-400">
+          <div className="bg-yellow-900/20 border border-yellow-500/30 rounded p-2 text-xs text-yellow-400">
             {t("perpNotEnabled")}
           </div>
         )}
@@ -999,7 +957,7 @@ export function PerpetualOrderPanelV2({
             (!hasSufficientBalance && parseFloat(amount) > 0) ||
             !!amountError
           }
-          className={`w-full py-3 rounded font-medium text-[14px] transition-all ${
+          className={`w-full py-3 rounded font-medium text-sm transition-all ${
             !isPerpEnabled
               ? "bg-gray-600 text-gray-400"
               : side === "long"
@@ -1030,22 +988,26 @@ export function PerpetualOrderPanelV2({
       {/* Positions Section - 当前仓位 */}
       {currentTokenPositions.length > 0 && (
         <div className="p-3 border-t border-okx-border-primary">
-          <div className="text-[12px] font-medium text-okx-text-primary mb-2">
+          <div className="text-xs font-medium text-okx-text-primary mb-2">
             {t("myPositions") || "My Positions"}
           </div>
           <div className="space-y-2">
             {currentTokenPositions.map((pos) => {
               // ETH 本位精度转换 (全部 1e18)
-              const sizeETH = Number(pos.size) / 1e18; // ETH 名义价值 (1e18 精度)
-              const entryPrice = Number(pos.entryPrice) / 1e18; // 价格 (1e18 精度, Token/ETH)
-              const leverage = parseFloat(pos.leverage); // 杠杆 (人类可读)
-              const pnlETH = Number(pos.unrealizedPnL) / 1e18; // PnL (1e18 精度, ETH)
-              const collateralETH = Number(pos.collateral) / 1e18; // 保证金 (1e18 精度, ETH)
+              const sizeETH = Number(pos.size) / 1e18;
+              const entryPrice = Number(pos.entryPrice) / 1e18;
+              const leverage = parseFloat(pos.leverage);
+              const collateralETH = Number(pos.collateral) / 1e18;
+              // 使用链上实时价格计算 PnL (GMX 标准)
+              const realtimePrice = spotPriceBigInt ? Number(spotPriceBigInt) / 1e18 : Number(pos.markPrice || pos.entryPrice) / 1e18;
+              const pnlDelta = entryPrice > 0 ? sizeETH * Math.abs(realtimePrice - entryPrice) / entryPrice : 0;
+              const hasProfit = pos.isLong ? (realtimePrice > entryPrice) : (entryPrice > realtimePrice);
+              const pnlETH = hasProfit ? pnlDelta : -pnlDelta;
 
               return (
                 <div
                   key={pos.pairId}
-                  className="bg-okx-bg-hover rounded p-2 text-[11px]"
+                  className="bg-okx-bg-hover rounded p-2 text-xs"
                 >
                   <div className="flex justify-between items-center mb-1">
                     <span className={pos.isLong ? "text-okx-up font-medium" : "text-okx-down font-medium"}>
@@ -1075,7 +1037,7 @@ export function PerpetualOrderPanelV2({
                     <button
                       onClick={() => handleClosePosition(pos.pairId)}
                       disabled={isSubmittingOrder || isPending}
-                      className="flex-1 py-1.5 text-[11px] bg-okx-down/80 hover:bg-okx-down text-white rounded disabled:opacity-50 transition-colors"
+                      className="flex-1 py-1.5 text-xs bg-okx-down/80 hover:bg-okx-down text-white rounded disabled:opacity-50 transition-colors"
                     >
                       {t("marketClose") || "Market Close"}
                     </button>
@@ -1089,7 +1051,7 @@ export function PerpetualOrderPanelV2({
 
       {/* Status Summary */}
       <div className="p-3 border-t border-okx-border-primary bg-okx-bg-hover/30">
-        <div className="flex justify-between text-[11px]">
+        <div className="flex justify-between text-xs">
           <div className="flex items-center gap-2">
             <span className="text-okx-text-tertiary">Positions:</span>
             <span className={currentTokenPositions.length > 0 ? "text-purple-300" : "text-okx-text-tertiary"}>

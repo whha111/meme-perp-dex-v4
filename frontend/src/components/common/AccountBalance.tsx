@@ -43,6 +43,9 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
     address: tradingWallet,
     getSignature,
     wrapAndDeposit,
+    sendETH,
+    ethBalance: tradingWalletNativeBalance,
+    refreshBalance: refreshTradingWalletBalance,
   } = useTradingWallet();
 
   // SettlementV2 deposit/withdraw via usePerpetualV2
@@ -74,6 +77,8 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
   const [withdrawStep, setWithdrawStep] = useState(0); // 0=idle, 1=in-progress
   const [stepError, setStepError] = useState<string | null>(null);
   const depositStepRef = useRef(0); // For accurate logging in async closures
+  // Total withdrawable = settlement + trading wallet native BNB
+  const totalWithdrawable = (settlementBalance ?? 0n) + tradingWalletNativeBalance;
 
   // Main wallet BNB balance
   const { data: mainWalletBalance, refetch: refetchMainBalance } = useBalance({
@@ -98,12 +103,19 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
   //   2. Trading wallet: BNB → WBNB (WBNB.deposit)
   //   3. Trading wallet: approve WBNB + SettlementV2.deposit
   // ═══════════════════════════════════════════════════════════
+  const GAS_BUFFER = parseEther("0.005"); // 0.005 BNB for Step 2 & 3 gas
+
   const handleDeposit = useCallback(async () => {
     if (!tradingWallet || amountWei === 0n || !publicClient) return;
     setStepError(null);
 
     try {
-      // Step 1: Transfer BNB from main wallet to trading wallet
+      // Actual deposit = user amount - gas buffer (for Step 2 & 3)
+      const depositAmount = amountWei - GAS_BUFFER;
+      if (depositAmount <= 0n) return;
+      const depositAmountStr = formatEther(depositAmount);
+
+      // Step 1: Transfer full amount to trading wallet (includes gas reserve)
       setDepositStep(1);
       depositStepRef.current = 1;
       const txHash = await sendTransactionAsync({
@@ -112,16 +124,16 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
       });
       await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-      // Step 2: Wrap BNB → WBNB on trading wallet
+      // Step 2: Wrap (amount - gas) BNB → WBNB, keep gas for Step 3
       setDepositStep(2);
       depositStepRef.current = 2;
-      const wrapHash = await wrapAndDeposit(amount);
+      const wrapHash = await wrapAndDeposit(depositAmountStr);
       await publicClient.waitForTransactionReceipt({ hash: wrapHash });
 
       // Step 3: Approve WBNB + deposit to SettlementV2
       setDepositStep(3);
       depositStepRef.current = 3;
-      await settlementDeposit(CONTRACTS.WETH, amount);
+      await settlementDeposit(CONTRACTS.WETH, depositAmountStr);
 
       // Success — engine event listener auto-syncs balance
       setDepositStep(0);
@@ -151,9 +163,9 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
   ]);
 
   // ═══════════════════════════════════════════════════════════
-  // On-chain withdrawal via Merkle proof:
-  //   1. POST /api/wallet/withdraw → backend generates proof + sig
-  //   2. usePerpetualV2.withdraw → SettlementV2.withdraw on-chain
+  // Withdraw: supports both sources
+  //   A. SettlementV2 contract → Merkle proof withdrawal
+  //   B. Trading wallet native BNB → direct sendETH to main wallet
   // ═══════════════════════════════════════════════════════════
   const handleWithdraw = useCallback(async () => {
     if (!tradingWallet || !mainWallet || amountWei === 0n) return;
@@ -161,13 +173,29 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
 
     try {
       setWithdrawStep(1);
-      await settlementWithdraw(CONTRACTS.WETH, amount);
+      const sBalance = settlementBalance ?? 0n;
 
-      // Success
+      if (sBalance > 0n && amountWei <= sBalance) {
+        // Case A: settlement contract has enough → Merkle proof withdrawal
+        await settlementWithdraw(CONTRACTS.WETH, amount);
+      } else {
+        // Case B: use trading wallet native BNB → direct transfer
+        const gasReserve = parseEther("0.001");
+        const maxSend = tradingWalletNativeBalance > gasReserve
+          ? tradingWalletNativeBalance - gasReserve : 0n;
+        if (amountWei > maxSend) {
+          setStepError("余额不足");
+          setWithdrawStep(0);
+          return;
+        }
+        await sendETH(mainWallet, amount);
+      }
+
       setWithdrawStep(0);
       setAmount("");
       refreshGlobalBalance();
       refetchMainBalance();
+      refreshTradingWalletBalance();
     } catch (e) {
       console.error("[Withdraw] Failed:", e);
       setStepError(
@@ -176,13 +204,9 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
       setWithdrawStep(0);
     }
   }, [
-    tradingWallet,
-    mainWallet,
-    amountWei,
-    amount,
-    settlementWithdraw,
-    refreshGlobalBalance,
-    refetchMainBalance,
+    tradingWallet, mainWallet, amountWei, amount, settlementBalance,
+    tradingWalletNativeBalance, settlementWithdraw, sendETH,
+    refreshGlobalBalance, refetchMainBalance, refreshTradingWalletBalance,
   ]);
 
   const copy = () => {
@@ -298,12 +322,12 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
         {/* 余额显示 */}
         <div className="flex justify-between items-center text-sm">
           <span className="text-gray-500">
-            {activeTab === "deposit" ? "钱包余额" : "交易账户余额"}
+            {activeTab === "deposit" ? "钱包余额" : "可提现余额"}
           </span>
           <span className="text-okx-text-primary">
             BNB {activeTab === "deposit"
               ? fmtETH(mainWalletBalance?.value)
-              : formattedWethBalance}
+              : fmtETH(totalWithdrawable)}
           </span>
         </div>
 
@@ -331,7 +355,10 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
                     setAmount(formatEther(maxDeposit));
                   }
                 } else {
-                  totalBalance && setAmount(formatEther(totalBalance));
+                  // Withdraw MAX: total withdrawable minus gas reserve
+                  const gasReserve = parseEther("0.001");
+                  const maxW = totalWithdrawable > gasReserve ? totalWithdrawable - gasReserve : 0n;
+                  if (maxW > 0n) setAmount(formatEther(maxW));
                 }
               }}
               disabled={isProcessing}
@@ -427,6 +454,7 @@ export function AccountBalance({ onClose }: { onClose?: () => void }) {
             请先在交易面板激活交易钱包
           </div>
         )}
+
       </div>
     </div>
   );

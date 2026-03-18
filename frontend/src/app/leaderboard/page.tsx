@@ -221,7 +221,7 @@ export default function LeaderboardPage() {
             <span className="font-mono text-sm font-bold text-meme-lime">{currentUser.rank}</span>
             <span className="font-mono text-sm flex items-center gap-2">
               {currentUser.address}
-              <span className="text-[10px] bg-meme-lime/20 text-meme-lime px-2 py-0.5 rounded">{t("you")}</span>
+              <span className="text-xs bg-meme-lime/20 text-meme-lime px-2 py-0.5 rounded">{t("you")}</span>
             </span>
             <span className="font-mono text-sm text-meme-lime font-semibold text-right">{currentUser.pnl}</span>
             <span className="font-mono text-sm text-meme-lime text-right">{currentUser.roe}</span>

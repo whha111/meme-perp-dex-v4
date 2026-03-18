@@ -72,7 +72,7 @@ export default function CreateTokenPage() {
     const saveMetadataAndRedirect = async () => {
       if (isConfirmed && createdTokenAddress && address) {
         try {
-          const instId = `${tokenSymbol}-USDT-SWAP`;
+          const instId = `${tokenSymbol.toUpperCase()}-USDT-SWAP`;
           await createTokenMetadata({
             instId,
             tokenAddress: createdTokenAddress,
@@ -123,11 +123,17 @@ export default function CreateTokenPage() {
     }
 
     try {
+      // metadataURI 必须始终是 JSON — 包含 description/image/socials
+      // image 字段用 IPFS gateway URL 或 logoUrl
+      const imageUrl = logoIpfsHash
+        ? `https://gateway.pinata.cloud/ipfs/${logoIpfsHash}`
+        : logoUrl;
+
       const metadata = {
         name: tokenName,
         symbol: tokenSymbol,
         description,
-        image: logoUrl || logoIpfsHash,
+        image: imageUrl || "",
         external_url: website,
         attributes: [
           { trait_type: "twitter", value: twitter },
@@ -136,9 +142,11 @@ export default function CreateTokenPage() {
         ].filter(attr => attr.value),
       };
 
-      const metadataURI = logoIpfsHash
-        ? `ipfs://${logoIpfsHash}`
-        : `data:application/json;base64,${btoa(JSON.stringify(metadata))}`;
+      // 始终用 base64 JSON 作为 metadataURI（不是原始图片 hash）
+      // 使用 TextEncoder 支持中文等 Unicode 字符（btoa 只支持 Latin1）
+      const jsonBytes = new TextEncoder().encode(JSON.stringify(metadata));
+      const base64 = Buffer.from(jsonBytes).toString("base64");
+      const metadataURI = `data:application/json;base64,${base64}`;
 
       await createToken({
         name: tokenName,
@@ -315,7 +323,7 @@ export default function CreateTokenPage() {
                 />
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-full bg-meme-lime flex items-center justify-center">
-                    <span className="text-[10px] text-black font-bold">B</span>
+                    <span className="text-xs text-black font-bold">B</span>
                   </div>
                   <span className="text-sm font-bold text-okx-text-primary">BNB</span>
                 </div>

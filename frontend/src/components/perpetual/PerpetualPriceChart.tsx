@@ -312,22 +312,28 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
 
       for (let i = startIdx; i < displayData.length; i++) {
         const k = displayData[i];
+        // 跳过无效时间的蜡烛 (防止 [object Object] 错误)
+        if (!k.time || typeof k.time !== "number" || isNaN(k.time)) continue;
         const prevClose = i > 0 ? displayData[i - 1].close : k.open;
         const isUp = k.close >= prevClose;
 
-        candleSeriesRef.current.update({
-          time: k.time as Time,
-          open: k.open * scaleFactor,
-          high: k.high * scaleFactor,
-          low: k.low * scaleFactor,
-          close: k.close * scaleFactor,
-        });
+        try {
+          candleSeriesRef.current.update({
+            time: k.time as Time,
+            open: k.open * scaleFactor,
+            high: k.high * scaleFactor,
+            low: k.low * scaleFactor,
+            close: k.close * scaleFactor,
+          });
 
-        volumeSeriesRef.current.update({
-          time: k.time as Time,
-          value: k.volume,
-          color: isUp ? colors.volumeUpColor : colors.volumeDownColor,
-        });
+          volumeSeriesRef.current.update({
+            time: k.time as Time,
+            value: k.volume,
+            color: isUp ? colors.volumeUpColor : colors.volumeDownColor,
+          });
+        } catch {
+          // "Cannot update oldest data" — 时间戳乱序时忽略，不崩溃
+        }
       }
 
       // 仅当用户在最新位置且新增蜡烛时才自动滚动
@@ -436,12 +442,16 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
       wickUpColor: colors.upColor,
       wickDownColor: colors.downColor,
       priceFormat: { type: 'price', precision: 12, minMove: 0.000000000001 },
+      lastValueVisible: true,
+      priceLineVisible: false,
     });
 
     const histogramSeries = chart.addHistogramSeries({
       color: colors.upColor,
       priceFormat: { type: 'volume' },
       priceScaleId: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
     });
 
     histogramSeries.priceScale().applyOptions({
@@ -587,7 +597,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
         {/* 左侧：交易对 */}
         <div className="flex items-center gap-2">
           <span className="text-okx-text-primary font-bold text-[16px]">{tokenSymbol}</span>
-          <span className="text-[#787B86] text-[12px]">/BNB Perp</span>
+          <span className="text-[#787B86] text-xs">/BNB Perp</span>
         </div>
 
         {displayOHLC && (
@@ -600,7 +610,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
             </div>
 
             {/* 涨跌幅 */}
-            <div className={`ml-3 px-2 py-1 rounded text-[13px] font-medium ${
+            <div className={`ml-3 px-2 py-1 rounded text-sm font-medium ${
               displayOHLC.isUp
                 ? 'text-[#26a69a] bg-[#26a69a]/15'
                 : 'text-[#ef5350] bg-[#ef5350]/15'
@@ -612,7 +622,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
             <div className="mx-4 h-6 w-px bg-[#2A2E39]" />
 
             {/* High/Low */}
-            <div className="flex items-center gap-4 text-[12px]">
+            <div className="flex items-center gap-4 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="text-[#787B86]">{t("high")}</span>
                 <span className="text-[#26a69a]">{formatPrice(displayOHLC.high)}</span>
@@ -637,7 +647,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
             <button
               key={key}
               onClick={() => setResolution(key)}
-              className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
+              className={`px-2 py-0.5 text-xs font-medium rounded transition-all ${
                 resolution === key
                   ? 'text-okx-text-primary bg-[#2962FF]'
                   : 'text-[#787B86] hover:text-okx-text-primary hover:bg-[#2A2E39]'
@@ -650,7 +660,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
 
         <div className="flex-1" />
 
-        <div className="flex items-center gap-3 text-[12px]">
+        <div className="flex items-center gap-3 text-xs">
           <span className="text-[#787B86]">{currentTime} UTC</span>
           <span className="text-[#363A45]">|</span>
 
@@ -718,7 +728,7 @@ export function PerpetualPriceChart({ tokenAddress, displaySymbol, className, cu
                 )}
               </div>
               <div>
-                <p className="text-[#787B86] text-[13px]">
+                <p className="text-[#787B86] text-sm">
                   {isLoading
                     ? t("loadingKline")
                     : error

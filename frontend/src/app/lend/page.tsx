@@ -94,7 +94,7 @@ export default function LendPage() {
           {isConnected && (
             <button
               onClick={refetch}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] text-okx-text-secondary border border-okx-border-primary hover:border-okx-border-secondary hover:text-okx-text-primary transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-okx-text-secondary border border-okx-border-primary hover:border-okx-border-secondary hover:text-okx-text-primary transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -129,15 +129,15 @@ export default function LendPage() {
               <div className="grid grid-cols-3 gap-4 mt-10">
                 <div className="text-center">
                   <div className="text-lg font-bold text-okx-up mb-1">{t("featureEarn")}</div>
-                  <div className="text-[11px] text-okx-text-tertiary">{t("featureEarnDesc")}</div>
+                  <div className="text-xs text-okx-text-tertiary">{t("featureEarnDesc")}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-bold text-okx-accent mb-1">{t("featureFlexible")}</div>
-                  <div className="text-[11px] text-okx-text-tertiary">{t("featureFlexibleDesc")}</div>
+                  <div className="text-xs text-okx-text-tertiary">{t("featureFlexibleDesc")}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-lg font-bold text-okx-text-primary mb-1">{t("featureSecure")}</div>
-                  <div className="text-[11px] text-okx-text-tertiary">{t("featureSecureDesc")}</div>
+                  <div className="text-xs text-okx-text-tertiary">{t("featureSecureDesc")}</div>
                 </div>
               </div>
             </div>
@@ -189,7 +189,7 @@ export default function LendPage() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setViewMode("markets")}
-                    className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                       viewMode === "markets"
                         ? "bg-okx-bg-hover text-okx-text-primary"
                         : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -200,7 +200,7 @@ export default function LendPage() {
                   {positions.length > 0 && (
                     <button
                       onClick={() => setViewMode("positions")}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         viewMode === "positions"
                           ? "bg-okx-bg-hover text-okx-text-primary"
                           : "text-okx-text-tertiary hover:text-okx-text-secondary"
@@ -210,7 +210,7 @@ export default function LendPage() {
                     </button>
                   )}
                 </div>
-                <div className="text-[11px] text-okx-text-tertiary">
+                <div className="text-xs text-okx-text-tertiary">
                   {t("autoRefresh")}
                 </div>
               </div>

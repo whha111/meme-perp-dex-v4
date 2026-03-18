@@ -172,9 +172,9 @@ class WebSocketServices {
   async unsubscribeInstrument(_instId: string): Promise<void> {}
 
   /**
-   * 获取交易历史 (stub — 返回空数组)
+   * 获取交易历史 — calls REST API /api/v1/spot/trades/{token}
    */
-  async getTradeHistory(_params: {
+  async getTradeHistory(params: {
     inst_id: string;
     page_size?: number;
   }): Promise<{
@@ -188,7 +188,45 @@ class WebSocketServices {
       tx_hash: string;
     }>;
   }> {
-    return { transactions: [] };
+    try {
+      // inst_id 可能是 "0xABC..." 或 "0xABC...-BNB"，提取 token 地址
+      const token = params.inst_id.split("-")[0];
+      if (!token.startsWith("0x")) {
+        return { transactions: [] };
+      }
+      const limit = params.page_size || 50;
+      const url = `${MATCHING_ENGINE_URL}/api/v1/spot/trades/${token.toLowerCase()}?limit=${limit}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        return { transactions: [] };
+      }
+      const json = await res.json();
+      if (!json.success || !json.data) {
+        return { transactions: [] };
+      }
+      // 将 SpotTrade 格式转换为 TradingTerminal 期望的 transactions 格式
+      return {
+        transactions: json.data.map((t: {
+          trader: string;
+          isBuy: boolean;
+          price: string;
+          tokenAmount: string;
+          ethAmount: string;
+          timestamp: number;
+          txHash: string;
+        }) => ({
+          transaction_type: t.isBuy ? "BUY" : "SELL",
+          buyer_wallet: t.isBuy ? t.trader : undefined,
+          seller_wallet: t.isBuy ? undefined : t.trader,
+          price: t.price,
+          token_amount: t.tokenAmount,
+          transaction_timestamp: t.timestamp.toString(),
+          tx_hash: t.txHash,
+        })),
+      };
+    } catch {
+      return { transactions: [] };
+    }
   }
 
   /**

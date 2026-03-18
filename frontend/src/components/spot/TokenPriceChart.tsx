@@ -320,6 +320,11 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
 
   // 是否自动滚动到最新K线
   const autoScrollRef = useRef(true);
+  // 当前K线数据条数（用于判断是否 fitContent）
+  const candleCountRef = useRef(0);
+  // 当前 resolution 下是否已完成首次 fitContent（防止 WS 更新时重复 fitContent 覆盖用户缩放）
+  const fitContentDoneRef = useRef(false);
+  const lastResolutionRef = useRef<Resolution>(resolution);
 
   // 订阅实时交易流
   const { trades, latestTrade: streamLatestTrade, isConnected } = useInstrumentTradeStream(instId, {
@@ -401,6 +406,12 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
       return;
     }
 
+    // 检测分辨率是否切换，如果切换了需要重新 fitContent
+    if (lastResolutionRef.current !== resolution) {
+      lastResolutionRef.current = resolution;
+      fitContentDoneRef.current = false;
+    }
+
     // 如果图表还没初始化，延迟重试
     if (!candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) {
       // 延迟 100ms 后重试（通过更新状态触发 re-render）
@@ -477,6 +488,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     }
 
     candleSeriesRef.current.setData(candles);
+    candleCountRef.current = candles.length;
     if (volumes.length > 0) {
       volumeSeriesRef.current.setData(volumes);
     }
@@ -486,16 +498,20 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
       priceLineVisible: false,
     });
 
-    // 设置可见范围为最近的数据
-    const timeScale = chartRef.current.timeScale();
-    timeScale.fitContent();
-
-    // 延迟滚动到最新数据
-    setTimeout(() => {
-      if (chartRef.current) {
-        chartRef.current.timeScale().scrollToRealTime();
+    // 设置可见范围（仅首次加载 / 切换分辨率时执行一次）：
+    // 行业标准 (DexScreener/GeckoTerminal/GMGN): 最新蜡烛靠右，左侧留空，正常宽度
+    // ⚠️ WS 实时更新时不再重复执行，避免覆盖用户手动缩放
+    if (!fitContentDoneRef.current) {
+      const timeScale = chartRef.current.timeScale();
+      if (candles.length >= 30) {
+        // 数据充足时铺满宽度
+        timeScale.fitContent();
+      } else {
+        // 数据少时：正常宽度蜡烛靠右对齐，左侧留空（同 DexScreener）
+        timeScale.scrollToRealTime();
       }
-    }, 100);
+      fitContentDoneRef.current = true;
+    }
 
     // 更新顶部价格显示 (使用原始数据，不是缩放后的数据)
     const latest = displayData[displayData.length - 1];
@@ -520,7 +536,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     setIsLoadingHistory(false);
     // ✅ 标记首次数据加载成功，后续切换分辨率时不再显示全屏遮罩
     historicalDataLoadedRef.current = true;
-  }, [effectiveChartData]); // 依赖 effectiveChartData (WS K线 + 链上兜底)
+  }, [effectiveChartData, resolution]); // 依赖 effectiveChartData + resolution（分辨率切换时重置）
 
   // UTC 时间更新
   useEffect(() => {
@@ -589,6 +605,8 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
         borderVisible: false,
         borderColor: 'transparent',
         rightOffset: 5, // 右侧留出空间显示最新K线
+        barSpacing: 8, // 固定蜡烛间距（像素），防止少量数据时蜡烛过宽
+        minBarSpacing: 2, // 最小间距，缩放时不会太窄
         shiftVisibleRangeOnNewBar: true, // 新K线时自动滚动
         timeVisible: true, // 显示时间 (小时:分钟)
         secondsVisible: false, // 不显示秒
@@ -769,7 +787,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
     }
   };
 
-  // 自动缩放
+  // 自动缩放 — 用户主动点击时始终 fitContent 铺满宽度
   const handleAutoScale = () => {
     if (chartRef.current) {
       chartRef.current.timeScale().fitContent();
@@ -792,8 +810,8 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
       <div className="h-[48px] flex items-center px-4" style={{ backgroundColor: chartColors.background, borderBottom: `1px solid ${chartColors.borderColor}` }}>
         {/* 左侧：交易对 - TOKEN/WBNB 格式，大小一致 */}
         <div className="flex items-center">
-          <span className="text-okx-text-primary font-bold text-[14px]">{tokenSymbol}</span>
-          <span className="text-okx-text-primary font-bold text-[14px]">/WBNB</span>
+          <span className="text-okx-text-primary font-bold text-sm">{tokenSymbol}</span>
+          <span className="text-okx-text-primary font-bold text-sm">/WBNB</span>
         </div>
 
         {displayOHLC && (
@@ -806,7 +824,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
             </div>
 
             {/* 涨跌幅 */}
-            <div className={`ml-3 px-2 py-1 rounded text-[13px] font-medium ${
+            <div className={`ml-3 px-2 py-1 rounded text-sm font-medium ${
               displayOHLC.isUp
                 ? 'text-okx-up bg-okx-up/15'
                 : 'text-okx-down bg-okx-down/15'
@@ -818,7 +836,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
             <div className="mx-4 h-6 w-px bg-okx-border-secondary" />
 
             {/* High/Low (ETH 本位) */}
-            <div className="flex items-center gap-4 text-[12px]">
+            <div className="flex items-center gap-4 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="text-okx-text-secondary">{t("high")}</span>
                 <span className="text-okx-up">{formatPriceETH(displayOHLC.high)}</span>
@@ -843,7 +861,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
             <button
               key={key}
               onClick={() => setResolution(key)}
-              className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
+              className={`px-2 py-0.5 text-xs font-medium rounded transition-all ${
                 resolution === key
                   ? 'text-okx-text-primary bg-blue-500'
                   : 'text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-hover'
@@ -856,7 +874,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
 
         <div className="flex-1" />
 
-        <div className="flex items-center gap-3 text-[12px]">
+        <div className="flex items-center gap-3 text-xs">
           <span className="text-okx-text-secondary">{currentTime} UTC</span>
           <span className="text-okx-text-tertiary">|</span>
 
@@ -925,7 +943,7 @@ export function TokenPriceChart({ symbol, displaySymbol, className, latestTrade 
                 )}
               </div>
               <div>
-                <p className="text-okx-text-secondary text-[13px]">
+                <p className="text-okx-text-secondary text-sm">
                   {wsLoading || isLoadingHistory
                     ? t("loadingKline")
                     : historyError

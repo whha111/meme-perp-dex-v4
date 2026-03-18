@@ -62,7 +62,7 @@ export const NETWORK_CONFIG = {
   CHAIN_ID: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56"),
   CHAIN_NAME: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56") === 56 ? "BSC Mainnet" : "BSC Testnet",
   BLOCK_EXPLORER: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || "https://bscscan.com",
-  RPC_URL: process.env.NEXT_PUBLIC_BSC_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "https://bsc-dataseed.binance.org/",
+  RPC_URL: process.env.NEXT_PUBLIC_BSC_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/",
 };
 
 /**
@@ -296,6 +296,20 @@ export const SETTLEMENT_V2_ABI = [
     type: "function",
   },
   {
+    inputs: [],
+    name: "depositBNB",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "user", type: "address" }],
+    name: "depositBNBFor",
+    outputs: [],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
     inputs: [
       { name: "amount", type: "uint256" },
       { name: "userEquity", type: "uint256" },
@@ -304,6 +318,18 @@ export const SETTLEMENT_V2_ABI = [
       { name: "signature", type: "bytes" },
     ],
     name: "withdraw",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "amount", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+      { name: "deadline", type: "uint256" },
+      { name: "signature", type: "bytes" },
+    ],
+    name: "fastWithdraw",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
@@ -370,6 +396,14 @@ export const SETTLEMENT_V2_ABI = [
  */
 export function getExplorerUrl(addressOrTx: string, type: "address" | "tx" = "address"): string {
   return `${NETWORK_CONFIG.BLOCK_EXPLORER}/${type}/${addressOrTx}`;
+}
+
+/**
+ * PancakeSwap V2 integration for graduated tokens
+ */
+export function getPancakeSwapUrl(tokenAddress: string): string {
+  const chainParam = NETWORK_CONFIG.CHAIN_ID === 56 ? "bsc" : "bscTestnet";
+  return `https://pancakeswap.finance/swap?chain=${chainParam}&outputCurrency=${tokenAddress}`;
 }
 
 /**

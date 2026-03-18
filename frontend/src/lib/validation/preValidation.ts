@@ -189,8 +189,8 @@ const VALIDATION_MESSAGES: Record<string, MessagePair> = {
     en: "Trading pool is not active",
   },
   [ValidationIds.TOKEN_GRADUATED]: {
-    zh: "该代币已毕业，请在 DEX 交易",
-    en: "Token graduated, please trade on DEX",
+    zh: "该代币已毕业，交易通过 PancakeSwap V2 执行",
+    en: "Token graduated — trading via PancakeSwap V2",
   },
 };
 

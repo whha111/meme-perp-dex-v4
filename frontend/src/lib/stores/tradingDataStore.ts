@@ -28,6 +28,7 @@ export interface WssOnChainToken {
   metadataURI: string;
   perpEnabled: boolean;
   realETHReserve: string;
+  priceChangePercent24h?: string;
 }
 
 // 仓位方向

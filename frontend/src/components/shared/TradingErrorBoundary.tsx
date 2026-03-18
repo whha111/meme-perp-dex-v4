@@ -139,14 +139,14 @@ export class TradingErrorBoundary extends Component<Props, State> {
             onClick={() =>
               this.setState((prev) => ({ showDetail: !prev.showDetail }))
             }
-            className="text-[10px] text-okx-text-tertiary hover:text-okx-text-secondary transition-colors"
+            className="text-xs text-okx-text-tertiary hover:text-okx-text-secondary transition-colors"
           >
             {this.state.showDetail ? "▲" : "▼"} {t.detail}
           </button>
         )}
 
         {this.state.showDetail && this.state.error && (
-          <pre className="mt-2 text-[10px] text-okx-down font-mono bg-okx-bg-secondary p-2 rounded max-w-full overflow-auto max-h-[80px]">
+          <pre className="mt-2 text-xs text-okx-down font-mono bg-okx-bg-secondary p-2 rounded max-w-full overflow-auto max-h-[80px]">
             {this.state.error.message}
           </pre>
         )}

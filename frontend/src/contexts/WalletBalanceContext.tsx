@@ -121,9 +121,9 @@ export function WalletBalanceProvider({
       );
       if (res.ok) {
         const data = await res.json();
-        // availableBalance = effectiveAvailable - pendingOrdersLocked - positionMargin
-        // For the "交易账户余额" display, we want the full available (including settlement)
-        setSettlementBalance(BigInt(data.availableBalance || "0"));
+        // Use settlementAvailable (pure on-chain: deposits - withdrawals) for display,
+        // NOT availableBalance which includes mode2Adj (stale fake deposit balances)
+        setSettlementBalance(BigInt(data.settlementAvailable || data.availableBalance || "0"));
       }
     } catch {
       // Ignore fetch errors

@@ -104,7 +104,7 @@ export function LiquidityPanel({
       {/* Status Badge */}
       <div className="flex items-center gap-2">
         <span
-          className={`px-2 py-0.5 rounded text-[11px] font-medium ${
+          className={`px-2 py-0.5 rounded text-xs font-medium ${
             poolState.isGraduated
               ? "bg-purple-500/20 text-purple-500"
               : poolState.isActive
@@ -119,7 +119,7 @@ export function LiquidityPanel({
               : t("trading.paused")}
         </span>
         {poolState.creator && (
-          <span className="text-okx-text-tertiary text-[10px]">
+          <span className="text-okx-text-tertiary text-xs">
             {t("holders.creator")}: {poolState.creator.slice(0, 6)}...{poolState.creator.slice(-4)}
           </span>
         )}
@@ -128,7 +128,7 @@ export function LiquidityPanel({
       {/* Graduation Progress Bar */}
       {!poolState.isGraduated && (
         <div>
-          <div className="flex justify-between text-[11px] mb-1">
+          <div className="flex justify-between text-xs mb-1">
             <span className="text-okx-text-secondary">{t("trading.graduationProgress")}</span>
             <span className="text-okx-text-primary font-bold">{progressPct.toFixed(1)}%</span>
           </div>
@@ -138,7 +138,7 @@ export function LiquidityPanel({
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <div className="flex justify-between text-[10px] text-okx-text-tertiary mt-1">
+          <div className="flex justify-between text-xs text-okx-text-tertiary mt-1">
             <span>{fmtNum(soldTokens)} {t("swap.sold")}</span>
             <span>{fmtNum(graduationTarget)} {t("swap.graduationTarget")}</span>
           </div>
@@ -170,21 +170,21 @@ export function LiquidityPanel({
 
       {/* Bonding Curve Info */}
       <div className="border-t border-okx-border-primary pt-3 space-y-2">
-        <h4 className="text-[12px] text-okx-text-secondary font-medium">{t("trading.bondingCurve")}</h4>
-        <div className="flex justify-between text-[11px]">
+        <h4 className="text-xs text-okx-text-secondary font-medium">{t("trading.bondingCurve")}</h4>
+        <div className="flex justify-between text-xs">
           <span className="text-okx-text-tertiary">{t("common.price")}</span>
           <span className="text-okx-text-primary">
             {fmtEthPrice(priceEth)}
-            <span className="text-okx-text-tertiary ml-1.5 text-[10px]">{fmtUsd(priceUsdVal)}</span>
+            <span className="text-okx-text-tertiary ml-1.5 text-xs">{fmtUsd(priceUsdVal)}</span>
           </span>
         </div>
-        <div className="flex justify-between text-[11px]">
+        <div className="flex justify-between text-xs">
           <span className="text-okx-text-tertiary">{t("swap.sold")}</span>
           <span className="text-okx-text-primary">
             {((soldTokens / totalSupply) * 100).toFixed(2)}%
           </span>
         </div>
-        <div className="flex justify-between text-[11px]">
+        <div className="flex justify-between text-xs">
           <span className="text-okx-text-tertiary">K</span>
           <span className="text-okx-text-primary">
             {fmtNum(vETH, 4)} × {fmtNum(vToken)}
@@ -206,9 +206,9 @@ function StatCard({
 }) {
   return (
     <div className="bg-okx-bg-hover rounded-lg p-3">
-      <div className="text-[10px] text-okx-text-tertiary mb-1">{label}</div>
-      <div className="text-[13px] text-okx-text-primary font-bold">{value}</div>
-      {subValue && <div className="text-[10px] text-okx-text-secondary mt-0.5">{subValue}</div>}
+      <div className="text-xs text-okx-text-tertiary mb-1">{label}</div>
+      <div className="text-sm text-okx-text-primary font-bold">{value}</div>
+      {subValue && <div className="text-xs text-okx-text-secondary mt-0.5">{subValue}</div>}
     </div>
   );
 }

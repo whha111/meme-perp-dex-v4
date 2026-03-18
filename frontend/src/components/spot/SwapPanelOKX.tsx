@@ -1,15 +1,16 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useBalance, useReadContract } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, useBalance, useReadContract, usePublicClient } from "wagmi";
 import { parseUnits, formatUnits, type Address, erc20Abi } from "viem";
 import { useExecuteSwap, ETH_DECIMALS } from "@/hooks/spot/useExecuteSwap";
 import { useOnChainQuote } from "@/hooks/spot/useOnChainQuote";
+import { useDexQuote, useDexSwap, useDexPoolInfo, useTokenAllowance } from "@/hooks/spot/useDexSwap";
 // useWalletBalance 已删除 - 余额应通过 WebSocket 从后端推送
 import { SecurityStatus } from "@/components/common/SecurityStatusBanner";
 import { useToast } from "@/components/shared/Toast";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { CONTRACTS } from "@/lib/contracts";
+import { CONTRACTS, getPancakeSwapUrl } from "@/lib/contracts";
 import { tradeEventEmitter } from "@/lib/tradeEvents";
 import { GRADUATION_THRESHOLD, REAL_TOKEN_SUPPLY } from "@/lib/protocol-constants";
 
@@ -22,6 +23,7 @@ import { showGlobalError } from "@/components/shared/ErrorModal";
 import { parseErrorCode, isUserCancelledError } from "@/lib/errors/errorDictionary";
 import { devLog } from "@/lib/debug-logger";
 import { useTranslations } from "next-intl";
+import { BnbIcon } from "@/components/common/BnbIcon";
 import { validateBuyTransaction, validateSellTransaction, ValidationState } from "@/lib/validation/preValidation";
 import { PreValidationWarning, InlineValidation } from "@/components/shared/PreValidationWarning";
 
@@ -77,8 +79,8 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
     return Math.round(globalSlippageTolerance * 100); // 使用全局配置
   }, [customSlippage, globalSlippageTolerance]);
   
-  // 检查交易是否被禁用
-  const isTradingDisabled = isGraduated || !isPoolActive;
+  // 检查交易是否被禁用 (毕业代币走 DEX，不禁用交易)
+  const isTradingDisabled = !isPoolActive && !isGraduated;
   
   // 计算内盘进度 (已售出/毕业目标)
   // 毕业目标 = 793M (需要卖出的代币数量，不是剩余代币阈值207M)
@@ -133,6 +135,8 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
 
   const bondingCurveProgress = animatedProgress;
 
+  const publicClient = usePublicClient();
+
   // 余额从链上查询
   const { data: ethBalanceData, refetch: refetchEthBalance } = useBalance({ address });
   // 临时使用 0 作为占位符
@@ -147,6 +151,18 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
     ? { value: internalBalance, decimals: 18, symbol: tokenLabel, formatted: formatUnits(internalBalance, 18) }
     : tokenBalance;
 
+  // DEX 交易执行 (hooks 必须在顶层，不能有条件)
+  const { buyTokens, sellTokens, isPending: isDexSwapping, isConfirmed: isDexConfirmed, txHash: dexTxHash, error: dexSwapError, reset: resetDexSwap } = useDexSwap();
+
+  // DEX 流动性池信息
+  const { poolInfo: dexPoolInfo } = useDexPoolInfo(isGraduated ? tokenAddress : undefined);
+
+  // DEX 授权 (approve Router, 不是 TokenFactory)
+  const { allowance: dexAllowance, approve: approveDexRouter, isApproving: isDexApproving, refetchAllowance: refetchDexAllowance } = useTokenAllowance(
+    isGraduated ? tokenAddress : undefined,
+    CONTRACTS.ROUTER
+  );
+
   // ✅ 授权检查 - 查询用户对 TokenFactory 合约的授权额度
   const { data: allowanceData, refetch: refetchAllowance } = useReadContract({
     address: tokenAddress,
@@ -156,10 +172,10 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
       ? [address, TOKEN_FACTORY_ADDRESS]
       : undefined,
     query: {
-      enabled: !!address && !!tokenAddress && mode === "sell",
+      enabled: !!address && !!tokenAddress && mode === "sell" && !isGraduated,
     },
   });
-  const allowance = allowanceData as bigint | undefined;
+  const allowance = isGraduated ? dexAllowance : (allowanceData as bigint | undefined);
 
   // 订阅交易事件，交易完成后立即刷新余额
   useEffect(() => {
@@ -173,6 +189,10 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
           refetchEthBalance();
           refetchTokenBalance();
           refetchAllowance();
+          if (isGraduated) {
+            refetchDexAllowance();
+            refetchDexQuote();
+          }
         }, 1000);
       }
     });
@@ -189,6 +209,13 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
       return null;
     }
   }, [amount]);
+
+  // DEX 报价 (PancakeSwap V2 Router getAmountsOut) — 放在 amountInBigInt 之后
+  const { quote: dexQuote, isLoading: isDexQuoting, error: dexQuoteError, refetch: refetchDexQuote } = useDexQuote(
+    isGraduated ? tokenAddress : undefined,
+    amountInBigInt ?? 0n,
+    mode === "buy"
+  );
 
   // 是否需要授权
   const isApprovalRequired = useMemo(() => {
@@ -230,17 +257,31 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
   }, [approvalTxHash]);
 
   const handleApprove = async () => {
-    if (!tokenAddress || !TOKEN_FACTORY_ADDRESS) return;
+    if (!tokenAddress) return;
     try {
-      // 无限授权，用户只需授权一次
-      const MAX_UINT256 = 2n ** 256n - 1n;
-      await writeContract({
-        address: tokenAddress,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [TOKEN_FACTORY_ADDRESS, MAX_UINT256],
-      });
-      showToast(t("approvalSubmitted"), "success");
+      if (isGraduated) {
+        // 毕业代币: approve PancakeSwap V2 Router
+        const MAX_UINT256 = 2n ** 256n - 1n;
+        const hash = await approveDexRouter(MAX_UINT256);
+        showToast(t("approvalSubmitted"), "success");
+        // Wait for on-chain confirmation then refetch DEX allowance
+        if (hash && publicClient) {
+          await publicClient.waitForTransactionReceipt({ hash });
+          showToast(t("approvalSuccess"), "success");
+          refetchDexAllowance();
+        }
+      } else {
+        // 内盘代币: approve TokenFactory
+        if (!TOKEN_FACTORY_ADDRESS) return;
+        const MAX_UINT256 = 2n ** 256n - 1n;
+        await writeContract({
+          address: tokenAddress,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [TOKEN_FACTORY_ADDRESS, MAX_UINT256],
+        });
+        showToast(t("approvalSubmitted"), "success");
+      }
     } catch (e) {
       logError(e, 'SwapPanelOKX:approve');
       const errorCode = parseErrorCode(e);
@@ -250,34 +291,52 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
     }
   };
 
-  // ✅ Phase 2 重构：使用 TokenFactory 链上报价
+  // ✅ Phase 2 重构：使用 TokenFactory 链上报价 (仅未毕业代币)
   const {
-    amountOut,
-    minimumReceived,
-    executionPrice,
-    priceImpact,
+    amountOut: bondingAmountOut,
+    minimumReceived: bondingMinReceived,
+    executionPrice: bondingExecPrice,
+    priceImpact: bondingPriceImpact,
     currentPrice,
-    isLoading: isQuoting,
-    isError: isQuoteError,
-    error: quoteError,
+    isLoading: isBondingQuoting,
+    isError: isBondingQuoteError,
+    error: bondingQuoteError,
   } = useOnChainQuote({
     tokenAddress,
     amountIn: amountInBigInt,
     isBuy: mode === "buy",
     slippageBps,
-    enabled: !!tokenAddress && !!amountInBigInt && amountInBigInt > 0n,
+    enabled: !!tokenAddress && !!amountInBigInt && amountInBigInt > 0n && !isGraduated,
   });
+
+  // 统一报价: 毕业代币用 DEX, 内盘用 Bonding Curve
+  const isQuoting = isGraduated ? isDexQuoting : isBondingQuoting;
+  const isQuoteError = isGraduated ? !!dexQuoteError : isBondingQuoteError;
+  const quoteError = isGraduated ? dexQuoteError : bondingQuoteError;
 
   // 构造兼容的 quote 对象
   const quote = useMemo(() => {
-    if (!amountOut || amountOut === 0n) return null;
+    if (isGraduated) {
+      // DEX 报价
+      if (!dexQuote) return null;
+      const slippageFactor = BigInt(10000 - slippageBps);
+      const minReceived = (dexQuote.amountOut * slippageFactor) / 10000n;
+      return {
+        amountOut: dexQuote.amountOut,
+        minimumReceived: minReceived,
+        executionPrice: 0, // DEX 不需要
+        priceImpact: dexQuote.priceImpact,
+      };
+    }
+    // Bonding curve 报价
+    if (!bondingAmountOut || bondingAmountOut === 0n) return null;
     return {
-      amountOut,
-      minimumReceived,
-      executionPrice,
-      priceImpact,
+      amountOut: bondingAmountOut,
+      minimumReceived: bondingMinReceived,
+      executionPrice: bondingExecPrice,
+      priceImpact: bondingPriceImpact,
     };
-  }, [amountOut, minimumReceived, executionPrice, priceImpact]);
+  }, [isGraduated, dexQuote, slippageBps, bondingAmountOut, bondingMinReceived, bondingExecPrice, bondingPriceImpact]);
 
   // ✅ 前置校验状态
   const validation: ValidationState = useMemo(() => {
@@ -288,7 +347,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         isConnected: !!address,
         ethBalance: ethBalance?.value,
         amount,
-        priceImpact: priceImpact,
+        priceImpact: quote?.priceImpact ?? 0,
         slippageBps,
         isPoolActive,
         isGraduated,
@@ -300,7 +359,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         tokenBalance: effectiveBalance?.value,
         tokenSymbol,
         amount,
-        priceImpact: priceImpact,
+        priceImpact: quote?.priceImpact ?? 0,
         slippageBps,
         ethBalance: ethBalance?.value,
         isPoolActive,
@@ -308,7 +367,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         allowance,
       });
     }
-  }, [mode, address, ethBalance?.value, amount, priceImpact, slippageBps, isPoolActive, isGraduated, effectiveBalance?.value, allowance, instId]);
+  }, [mode, address, ethBalance?.value, amount, quote?.priceImpact, slippageBps, isPoolActive, isGraduated, effectiveBalance?.value, allowance, instId]);
 
   // ✅ 保存报价到 store
   useEffect(() => {
@@ -336,34 +395,50 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
 
   const { executeSwap, isPending: isSwapping } = useExecuteSwap();
 
-  const isPending = isSwapping || isApprovalConfirming;
+  const isPending = isSwapping || isDexSwapping || isApprovalConfirming || isDexApproving;
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
-      {/* 毕业/不活跃提示 */}
+      {/* 毕业 DEX 交易提示 */}
+      {isGraduated && (
+        <div className="bg-gradient-to-r from-okx-up/10 to-okx-accent/10 border border-okx-up/30 rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-lg">🥞</span>
+            <span className="text-okx-up font-bold text-sm">
+              {t("dexTrading") || "DEX Trading"}
+            </span>
+          </div>
+          <p className="text-okx-text-secondary text-xs">
+            {t("dexTradingDesc") || "This token has graduated! Trading via PancakeSwap V2."}
+          </p>
+          {dexPoolInfo && (
+            <div className="flex gap-4 mt-2 text-xs text-okx-text-tertiary">
+              <span>{t("liquidity") || "Liquidity"}: {(Number(dexPoolInfo.reserveBNB) / 1e18).toFixed(2)} BNB</span>
+              <a
+                href={getPancakeSwapUrl(tokenAddress!)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-okx-accent hover:underline"
+              >
+                PancakeSwap ↗
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 池子不活跃提示 */}
       {isTradingDisabled && (
         <div className="bg-gradient-to-r from-okx-warning/20 to-okx-warning/20 border border-okx-warning/50 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-lg">🎓</span>
-            <span className="text-okx-warning font-bold text-[13px]">
-              {isGraduated ? t("tokenGraduated") : t("poolPaused")}
+            <span className="text-lg">⚠️</span>
+            <span className="text-okx-warning font-bold text-sm">
+              {t("poolPaused")}
             </span>
           </div>
-          <p className="text-okx-text-secondary text-[11px]">
-            {isGraduated
-              ? t("graduatedDesc")
-              : t("poolPausedDesc")}
+          <p className="text-okx-text-secondary text-xs">
+            {t("poolPausedDesc")}
           </p>
-          {isGraduated && (
-            <a
-              href={`https://pancakeswap.finance/swap?chain=bsc&inputCurrency=BNB&outputCurrency=${tokenAddress}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-block bg-okx-accent text-okx-text-primary px-3 py-1.5 rounded-lg text-[12px] font-bold hover:opacity-90"
-            >
-              🥞 {t("tradeOnUniswap")}
-            </a>
-          )}
         </div>
       )}
 
@@ -371,13 +446,13 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
       <div className="flex bg-okx-bg-card p-1 rounded-lg border border-okx-border-primary">
         <button
           onClick={() => setMode("buy")}
-          className={`flex-1 py-1.5 text-[13px] font-bold rounded-md transition-all ${mode === 'buy' ? 'bg-okx-bg-hover text-okx-up' : 'text-okx-text-tertiary hover:text-okx-text-secondary'}`}
+          className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${mode === 'buy' ? 'bg-okx-bg-hover text-okx-up' : 'text-okx-text-tertiary hover:text-okx-text-secondary'}`}
         >
           {t("buy")}
         </button>
         <button
           onClick={() => setMode("sell")}
-          className={`flex-1 py-1.5 text-[13px] font-bold rounded-md transition-all ${mode === 'sell' ? 'bg-okx-bg-hover text-okx-down' : 'text-okx-text-tertiary hover:text-okx-text-secondary'}`}
+          className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${mode === 'sell' ? 'bg-okx-bg-hover text-okx-down' : 'text-okx-text-tertiary hover:text-okx-text-secondary'}`}
         >
           {t("sell")}
         </button>
@@ -388,16 +463,16 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         <div className="flex gap-4 border-b border-okx-border-primary mb-4">
           <button
             onClick={() => setOrderType("market")}
-            className={`pb-2 text-[13px] font-bold relative ${orderType === 'market' ? 'text-okx-text-primary' : 'text-okx-text-tertiary'}`}
+            className={`pb-2 text-sm font-bold relative ${orderType === 'market' ? 'text-okx-text-primary' : 'text-okx-text-tertiary'}`}
           >
             {t("market")}
             {orderType === 'market' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-okx-text-primary"></div>}
           </button>
           <button
             onClick={() => setOrderType("limit")}
-            className={`pb-2 text-[13px] font-bold relative ${orderType === 'limit' ? 'text-okx-text-primary' : 'text-okx-text-tertiary'}`}
+            className={`pb-2 text-sm font-bold relative ${orderType === 'limit' ? 'text-okx-text-primary' : 'text-okx-text-tertiary'}`}
           >
-            {t("limit")} <span className="text-[10px] ml-0.5">ⓘ</span>
+            {t("limit")} <span className="text-xs ml-0.5">ⓘ</span>
             {orderType === 'limit' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-okx-text-primary"></div>}
           </button>
         </div>
@@ -405,7 +480,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         {/* 金额输入 */}
         <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-okx-text-secondary text-[12px]">{mode === "buy" ? t("pay") : t("sell")}</span>
+            <span className="text-okx-text-secondary text-xs">{mode === "buy" ? t("pay") : t("sell")}</span>
             <button
               onClick={() => {
                 // 点击余额快速填入
@@ -417,7 +492,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                   setAmount(formatUnits(effectiveBalance.value, 18));
                 }
               }}
-              className="text-okx-text-tertiary text-[11px] hover:text-meme-lime transition-colors cursor-pointer"
+              className="text-okx-text-tertiary text-xs hover:text-meme-lime transition-colors cursor-pointer"
             >
               {t("balance")}: <span className="text-okx-text-primary font-mono">
                 {mode === "buy"
@@ -436,12 +511,8 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
               placeholder="0.00"
             />
             <div className="flex items-center gap-2">
-              <span className="text-okx-text-secondary text-[14px] font-bold">{mode === "buy" ? "BNB" : tokenLabel}</span>
-              {mode === "buy" && (
-                <div className="w-5 h-5 rounded-full bg-okx-warning flex items-center justify-center">
-                  <span className="text-[10px] font-bold text-black">B</span>
-                </div>
-              )}
+              <span className="text-okx-text-secondary text-sm font-bold">{mode === "buy" ? "BNB" : tokenLabel}</span>
+              {mode === "buy" && <BnbIcon size={20} />}
             </div>
           </div>
         </div>
@@ -455,7 +526,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                 <button
                   key={val}
                   onClick={() => setAmount(val)}
-                  className={`flex-1 py-2 text-[12px] font-bold rounded-lg border transition-all ${
+                  className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${
                     amount === val
                       ? "bg-okx-up/20 border-okx-up text-okx-up"
                       : "bg-okx-bg-hover border-okx-border-primary text-okx-text-primary hover:border-okx-border-secondary hover:bg-okx-bg-active"
@@ -482,7 +553,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                       setAmount(formatUnits(sellAmount, 18));
                     }
                   }}
-                  className="flex-1 py-2 text-[12px] text-okx-text-primary font-bold rounded-lg border border-okx-border-primary bg-okx-bg-hover hover:border-okx-down hover:bg-okx-down/10 transition-all"
+                  className="flex-1 py-2 text-xs text-okx-text-primary font-bold rounded-lg border border-okx-border-primary bg-okx-bg-hover hover:border-okx-down hover:bg-okx-down/10 transition-all"
                 >
                   {label}
                 </button>
@@ -539,27 +610,60 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                 return;
               }
               try {
-                devLog.log("[SwapPanel] Calling executeSwap...");
+                if (isGraduated && tokenAddress) {
+                  // ===== DEX 模式 (PancakeSwap V2 Router) =====
+                  devLog.log("[SwapPanel] DEX swap via PancakeSwap V2 Router", {
+                    mode,
+                    amountOut: quote.amountOut.toString(),
+                    minimumReceived: quote.minimumReceived.toString(),
+                  });
 
-                // minimumAmountOut 直接使用合约 previewBuy/previewSell 返回值 + 用户滑点
-                // quote.minimumReceived = previewResult * (10000 - slippageBps) / 10000
-                // 不做额外计算，合约已经给出精确报价
-                devLog.log("[SwapPanel] Swap params:", {
-                  mode,
-                  amountOut: quote.amountOut.toString(),
-                  minimumReceived: quote.minimumReceived.toString(),
-                  slippageBps,
-                });
+                  let dexHash: string | undefined;
+                  if (mode === "buy") {
+                    dexHash = await buyTokens({
+                      tokenAddress,
+                      amountInBNB: amountInBigInt,
+                      amountOutMin: quote.minimumReceived,
+                    });
+                  } else {
+                    dexHash = await sellTokens({
+                      tokenAddress,
+                      amountIn: amountInBigInt,
+                      amountOutMin: quote.minimumReceived,
+                    });
+                  }
+                  // Emit trade event so TradingTerminal refreshes trade list
+                  if (dexHash) {
+                    tradeEventEmitter.emit(tokenAddress, dexHash);
+                  }
+                } else {
+                  // ===== 内盘模式 (TokenFactory Bonding Curve) =====
+                  devLog.log("[SwapPanel] Bonding curve swap via TokenFactory", {
+                    mode,
+                    amountOut: quote.amountOut.toString(),
+                    minimumReceived: quote.minimumReceived.toString(),
+                    slippageBps,
+                  });
 
-                await executeSwap({
-                  tokenAddress,
-                  amountIn: amountInBigInt,
-                  minimumAmountOut: quote.minimumReceived,
-                  isBuy: mode === "buy",
-                });
-                devLog.log("[SwapPanel] executeSwap completed");
+                  await executeSwap({
+                    tokenAddress,
+                    amountIn: amountInBigInt,
+                    minimumAmountOut: quote.minimumReceived,
+                    isBuy: mode === "buy",
+                  });
+                }
+                devLog.log("[SwapPanel] Swap completed");
                 setAmount("");
                 showToast(mode === "buy" ? t("buySuccess") : t("sellSuccess"), "success");
+                // 刷新余额
+                setTimeout(() => {
+                  refetchEthBalance();
+                  refetchTokenBalance();
+                  if (isGraduated) {
+                    refetchDexQuote();
+                    refetchDexAllowance();
+                  }
+                }, 2000);
               } catch (error) {
                 logError(error, 'SwapPanelOKX');
                 const errorCode = parseErrorCode(error);
@@ -581,20 +685,20 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         <div className="border-t border-okx-border-primary pt-3 mt-2">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <span className="text-okx-text-secondary text-[11px]">{t("slippageTolerance")}</span>
+              <span className="text-okx-text-secondary text-xs">{t("slippageTolerance")}</span>
               <button
                 onClick={() => setShowSlippageSettings(!showSlippageSettings)}
-                className="text-okx-text-tertiary hover:text-okx-text-secondary text-[10px]"
+                className="text-okx-text-tertiary hover:text-okx-text-secondary text-xs"
               >
                 ⚙️
               </button>
             </div>
-            <span className="text-okx-text-primary text-[11px] font-bold">{(slippageBps / 100).toFixed(2)}%</span>
+            <span className="text-okx-text-primary text-xs font-bold">{(slippageBps / 100).toFixed(2)}%</span>
           </div>
           
           {showSlippageSettings && (
             <div className="bg-okx-bg-secondary border border-okx-border-primary rounded-lg p-3 mt-2">
-              <div className="text-okx-text-secondary text-[10px] mb-2">{t("presetSlippage")}</div>
+              <div className="text-okx-text-secondary text-xs mb-2">{t("presetSlippage")}</div>
               <div className="grid grid-cols-4 gap-2 mb-3">
                 {[
                   { label: "0.5%", value: 50 },
@@ -609,7 +713,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                       setCustomSlippage((preset.value / 100).toString());
                       setShowSlippageSettings(false);
                     }}
-                    className={`py-1.5 text-[11px] font-bold rounded border transition-all ${
+                    className={`py-1.5 text-xs font-bold rounded border transition-all ${
                       slippageBps === preset.value
                         ? "bg-okx-bg-hover border-meme-lime text-meme-lime"
                         : "bg-okx-bg-hover border-okx-border-primary text-okx-text-primary hover:border-okx-border-secondary"
@@ -620,7 +724,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                 ))}
               </div>
               
-              <div className="text-okx-text-secondary text-[10px] mb-1">{t("customSlippage")}</div>
+              <div className="text-okx-text-secondary text-xs mb-1">{t("customSlippage")}</div>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -640,20 +744,20 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
                   min="0"
                   max="100"
                   step="0.1"
-                  className="bg-okx-bg-primary border border-okx-border-primary rounded px-2 py-1.5 text-okx-text-primary text-[11px] flex-1 outline-none focus:border-meme-lime"
+                  className="bg-okx-bg-primary border border-okx-border-primary rounded px-2 py-1.5 text-okx-text-primary text-xs flex-1 outline-none focus:border-meme-lime"
                 />
-                <span className="text-okx-text-secondary text-[11px]">%</span>
+                <span className="text-okx-text-secondary text-xs">%</span>
               </div>
               {customSlippage && (isNaN(parseFloat(customSlippage)) || parseFloat(customSlippage) < 0 || parseFloat(customSlippage) > 100) && (
-                <div className="text-okx-down text-[9px] mt-1">{t("slippageRange")}</div>
+                <div className="text-okx-down text-xs mt-1">{t("slippageRange")}</div>
               )}
-              <div className="flex items-center justify-between text-okx-text-tertiary text-[9px] mt-2">
+              <div className="flex items-center justify-between text-okx-text-tertiary text-xs mt-2">
                 <span>{tc("currentSetting")}: {(slippageBps / 100).toFixed(2)}%</span>
                 <button
                   onClick={() => {
                     setShowSlippageSettings(false);
                   }}
-                  className="text-meme-lime hover:text-okx-up text-[10px] font-bold"
+                  className="text-meme-lime hover:text-okx-up text-xs font-bold"
                 >
                   {tc("done")}
                 </button>
@@ -664,14 +768,14 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
 
         {/* 报价信息 */}
         {quoteError && (
-          <div className="text-okx-down text-[11px] mt-2">
+          <div className="text-okx-down text-xs mt-2">
             {t("quoteFailed")}: {quoteError instanceof Error ? quoteError.message : tc("loading")}
           </div>
         )}
 
         {/* 大额卖出警告 */}
         {quote && mode === "sell" && quote.priceImpact > 5 && (
-          <div className={`mt-2 p-2 rounded-lg border text-[11px] ${
+          <div className={`mt-2 p-2 rounded-lg border text-xs ${
             quote.priceImpact > 20
               ? "bg-okx-down/20 border-okx-down/50 text-okx-down"
               : quote.priceImpact > 10
@@ -696,7 +800,7 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         )}
 
         {quote && (
-          <div className="flex flex-col gap-1 mt-2 text-[11px] text-okx-text-secondary">
+          <div className="flex flex-col gap-1 mt-2 text-xs text-okx-text-secondary">
             <div className="flex justify-between">
               <span>{t("expectedReceive")}</span>
               <span className="text-okx-text-primary font-mono">
@@ -717,31 +821,62 @@ export function SwapPanelOKX({ symbol, displaySymbol, securityStatus, tokenAddre
         )}
       </div>
 
-      {/* 内盘进度条 - Bonding Curve Progress */}
-      <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-[10px] text-okx-text-tertiary">{t("bondingCurveProgress")}</span>
-          <span className="text-[10px] text-okx-text-primary font-bold">{graduationProgress.toFixed(2)}%</span>
+      {/* 内盘进度条 / DEX 流动性信息 */}
+      {isGraduated ? (
+        // DEX 流动性信息
+        <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs text-okx-text-tertiary">{t("dexLiquidity") || "DEX Liquidity (PancakeSwap V2)"}</span>
+            <span className="text-xs text-okx-up font-bold">🎓 {t("graduated") || "Graduated"}</span>
+          </div>
+          {dexPoolInfo ? (
+            <div className="flex flex-col gap-1 text-xs">
+              <div className="flex justify-between text-okx-text-secondary">
+                <span>BNB</span>
+                <span className="text-okx-text-primary font-mono">
+                  {(Number(dexPoolInfo.reserveBNB) / 1e18).toFixed(4)}
+                </span>
+              </div>
+              <div className="flex justify-between text-okx-text-secondary">
+                <span>{tokenLabel}</span>
+                <span className="text-okx-text-primary font-mono">
+                  {(Number(dexPoolInfo.reserveToken) / 1e18).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex justify-between text-okx-text-secondary">
+                <span>{t("price") || "Price"}</span>
+                <span className="text-okx-text-primary font-mono">
+                  {dexPoolInfo.price > 0 ? dexPoolInfo.price.toExponential(4) : "—"} BNB
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-okx-text-tertiary text-center py-2">
+              {t("loadingLiquidity") || "Loading liquidity..."}
+            </div>
+          )}
         </div>
-        <div className="w-full h-2 bg-okx-bg-secondary rounded-full overflow-hidden relative">
-          <div
-            className="h-full bg-gradient-to-r from-okx-up to-okx-accent transition-all duration-300 ease-out relative"
-            style={{width: `${graduationProgress}%`}}
-          >
-            {/* Add pulse effect at the tip of the progress bar */}
-            <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/50 blur-[2px] animate-pulse"></div>
+      ) : (
+        // Bonding Curve Progress
+        <div className="bg-okx-bg-card border border-okx-border-primary rounded-lg p-3">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs text-okx-text-tertiary">{t("bondingCurveProgress")}</span>
+            <span className="text-xs text-okx-text-primary font-bold">{graduationProgress.toFixed(2)}%</span>
+          </div>
+          <div className="w-full h-2 bg-okx-bg-secondary rounded-full overflow-hidden relative">
+            <div
+              className="h-full bg-gradient-to-r from-okx-up to-okx-accent transition-all duration-300 ease-out relative"
+              style={{width: `${graduationProgress}%`}}
+            >
+              <div className="absolute right-0 top-0 bottom-0 w-2 bg-white/50 blur-[2px] animate-pulse"></div>
+            </div>
+          </div>
+          <div className="flex justify-between text-xs mt-2 text-okx-text-tertiary">
+            <span>{t("sold")}: {soldTokensM.toFixed(2)}M</span>
+            <span>{t("target")}: 793M ({t("graduation")})</span>
           </div>
         </div>
-        <div className="flex justify-between text-[9px] mt-2 text-okx-text-tertiary">
-          <span>{t("sold")}: {soldTokensM.toFixed(2)}M</span>
-          <span>{t("target")}: 793M ({t("graduation")})</span>
-        </div>
-        {(graduationProgress >= 100 || isGraduated) && (
-          <div className="mt-2 text-center text-[10px] text-okx-warning font-bold">
-            🎓 {t("graduatedMessage")}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

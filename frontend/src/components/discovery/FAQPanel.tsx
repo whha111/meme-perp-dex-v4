@@ -62,7 +62,7 @@ export function FAQPanel({ isOpen, onClose }: FAQPanelProps) {
                 onClick={() => setExpandedIndex(expandedIndex === index ? null : index)}
                 className="w-full p-4 flex items-center justify-between text-left"
               >
-                <span className="text-okx-text-primary text-[14px] font-medium pr-4">
+                <span className="text-okx-text-primary text-sm font-medium pr-4">
                   {item.question}
                 </span>
                 <span className="text-okx-text-tertiary text-lg flex-shrink-0">
@@ -70,7 +70,7 @@ export function FAQPanel({ isOpen, onClose }: FAQPanelProps) {
                 </span>
               </button>
               {expandedIndex === index && (
-                <div className="px-4 pb-4 text-okx-text-secondary text-[13px] leading-relaxed whitespace-pre-line">
+                <div className="px-4 pb-4 text-okx-text-secondary text-sm leading-relaxed whitespace-pre-line">
                   {item.answer}
                 </div>
               )}
@@ -80,7 +80,7 @@ export function FAQPanel({ isOpen, onClose }: FAQPanelProps) {
 
         {/* Footer */}
         <div className="sticky bottom-0 bg-okx-bg-primary border-t border-okx-border-primary p-4">
-          <p className="text-okx-text-tertiary text-[11px] text-center">
+          <p className="text-okx-text-tertiary text-xs text-center">
             {t('contact')}
           </p>
         </div>

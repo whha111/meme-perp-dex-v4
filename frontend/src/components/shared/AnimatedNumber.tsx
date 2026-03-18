@@ -102,7 +102,7 @@ export function AnimatedNumber({
     >
       {showArrow && changeDirection && (
         <span
-          className={`text-[10px] ${
+          className={`text-xs ${
             changeDirection === "up" ? "text-okx-up" : "text-okx-down"
           }`}
         >

@@ -91,7 +91,7 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
         <div className="flex border-b border-okx-border-primary">
           <button
             onClick={() => setActiveTab('new')}
-            className={`flex-1 py-3 text-[13px] font-medium ${
+            className={`flex-1 py-3 text-sm font-medium ${
               activeTab === 'new'
                 ? 'text-okx-text-primary border-b-2 border-okx-up'
                 : 'text-okx-text-secondary'
@@ -101,7 +101,7 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
           </button>
           <button
             onClick={() => setActiveTab('migrating')}
-            className={`flex-1 py-3 text-[13px] font-medium ${
+            className={`flex-1 py-3 text-sm font-medium ${
               activeTab === 'migrating'
                 ? 'text-okx-text-primary border-b-2 border-okx-up'
                 : 'text-okx-text-secondary'
@@ -111,7 +111,7 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
           </button>
           <button
             onClick={() => setActiveTab('migrated')}
-            className={`flex-1 py-3 text-[13px] font-medium ${
+            className={`flex-1 py-3 text-sm font-medium ${
               activeTab === 'migrated'
                 ? 'text-okx-text-primary border-b-2 border-okx-up'
                 : 'text-okx-text-secondary'
@@ -125,26 +125,26 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
         <div className="p-4 space-y-5">
           {/* Keyword Search */}
           <div>
-            <label className="block text-okx-text-secondary text-[12px] mb-2">{t('keyword')}</label>
+            <label className="block text-okx-text-secondary text-xs mb-2">{t('keyword')}</label>
             <input
               type="text"
               value={localFilters.keyword}
               onChange={(e) => handleInputChange('keyword', e.target.value)}
               placeholder={t('keywordPlaceholder')}
-              className="w-full bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+              className="w-full bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
             />
           </div>
 
           {/* Market Cap Range */}
           <div>
-            <label className="block text-okx-text-secondary text-[12px] mb-2">{t('marketCap')}</label>
+            <label className="block text-okx-text-secondary text-xs mb-2">{t('marketCap')}</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={localFilters.marketCapMin}
                 onChange={(e) => handleInputChange('marketCapMin', e.target.value)}
                 placeholder={t('min')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
               <span className="text-okx-text-tertiary">-</span>
               <input
@@ -152,21 +152,21 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
                 value={localFilters.marketCapMax}
                 onChange={(e) => handleInputChange('marketCapMax', e.target.value)}
                 placeholder={t('max')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
             </div>
           </div>
 
           {/* 24h Volume Range */}
           <div>
-            <label className="block text-okx-text-secondary text-[12px] mb-2">{t('volume24h')}</label>
+            <label className="block text-okx-text-secondary text-xs mb-2">{t('volume24h')}</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={localFilters.volume24hMin}
                 onChange={(e) => handleInputChange('volume24hMin', e.target.value)}
                 placeholder={t('min')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
               <span className="text-okx-text-tertiary">-</span>
               <input
@@ -174,21 +174,21 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
                 value={localFilters.volume24hMax}
                 onChange={(e) => handleInputChange('volume24hMax', e.target.value)}
                 placeholder={t('max')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
             </div>
           </div>
 
           {/* 24h Price Change Range */}
           <div>
-            <label className="block text-okx-text-secondary text-[12px] mb-2">{t('priceChange24h')}</label>
+            <label className="block text-okx-text-secondary text-xs mb-2">{t('priceChange24h')}</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={localFilters.priceChangeMin}
                 onChange={(e) => handleInputChange('priceChangeMin', e.target.value)}
                 placeholder={t('min')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
               <span className="text-okx-text-tertiary">%</span>
               <span className="text-okx-text-tertiary">-</span>
@@ -197,7 +197,7 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
                 value={localFilters.priceChangeMax}
                 onChange={(e) => handleInputChange('priceChangeMax', e.target.value)}
                 placeholder={t('max')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
               <span className="text-okx-text-tertiary">%</span>
             </div>
@@ -205,14 +205,14 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
 
           {/* Traders Count Range */}
           <div>
-            <label className="block text-okx-text-secondary text-[12px] mb-2">{t('traders')}</label>
+            <label className="block text-okx-text-secondary text-xs mb-2">{t('traders')}</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={localFilters.tradersMin}
                 onChange={(e) => handleInputChange('tradersMin', e.target.value)}
                 placeholder={t('min')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
               <span className="text-okx-text-tertiary">-</span>
               <input
@@ -220,21 +220,21 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
                 value={localFilters.tradersMax}
                 onChange={(e) => handleInputChange('tradersMax', e.target.value)}
                 placeholder={t('max')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
             </div>
           </div>
 
           {/* Progress Range */}
           <div>
-            <label className="block text-okx-text-secondary text-[12px] mb-2">{t('progress')}</label>
+            <label className="block text-okx-text-secondary text-xs mb-2">{t('progress')}</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={localFilters.progressMin}
                 onChange={(e) => handleInputChange('progressMin', e.target.value)}
                 placeholder={t('min')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
               <span className="text-okx-text-tertiary">%</span>
               <span className="text-okx-text-tertiary">-</span>
@@ -243,14 +243,14 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
                 value={localFilters.progressMax}
                 onChange={(e) => handleInputChange('progressMax', e.target.value)}
                 placeholder={t('max')}
-                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-[13px] text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
+                className="flex-1 bg-okx-bg-hover border border-okx-border-primary rounded-lg px-3 py-2 text-sm text-okx-text-primary placeholder:text-okx-text-tertiary focus:outline-none focus:border-okx-border-secondary"
               />
               <span className="text-okx-text-tertiary">%</span>
             </div>
           </div>
 
           {/* Note */}
-          <div className="text-okx-text-tertiary text-[11px] flex items-start gap-1">
+          <div className="text-okx-text-tertiary text-xs flex items-start gap-1">
             <span>ⓘ</span>
             <span>{t('note')}</span>
           </div>
@@ -260,13 +260,13 @@ export function FilterPanel({ isOpen, onClose, filters, onFiltersChange, counts 
         <div className="sticky bottom-0 bg-okx-bg-primary border-t border-okx-border-primary p-4 flex gap-3">
           <button
             onClick={handleReset}
-            className="flex-1 bg-okx-bg-hover border border-okx-border-primary text-okx-text-primary py-2.5 rounded-lg text-[13px] font-medium hover:bg-okx-bg-card transition-colors"
+            className="flex-1 bg-okx-bg-hover border border-okx-border-primary text-okx-text-primary py-2.5 rounded-lg text-sm font-medium hover:bg-okx-bg-card transition-colors"
           >
             {t('reset')}
           </button>
           <button
             onClick={handleApply}
-            className="flex-1 bg-okx-up text-black py-2.5 rounded-lg text-[13px] font-bold hover:opacity-90 transition-opacity"
+            className="flex-1 bg-okx-up text-black py-2.5 rounded-lg text-sm font-bold hover:opacity-90 transition-opacity"
           >
             {t('apply')}
           </button>

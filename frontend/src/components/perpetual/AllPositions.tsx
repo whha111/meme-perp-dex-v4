@@ -200,12 +200,12 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
         {/* 风险统计 */}
         <div className="flex gap-1">
           {data.dangerCount > 0 && (
-            <span className="px-1.5 py-0.5 bg-red-900/50 text-red-400 rounded text-[10px] font-bold animate-pulse">
+            <span className="px-1.5 py-0.5 bg-red-900/50 text-red-400 rounded text-xs font-bold animate-pulse">
               {data.dangerCount} <svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
             </span>
           )}
           {data.warningCount > 0 && (
-            <span className="px-1.5 py-0.5 bg-yellow-900/50 text-yellow-400 rounded text-[10px]">
+            <span className="px-1.5 py-0.5 bg-yellow-900/50 text-yellow-400 rounded text-xs">
               {data.warningCount} !
             </span>
           )}
@@ -224,7 +224,7 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
           <button
             key={f.key}
             onClick={() => setFilter(f.key as typeof filter)}
-            className={`px-2 py-0.5 rounded text-[10px] whitespace-nowrap transition-colors ${
+            className={`px-2 py-0.5 rounded text-xs whitespace-nowrap transition-colors ${
               filter === f.key
                 ? "bg-blue-600 text-white"
                 : `bg-gray-800 ${f.color || "text-gray-400"} hover:bg-gray-700`
@@ -242,7 +242,7 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
             <p>{t("noPositionsFound")}</p>
           </div>
         ) : (
-          <table className="w-full text-[10px]">
+          <table className="w-full text-xs">
             <thead className="sticky top-0 bg-gray-900">
               <tr className="text-gray-500 border-b border-gray-700">
                 <th className="text-left py-1 px-1 font-normal">Trader</th>
@@ -278,7 +278,7 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
 
                     {/* Side */}
                     <td className="py-1.5 px-1 text-center">
-                      <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
+                      <span className={`px-1 py-0.5 rounded text-xs font-bold ${
                         pos.isLong ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400"
                       }`}>
                         {pos.isLong ? "L" : "S"}{pos.leverage}x
@@ -288,7 +288,7 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
                     {/* Size */}
                     <td className="py-1.5 px-1 text-right">
                       <div className="text-okx-text-primary">{formatSize(pos.size)}</div>
-                      <div className="text-gray-500 text-[9px]">{formatETH(pos.collateral)}</div>
+                      <div className="text-gray-500 text-xs">{formatETH(pos.collateral)}</div>
                     </td>
 
                     {/* Entry Price */}
@@ -308,7 +308,7 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
                       pnlValue >= 0 ? "text-green-400" : "text-red-400"
                     }`}>
                       <div>{formatPnL(pos.unrealizedPnL)}</div>
-                      <div className="text-[9px]">{formatPercent(pos.roe)}</div>
+                      <div className="text-xs">{formatPercent(pos.roe)}</div>
                     </td>
 
                     {/* Risk Progress */}
@@ -329,7 +329,7 @@ export function AllPositions({ token, apiUrl = MATCHING_ENGINE_URL }: Props) {
       </div>
 
       {/* 当前价格 */}
-      <div className="pt-2 border-t border-gray-700 text-center text-[10px] text-gray-400 flex-shrink-0">
+      <div className="pt-2 border-t border-gray-700 text-center text-xs text-gray-400 flex-shrink-0">
         {t("currentPrice")}: <span className="text-okx-text-primary font-mono">{formatPrice(data.currentPrice)}</span>
       </div>
     </div>

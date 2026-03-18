@@ -138,10 +138,10 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
       {/* 标题栏 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-okx-border-primary">
         <div className="flex items-center gap-2">
-          <span className="text-okx-text-primary font-bold text-[14px]">{t('holders.distribution')}</span>
-          <span className="text-okx-text-tertiary text-[12px]">{t('holders.top10')}</span>
+          <span className="text-okx-text-primary font-bold text-sm">{t('holders.distribution')}</span>
+          <span className="text-okx-text-tertiary text-xs">{t('holders.top10')}</span>
         </div>
-        <div className="flex items-center gap-3 text-[11px]">
+        <div className="flex items-center gap-3 text-xs">
           <span className="text-okx-text-secondary">
             {t('holders.holderCount')}: <span className="text-okx-text-primary">{holdersData.total_holders?.toLocaleString() || 0}</span>
           </span>
@@ -157,7 +157,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
         <div className="mx-4 mt-3 px-3 py-2 bg-okx-down/10 border border-okx-down/30 rounded-lg">
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4 text-okx-down flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
-            <span className="text-okx-down text-[11px]">
+            <span className="text-okx-down text-xs">
               {t('holders.top10Warning', { percent: holdersData.top10_percentage?.toFixed(1) })}
             </span>
           </div>
@@ -169,7 +169,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
         <div className="mx-4 mt-2 px-3 py-2 bg-okx-warning/10 border border-okx-warning/30 rounded-lg">
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4 text-okx-warning flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
-            <span className="text-okx-warning text-[11px]">
+            <span className="text-okx-warning text-xs">
               {t('holders.creatorHolding', { percent: holdersData.creator_holding?.toFixed(2) })}
             </span>
           </div>
@@ -184,7 +184,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
             className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-okx-bg-hover transition-colors group"
           >
             {/* 排名 */}
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
               index < 3 ? "bg-okx-warning/20 text-okx-warning" : "bg-okx-bg-hover text-okx-text-tertiary"
             }`}>
               {holder.rank || index + 1}
@@ -194,15 +194,15 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <a
-                  href={`https://sepolia.basescan.org/address/${holder.address}`}
+                  href={`https://testnet.bscscan.com/address/${holder.address}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-okx-text-primary font-mono text-[12px] hover:text-okx-accent transition-colors"
+                  className="text-okx-text-primary font-mono text-xs hover:text-okx-accent transition-colors"
                 >
                   {formatAddress(holder.address)}
                 </a>
                 {(holder.is_creator || holder.is_dev || holder.label) && (
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${getLabelStyle(holder)}`}>
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getLabelStyle(holder)}`}>
                     {getLabelText(holder)}
                   </span>
                 )}
@@ -217,7 +217,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
                 </div>
               </div>
               {/* 持仓数量 */}
-              <div className="text-okx-text-tertiary text-[10px] mt-0.5">
+              <div className="text-okx-text-tertiary text-xs mt-0.5">
                 {formatBalance(holder.balance)} {instId.toUpperCase()}
               </div>
             </div>
@@ -225,7 +225,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
             {/* 百分比进度条 */}
             <div className="w-24">
               <div className="flex items-center justify-between mb-1">
-                <span className={`text-[11px] font-bold ${
+                <span className={`text-xs font-bold ${
                   holder.percentage > 10 ? "text-okx-down" :
                   holder.percentage > 5 ? "text-okx-warning" : "text-okx-text-primary"
                 }`}>
@@ -246,7 +246,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
 
             {/* PnL 显示 */}
             {holder.pnl_percentage !== undefined && (
-              <div className={`text-[11px] font-medium w-16 text-right ${
+              <div className={`text-xs font-medium w-16 text-right ${
                 holder.pnl_percentage >= 0 ? "text-okx-up" : "text-okx-down"
               }`}>
                 {holder.pnl_percentage >= 0 ? "+" : ""}{holder.pnl_percentage.toFixed(1)}%
@@ -257,7 +257,7 @@ export function TopHolders({ instId, creatorAddress, className }: TopHoldersProp
       </div>
 
       {/* 底部统计 */}
-      <div className="px-4 py-3 border-t border-okx-border-primary flex items-center justify-between text-[11px]">
+      <div className="px-4 py-3 border-t border-okx-border-primary flex items-center justify-between text-xs">
         <div className="flex items-center gap-4">
           <span className="text-okx-text-tertiary">
             {t('holders.top10Share')}: <span className={`font-bold ${

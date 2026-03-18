@@ -20,7 +20,7 @@ export function WalletButton() {
       <div className="relative">
         <button
           onClick={() => setShowMenu(!showMenu)}
-          className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-[13px] font-bold hover:opacity-90 transition-opacity"
+          className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity"
         >
           {address.slice(0, 6)}...{address.slice(-4)}
         </button>
@@ -52,7 +52,7 @@ export function WalletButton() {
         }
       }}
       disabled={isPending || !injectedConnector}
-      className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-[13px] font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
+      className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
     >
       {isPending ? t('common.connecting') : t('wallet.connect')}
     </button>

@@ -28,7 +28,7 @@ export function LendingMarketTable({
       <table className="w-full">
         {/* Table Head */}
         <thead>
-          <tr className="text-[11px] text-okx-text-tertiary uppercase tracking-wider">
+          <tr className="text-xs text-okx-text-tertiary uppercase tracking-wider">
             <th className="text-left px-5 py-3 font-medium">{t("colAsset")}</th>
             <th className="text-right px-3 py-3 font-medium hidden md:table-cell">{t("colTotalSupply")}</th>
             <th className="text-right px-3 py-3 font-medium">{t("colSupplyAPY")}</th>
@@ -61,12 +61,12 @@ export function LendingMarketTable({
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
                     {/* Token Avatar */}
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-okx-bg-hover to-okx-border-primary flex items-center justify-center text-[11px] font-bold text-okx-text-secondary shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-okx-bg-hover to-okx-border-primary flex items-center justify-center text-xs font-bold text-okx-text-secondary shrink-0">
                       {pool.tokenSymbol.slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-bold text-[13px] leading-tight">{pool.tokenSymbol}</div>
-                      <div className="text-[10px] text-okx-text-tertiary truncate max-w-[120px]">
+                      <div className="font-bold text-sm leading-tight">{pool.tokenSymbol}</div>
+                      <div className="text-xs text-okx-text-tertiary truncate max-w-[120px]">
                         {pool.tokenName}
                       </div>
                     </div>
@@ -79,28 +79,28 @@ export function LendingMarketTable({
 
                 {/* Total Supply */}
                 <td className="text-right px-3 py-4 hidden md:table-cell">
-                  <span className="text-[13px] font-medium">{pool.totalDepositsFormatted}</span>
+                  <span className="text-sm font-medium">{pool.totalDepositsFormatted}</span>
                 </td>
 
                 {/* Supply APY */}
                 <td className="text-right px-3 py-4">
-                  <span className="text-[13px] font-bold text-okx-up">{pool.supplyAPY}%</span>
+                  <span className="text-sm font-bold text-okx-up">{pool.supplyAPY}%</span>
                 </td>
 
                 {/* Total Borrowed */}
                 <td className="text-right px-3 py-4 hidden lg:table-cell">
-                  <span className="text-[13px] font-medium">{pool.totalBorrowedFormatted}</span>
+                  <span className="text-sm font-medium">{pool.totalBorrowedFormatted}</span>
                 </td>
 
                 {/* Borrow APY */}
                 <td className="text-right px-3 py-4 hidden lg:table-cell">
-                  <span className="text-[13px] font-medium">{pool.borrowAPY}%</span>
+                  <span className="text-sm font-medium">{pool.borrowAPY}%</span>
                 </td>
 
                 {/* Utilization */}
                 <td className="text-right px-3 py-4 hidden sm:table-cell">
                   <div className="flex flex-col items-end gap-1">
-                    <span className={`text-[12px] font-medium ${
+                    <span className={`text-xs font-medium ${
                       utilNum >= 90 ? "text-okx-down" : utilNum >= 80 ? "text-yellow-500" : "text-okx-text-primary"
                     }`}>
                       {pool.utilizationPercent}%
@@ -121,13 +121,13 @@ export function LendingMarketTable({
                 <td className="text-right px-3 py-4">
                   {userPos ? (
                     <div>
-                      <div className="text-[13px] font-medium">{userPos.depositAmountFormatted}</div>
+                      <div className="text-sm font-medium">{userPos.depositAmountFormatted}</div>
                       {userPos.pendingInterest > 0n && (
-                        <div className="text-[10px] text-okx-up">+{userPos.pendingInterestFormatted}</div>
+                        <div className="text-xs text-okx-up">+{userPos.pendingInterestFormatted}</div>
                       )}
                     </div>
                   ) : (
-                    <span className="text-[13px] text-okx-text-tertiary">—</span>
+                    <span className="text-sm text-okx-text-tertiary">—</span>
                   )}
                 </td>
 
@@ -138,7 +138,7 @@ export function LendingMarketTable({
                       e.stopPropagation();
                       onSelect(pool.token);
                     }}
-                    className={`px-3.5 py-1.5 rounded-lg text-[11px] font-bold transition-all ${
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       isSelected
                         ? "bg-okx-accent text-black"
                         : "bg-okx-bg-hover text-okx-text-primary hover:bg-okx-accent hover:text-black"

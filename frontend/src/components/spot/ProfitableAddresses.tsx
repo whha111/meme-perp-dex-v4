@@ -118,16 +118,16 @@ export function ProfitableAddresses({
     <div className={`${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-okx-border-primary">
-        <span className="text-okx-text-primary font-bold text-[14px]">
+        <span className="text-okx-text-primary font-bold text-sm">
           {t("trading.profitAddresses")}
         </span>
-        <span className="text-okx-text-tertiary text-[11px]">
+        <span className="text-okx-text-tertiary text-xs">
           {data.total_holders} {t("holders.holderCount").toLowerCase()}
         </span>
       </div>
 
       {/* Table Header */}
-      <div className="grid grid-cols-[auto_1fr_100px_100px] gap-2 px-4 py-2 text-[10px] text-okx-text-tertiary border-b border-okx-border-primary">
+      <div className="grid grid-cols-[auto_1fr_100px_100px] gap-2 px-4 py-2 text-xs text-okx-text-tertiary border-b border-okx-border-primary">
         <span>#</span>
         <span>{t("holders.address")}</span>
         <span className="text-right">{t("holders.amount")}</span>
@@ -143,7 +143,7 @@ export function ProfitableAddresses({
           return (
             <div
               key={holder.address}
-              className="grid grid-cols-[auto_1fr_100px_100px] gap-2 px-4 py-2 text-[11px] hover:bg-okx-bg-hover transition-colors items-center"
+              className="grid grid-cols-[auto_1fr_100px_100px] gap-2 px-4 py-2 text-xs hover:bg-okx-bg-hover transition-colors items-center"
             >
               {/* Rank */}
               <span className={`w-5 text-center font-bold ${
@@ -155,7 +155,7 @@ export function ProfitableAddresses({
               {/* Address + Label */}
               <div className="flex items-center gap-1.5 min-w-0">
                 <a
-                  href={`https://sepolia.basescan.org/address/${holder.address}`}
+                  href={`https://testnet.bscscan.com/address/${holder.address}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-okx-text-primary font-mono hover:text-okx-accent transition-colors"
@@ -163,7 +163,7 @@ export function ProfitableAddresses({
                   {formatAddress(holder.address)}
                 </a>
                 {holder.label && (
-                  <span className={`px-1 py-0.5 rounded text-[8px] font-medium ${
+                  <span className={`px-1 py-0.5 rounded text-xs font-medium ${
                     holder.is_creator
                       ? "bg-okx-accent/20 text-okx-accent"
                       : "bg-purple-500/20 text-purple-500"

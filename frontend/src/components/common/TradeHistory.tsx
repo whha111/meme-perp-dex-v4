@@ -40,7 +40,7 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
 
   return (
     <div className={`w-full overflow-x-auto ${className}`}>
-      <table className="w-full text-[12px] text-left border-collapse">
+      <table className="w-full text-xs text-left border-collapse">
         <thead>
           <tr className="text-okx-text-tertiary border-b border-okx-border-primary">
             <th className="py-2 px-3 font-normal">{t('history.timeSort')} ⇅ ▽</th>
@@ -75,20 +75,20 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                 {/* 类型 */}
                 <td className="py-3 px-3">
                   <div className="flex items-center gap-1.5">
-                    <span className={`px-2 py-0.5 rounded-[4px] font-bold text-[11px] ${
+                    <span className={`px-2 py-0.5 rounded-[4px] font-bold text-xs ${
                       isBuy ? "bg-okx-up/10 text-okx-up" : "bg-okx-down/10 text-okx-down"
                     }`}>
                       {isBuy ? t('token.buy') : t('token.sell')}
                     </span>
                     {/* Dev Sold 警告标识 */}
                     {!isBuy && (trade.isDev || trade.label === "DEV") && (
-                      <span className="px-1.5 py-0.5 rounded bg-okx-down/20 text-okx-down text-[9px] font-bold border border-okx-down/30 animate-pulse">
+                      <span className="px-1.5 py-0.5 rounded bg-okx-down/20 text-okx-down text-xs font-bold border border-okx-down/30 animate-pulse">
                         {t('history.devSold')}
                       </span>
                     )}
                     {/* Creator Sold 警告标识 */}
                     {!isBuy && (trade.isCreator || trade.label === "CREATOR") && (
-                      <span className="px-1.5 py-0.5 rounded bg-okx-warning/20 text-okx-warning text-[9px] font-bold border border-okx-warning/30">
+                      <span className="px-1.5 py-0.5 rounded bg-okx-warning/20 text-okx-warning text-xs font-bold border border-okx-warning/30">
                         {t('holders.creator')}
                       </span>
                     )}
@@ -110,7 +110,7 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                   <div className={`font-bold ${isBuy ? "text-okx-up" : "text-okx-down"}`}>
                     {trade.quantity}
                   </div>
-                  <div className="text-okx-text-tertiary text-[10px]">
+                  <div className="text-okx-text-tertiary text-xs">
                     {trade.quantitySol}
                   </div>
                 </td>
@@ -121,7 +121,7 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                     <span className="text-okx-text-primary font-mono">{trade.address}</span>
                     {/* 地址标签 */}
                     {trade.label && !["DEV", "CREATOR"].includes(trade.label) && (
-                      <span className={`px-1 py-0.5 rounded text-[9px] font-medium ${
+                      <span className={`px-1 py-0.5 rounded text-xs font-medium ${
                         trade.label === "WHALE" ? "bg-purple-500/20 text-purple-500 border border-purple-500/30" :
                         trade.label === "SNIPER" ? "bg-okx-down/20 text-okx-down border border-okx-down/30" :
                         trade.label === "KOL" ? "bg-blue-500/20 text-blue-500 border border-blue-500/30" :
@@ -146,10 +146,10 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                   {(trade.isDev || trade.isCreator || trade.label === "DEV" || trade.label === "CREATOR") && (
                     <div className="flex gap-1 mt-0.5">
                       {(trade.isDev || trade.label === "DEV") && (
-                        <span className="text-[10px] text-okx-warning flex items-center gap-0.5"><svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg> {t('holders.dev')}</span>
+                        <span className="text-xs text-okx-warning flex items-center gap-0.5"><svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg> {t('holders.dev')}</span>
                       )}
                       {(trade.isCreator || trade.label === "CREATOR") && (
-                        <span className="text-[10px] text-blue-500 flex items-center gap-0.5"><svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg> {t('holders.creator')}</span>
+                        <span className="text-xs text-blue-500 flex items-center gap-0.5"><svg className="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg> {t('holders.creator')}</span>
                       )}
                     </div>
                   )}
@@ -163,7 +163,7 @@ export function TradeHistory({ trades, className }: TradeHistoryProps) {
                 {/* 详情 */}
                 <td className="py-3 px-3 text-center">
                   <a 
-                    href={`https://sepolia.basescan.org/tx/${trade.txHash}`}
+                    href={`https://testnet.bscscan.com/tx/${trade.txHash}`}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="text-okx-text-tertiary hover:text-okx-text-primary"
