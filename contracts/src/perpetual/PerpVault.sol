@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./IPerpVault.sol";
 
 /// @notice WETH interface for M-21 fallback transfers
-interface IWETH {
+interface IWETH_PerpVault {
     function deposit() external payable;
     function withdraw(uint256) external;
     function transfer(address to, uint256 value) external returns (bool);
@@ -533,8 +533,8 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
             // M-21 FIX: WETH fallback — 当 ETH 转账失败时（如 trader 是无 receive 的合约），
             // 将 ETH 包装为 WETH (ERC-20) 再转账，保证 trader 一定能收到资金
             if (weth == address(0)) revert WETHNotSet();
-            IWETH(weth).deposit{value: actualPay}();
-            require(IWETH(weth).transfer(trader, actualPay), "WETH transfer failed");
+            IWETH_PerpVault(weth).deposit{value: actualPay}();
+            require(IWETH_PerpVault(weth).transfer(trader, actualPay), "WETH transfer failed");
             emit WETHFallbackUsed(trader, actualPay);
         }
 

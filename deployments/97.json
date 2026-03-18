@@ -1,0 +1,22 @@
+{
+  "chainId": 97,
+  "chainName": "BSC Testnet",
+  "deployedAt": "2026-03-18T00:00:00Z",
+  "deployer": "0xAecb229194314999E396468eb091b42E44Bc3c8c",
+  "contracts": {
+    "TokenFactory": "0xd75be83c73fb331cc566e3d58563f74058e4ca0b",
+    "Settlement": "0xe866e042dc6ec594c7534974cff0f9eaeebc2a1a",
+    "SettlementV2": "0xac85c7ed31fa521bfdb7ae63d6e9385e4af79f1b",
+    "PriceFeed": "0x5c727ea9ac9be9036e538064e7db245cc09545fd",
+    "PositionManager": "0x5176a9f4093dede515c3a524f218cb4324500d22",
+    "Vault": "0xf00a94a1ae8a276c3aed24f5b542f4ec5e1f373c",
+    "PerpVault": "0xeafa2fad2bb336da8cd8309669b0c16f597decdb",
+    "RiskManager": "0x6338608189d8153608d1d014e928490a33cfabf4",
+    "FundingRate": "0x05a2bb4ad567f2b078a7028d4ca47998fb7f88d6",
+    "Liquidation": "0x6c9a628219501c3271ea5b95b5aab8d1b593383e",
+    "InsuranceFund": "0x6140b2f99a95b4e056d0bc6360c17232f1a8ab91",
+    "ContractRegistry": "0x4bd177026918c774feaad56aa6ce3d69e0d67021",
+    "WBNB": "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
+    "PancakeRouterV2": "0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
+  }
+}

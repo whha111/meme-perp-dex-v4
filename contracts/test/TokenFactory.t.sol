@@ -48,7 +48,7 @@ contract TokenFactoryTest is Test {
         vm.deal(user2, 100 ether);
 
         vm.prank(owner);
-        factory = new TokenFactory(owner, feeReceiver, mockRouter);
+        factory = new TokenFactory(owner, feeReceiver, mockRouter, address(0x99));
     }
 
     // ══════════════════════════════════════════════════════════════════════════════

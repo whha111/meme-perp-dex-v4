@@ -148,8 +148,8 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     // Liquidation 地址（毕业后启用清算奖励）
     address public liquidation;
 
-    // WBNB 地址 (BSC Mainnet)
-    address public constant WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    // WBNB 地址 (通过构造函数传入，支持多链部署)
+    address public immutable WETH;
 
     // P0-2: 毕业后的 Uniswap V2 Pair 地址 (token => pair)
     mapping(address => address) public uniswapPairs;
@@ -223,13 +223,16 @@ contract TokenFactory is Ownable, ReentrancyGuard, Pausable, ICurveEvents {
     constructor(
         address initialOwner,
         address feeReceiver_,
-        address uniswapV2Router_
+        address uniswapV2Router_,
+        address weth_
     ) Ownable(initialOwner) {
         if (feeReceiver_ == address(0)) revert InvalidAddress();
         if (uniswapV2Router_ == address(0)) revert InvalidAddress();
+        if (weth_ == address(0)) revert InvalidAddress();
 
         feeReceiver = feeReceiver_;
         uniswapV2Router = uniswapV2Router_;
+        WETH = weth_;
     }
 
     // ══════════════════════════════════════════════════════════════════════════════

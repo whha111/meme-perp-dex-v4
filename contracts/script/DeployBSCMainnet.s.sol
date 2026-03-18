@@ -46,7 +46,7 @@ import "../src/perpetual/InsuranceFund.sol";
 contract DeployBSCMainnet is Script {
     // ── BSC Mainnet Constants ──
     address constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-    address constant PANCAKE_ROUTER_V2 = 0x10ED43C718714eb63d5aA57B78f21c9F0d0e3d9A;
+    address constant PANCAKE_ROUTER_V2 = 0x10ED43c718714EB63d5aA57B78f21C9f0D0E3d9A;
 
     // ── Configuration (adjust for mainnet risk tolerance) ──
     uint256 constant SEED_LP_BNB = 2 ether;            // PerpVault 初始 LP (mainnet: higher seed)
@@ -75,7 +75,7 @@ contract DeployBSCMainnet is Script {
 
         console.log("=============================================");
         console.log("  BSC MAINNET Full Deployment");
-        console.log("  *** REAL FUNDS — DOUBLE CHECK ***");
+        console.log("  *** REAL FUNDS -- DOUBLE CHECK ***");
         console.log("=============================================");
         console.log("Deployer:", deployer);
         console.log("Balance:", deployer.balance / 1e18, "BNB");
@@ -118,7 +118,7 @@ contract DeployBSCMainnet is Script {
         // ════════════════════════════════════════════
         console.log("\n=== Phase 2: Dependent Contracts ===");
 
-        tokenFactory = new TokenFactory(deployer, deployer, PANCAKE_ROUTER_V2);
+        tokenFactory = new TokenFactory(deployer, deployer, PANCAKE_ROUTER_V2, WBNB);
         console.log("TokenFactory:", address(tokenFactory));
 
         positionManager = new PositionManager(

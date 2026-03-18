@@ -109,7 +109,7 @@ contract DeployBSCTestnet is Script {
         // ════════════════════════════════════════════
         console.log("\n=== Phase 2: Dependent Contracts ===");
 
-        tokenFactory = new TokenFactory(deployer, deployer, PANCAKE_ROUTER_V2);
+        tokenFactory = new TokenFactory(deployer, deployer, PANCAKE_ROUTER_V2, WBNB);
         console.log("TokenFactory:", address(tokenFactory));
 
         positionManager = new PositionManager(

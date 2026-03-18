@@ -88,7 +88,7 @@ contract E2ETest is Test {
         mockRouter = new MockUniswapRouter();
 
         // Deploy real contracts
-        tokenFactory = new TokenFactory(owner, feeReceiver, address(mockRouter));
+        tokenFactory = new TokenFactory(owner, feeReceiver, address(mockRouter), address(0x99));
         priceFeed = new PriceFeed();
         perpVault = new PerpVault();
         lendingPool = new LendingPool(owner, address(tokenFactory));

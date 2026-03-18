@@ -17,6 +17,8 @@ import "../src/common/PriceFeed.sol";
 contract DeployFreshTokenFactory is Script {
     // BSC Mainnet PancakeSwap V2 Router
     address constant UNISWAP_ROUTER = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
+    // BSC Mainnet WBNB
+    address constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
@@ -32,7 +34,7 @@ contract DeployFreshTokenFactory is Script {
         console.log("PriceFeed deployed:", address(priceFeed));
 
         // 2. Deploy TokenFactory
-        TokenFactory tokenFactory = new TokenFactory(deployer, deployer, UNISWAP_ROUTER);
+        TokenFactory tokenFactory = new TokenFactory(deployer, deployer, UNISWAP_ROUTER, WBNB);
         console.log("TokenFactory deployed:", address(tokenFactory));
 
         // 3. Wire: PriceFeed <-> TokenFactory
