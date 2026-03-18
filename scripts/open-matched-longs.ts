@@ -13,14 +13,18 @@ import { bscTestnet } from "viem/chains";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const RPC_URL = "https://bsc-testnet-rpc.publicnode.com";
-const API_URL = "http://localhost:8081";
-const CHAIN_ID = 97;
-const DEPLOYER_KEY = "0x4698c351c4aead4844a41399b035e1177535db94a5418a79df07b7f0bf158776" as Hex;
-const SETTLEMENT_V2 = "0xac85c7ed31fa521bfdb7ae63d6e9385e4af79f1b" as Address;
-const SETTLEMENT_V1 = "0xe866e042dc6ec594c7534974cff0f9eaeebc2a1a" as Address;
-const WBNB = "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address;
-const TOKEN1 = "0x2a69B7aEcc3c0860840B469E5322359bc6c3d612" as Address;
+const deployments = JSON.parse(readFileSync(resolve(__dirname, "../deployments/97.json"), "utf-8"));
+
+const RPC_URL = process.env.RPC_URL || process.env.MEMEPERP_BLOCKCHAIN_RPC_URL;
+if (!RPC_URL) throw new Error("Set RPC_URL or MEMEPERP_BLOCKCHAIN_RPC_URL env var");
+const API_URL = process.env.API_URL || "http://localhost:8081";
+const CHAIN_ID = parseInt(process.env.CHAIN_ID || String(deployments.chainId));
+const DEPLOYER_KEY = (process.env.DEPLOYER_PRIVATE_KEY || process.env.MEMEPERP_BLOCKCHAIN_PRIVATE_KEY) as Hex;
+if (!DEPLOYER_KEY) throw new Error("Set DEPLOYER_PRIVATE_KEY env var");
+const SETTLEMENT_V2 = (deployments.contracts.SettlementV2) as Address;
+const SETTLEMENT_V1 = (deployments.contracts.Settlement) as Address;
+const WBNB = (deployments.contracts.WBNB) as Address;
+const TOKEN1 = (process.env.TOKEN1_ADDRESS || "0x2a69B7aEcc3c0860840B469E5322359bc6c3d612") as Address;
 
 const FUND_PER_WALLET = parseEther("0.12");
 const DEPOSIT_AMOUNT = parseEther("0.1");

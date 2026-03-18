@@ -10,14 +10,26 @@ import type { Address, Hex } from "viem";
 // ============================================================
 
 export const PORT = parseInt(process.env.PORT || "8081");
-export const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
-export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "97"); // BSC Testnet
+export const RPC_URL = process.env.RPC_URL;
+if (!RPC_URL) {
+  console.error("🚨 FATAL: RPC_URL env var is required. No fallback allowed.");
+  process.exit(1);
+}
+export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "");
+if (!process.env.CHAIN_ID || isNaN(CHAIN_ID)) {
+  console.error("🚨 FATAL: CHAIN_ID env var is required (e.g. 56 for BSC Mainnet, 97 for Testnet).");
+  process.exit(1);
+}
 
 // ============================================================
 // 合约地址
 // ============================================================
 
 export const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
+if (!MATCHER_PRIVATE_KEY) {
+  console.error("🚨 FATAL: MATCHER_PRIVATE_KEY env var is required.");
+  process.exit(1);
+}
 export const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
 export const INSURANCE_FUND_ADDRESS = process.env.INSURANCE_FUND_ADDRESS as Address;
 // All contract addresses MUST be set via environment variables. No fallbacks — fail fast on missing config.
@@ -33,6 +45,9 @@ export const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Addres
 export const COLLATERAL_TOKEN_ADDRESS = process.env.COLLATERAL_TOKEN_ADDRESS as Address;
 export const FEE_RECEIVER_ADDRESS = process.env.FEE_RECEIVER_ADDRESS as Address;
 export const LIQUIDATOR_BOT_ADDRESS = (process.env.LIQUIDATOR_BOT_ADDRESS || process.env.FEE_RECEIVER_ADDRESS) as Address;
+export const WETH_ADDRESS = (process.env.WETH_ADDRESS || process.env.COLLATERAL_TOKEN_ADDRESS) as Address;
+export const PANCAKESWAP_FACTORY_ADDRESS = process.env.PANCAKESWAP_FACTORY_ADDRESS as Address;
+export const ROUTER_ADDRESS = process.env.ROUTER_ADDRESS as Address;
 
 // Startup validation: crash immediately if any required contract address is missing
 const REQUIRED_CONTRACT_ADDRESSES: Record<string, Address | undefined> = {
@@ -49,6 +64,7 @@ const REQUIRED_CONTRACT_ADDRESSES: Record<string, Address | undefined> = {
   FEE_RECEIVER_ADDRESS,
   SETTLEMENT_ADDRESS,
   INSURANCE_FUND_ADDRESS,
+  WETH_ADDRESS,
 };
 const missingAddresses = Object.entries(REQUIRED_CONTRACT_ADDRESSES)
   .filter(([, v]) => !v)

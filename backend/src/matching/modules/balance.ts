@@ -18,7 +18,7 @@
 
 import { createPublicClient, http, type Address } from "viem";
 import { bsc } from "viem/chains";
-import { RPC_URL, SETTLEMENT_ADDRESS } from "../config";
+import { RPC_URL, SETTLEMENT_ADDRESS, WETH_ADDRESS as WETH_ADDR_FROM_CONFIG } from "../config";
 import { BalanceRepo } from "../database/redis";
 import { logger } from "../utils/logger";
 import type { UserBalance } from "../types";
@@ -57,8 +57,8 @@ const SETTLEMENT_ABI = [
   },
 ] as const;
 
-// WBNB 地址 (BSC Testnet)
-const WETH_ADDRESS = (process.env.WETH_ADDRESS || process.env.COLLATERAL_TOKEN_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
+// WBNB 地址 — from config.ts (env-driven, no fallback)
+const WETH_ADDRESS = WETH_ADDR_FROM_CONFIG;
 
 // ============================================================
 // Balance Functions

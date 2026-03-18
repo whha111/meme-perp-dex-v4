@@ -23,29 +23,29 @@ redis:
   pool_size: 10
 
 blockchain:
-  # BSC Testnet (Chain 97) — P0-1: RPC URL must come from env in production
-  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL:-https://data-seed-prebsc-1-s1.binance.org:8545/}"
-  chain_id: 97
+  # All values MUST come from env — no hardcoded addresses or chain config
+  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL}"
+  chain_id: ${MEMEPERP_BLOCKCHAIN_CHAIN_ID}
 
-  # Contract Addresses (BSC Testnet — fresh deploy 2026-03-13)
-  router_address: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
-  vault_address: "0xf00a94a1ae8a276c3aed24f5b542f4ec5e1f373c"
-  amm_address: "${MEMEPERP_AMM_ADDRESS:-0x2c23046DC1595754528a10b8340F2AD8fdE05112}"
-  position_address: "0x5176a9f4093dede515c3a524f218cb4324500d22"
-  liquidation_address: "0x6c9a628219501c3271ea5b95b5aab8d1b593383e"
-  funding_rate_address: "0x05a2bb4ad567f2b078a7028d4ca47998fb7f88d6"
-  lending_pool_address: "${MEMEPERP_LENDING_POOL_ADDRESS:-0x98a7665301C0dB32ceff957e1A2c505dF8384CA4}"
-  price_feed_address: "0x5c727ea9ac9be9036e538064e7db245cc09545fd"
-  risk_manager_address: "0x6338608189d8153608d1d014e928490a33cfabf4"
-  presale_address: "0x0000000000000000000000000000000000000000"
-  meme_token_address: "${MEMEPERP_MEME_TOKEN_ADDRESS:-0xB3D475Bf9c7427Fd1dC6494227803fE163320d69}"
+  # Contract Addresses — all from env vars
+  router_address: "${MEMEPERP_ROUTER_ADDRESS}"
+  vault_address: "${MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS}"
+  amm_address: "${MEMEPERP_AMM_ADDRESS}"
+  position_address: "${MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS}"
+  liquidation_address: "${MEMEPERP_LIQUIDATION_ADDRESS}"
+  funding_rate_address: "${MEMEPERP_FUNDING_RATE_ADDRESS}"
+  lending_pool_address: "${MEMEPERP_LENDING_POOL_ADDRESS}"
+  price_feed_address: "${MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS}"
+  risk_manager_address: "${MEMEPERP_RISK_MANAGER_ADDRESS}"
+  presale_address: "${MEMEPERP_PRESALE_ADDRESS:-0x0000000000000000000000000000000000000000}"
+  meme_token_address: "${MEMEPERP_MEME_TOKEN_ADDRESS}"
 
-  # Settlement contracts (BSC Testnet — fresh deploy 2026-03-13)
-  settlement_address: "0xe866e042dc6ec594c7534974cff0f9eaeebc2a1a"
-  settlement_v2_address: "0xac85c7ed31fa521bfdb7ae63d6e9385e4af79f1b"
-  insurance_fund_address: "0x6140b2f99a95b4e056d0bc6360c17232f1a8ab91"
-  contract_registry_address: "0x4bd177026918c774feaad56aa6ce3d69e0d67021"
-  perp_vault_address: "0xeafa2fad2bb336da8cd8309669b0c16f597decdb"
+  # Settlement contracts
+  settlement_address: "${MEMEPERP_SETTLEMENT_ADDRESS}"
+  settlement_v2_address: "${MEMEPERP_SETTLEMENT_V2_ADDRESS}"
+  insurance_fund_address: "${MEMEPERP_INSURANCE_FUND_ADDRESS}"
+  contract_registry_address: "${MEMEPERP_CONTRACT_REGISTRY_ADDRESS}"
+  perp_vault_address: "${MEMEPERP_PERP_VAULT_ADDRESS}"
 
   # P0-1: Private key MUST come from env — NEVER hardcode in config files
   private_key: "${MEMEPERP_BLOCKCHAIN_PRIVATE_KEY}"

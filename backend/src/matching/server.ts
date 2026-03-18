@@ -33,7 +33,7 @@ import { connectRedis as connectNewRedis, disconnectRedis, PositionRepo, TradeRe
 // P1-5: PostgreSQL 订单镜像 (Write-Through Cache)
 import { connectPostgres, disconnectPostgres, isPostgresConnected, OrderMirrorRepo, PositionMirrorRepo, type PgOrderMirror, type PgPositionMirror } from "./database/postgres";
 // P2-4: 仓位大小限制常量
-import { TRADING, ALLOW_FAKE_DEPOSIT, RESET_MODE2_ON_START, PRECISION_MULTIPLIER } from "./config";
+import { TRADING, ALLOW_FAKE_DEPOSIT, RESET_MODE2_ON_START, PRECISION_MULTIPLIER, WETH_ADDRESS as WETH_ADDR_FROM_CONFIG, PANCAKESWAP_FACTORY_ADDRESS } from "./config";
 import { verifyOrderSignature } from "./utils/crypto";
 import { createWalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -156,8 +156,8 @@ const TOKEN_POOL_CACHE = new Map<string, CachedPoolState>();
 // 当代币从 bonding curve 毕业到 Uniswap V2 后，价格源需要切换
 // token address (lowercase) => { pairAddress, isWethToken0 }
 
-const WETH_ADDRESS = getAddress(process.env.WETH_ADDRESS || process.env.COLLATERAL_TOKEN_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address; // WBNB — read from env
-const UNISWAP_V2_FACTORY_ADDRESS = getAddress(process.env.PANCAKESWAP_FACTORY_ADDRESS || "0x6725F303b657a9451d8BA641348b6733DCBd9f4c") as Address; // PancakeSwap V2 Factory — read from env
+const WETH_ADDRESS = getAddress(WETH_ADDR_FROM_CONFIG) as Address;
+const UNISWAP_V2_FACTORY_ADDRESS = PANCAKESWAP_FACTORY_ADDRESS ? getAddress(PANCAKESWAP_FACTORY_ADDRESS) as Address : undefined;
 
 interface GraduatedTokenInfo {
   pairAddress: Address;    // Uniswap V2 Pair 地址
@@ -4899,7 +4899,7 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
   // - 如果 native ETH 不多，value + gas 容易超出余额
   // - WETH 是 ERC20，approve+deposit 只需要 gas (native ETH)，value 从 WETH 余额出
   //
-  const WETH_ADDRESS = (process.env.WETH_ADDRESS || process.env.COLLATERAL_TOKEN_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
+  // WETH_ADDRESS is already defined at module scope from config.ts — reuse it
 
   console.log(`[Deposit] ${trader.slice(0, 10)} 需要存入 Ξ${Number(shortfall) / 1e18} 到 Settlement (native=Ξ${Number(balance.nativeEthBalance) / 1e18}, weth=Ξ${Number(balance.wethBalance) / 1e18})`);
 
