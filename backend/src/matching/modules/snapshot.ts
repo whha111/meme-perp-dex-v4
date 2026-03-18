@@ -23,6 +23,10 @@ type BalanceGetter = (trader: Address) => {
   availableBalance: bigint;
   usedMargin?: bigint;
   unrealizedPnL?: bigint;
+  /** Settlement 合约可用余额 (链上原始值, 不含钱包余额) */
+  settlementAvailable?: bigint;
+  /** 钱包余额 (native + WETH, 用于排除非托管资金) */
+  walletBalance?: bigint;
 };
 
 type PositionGetter = (trader: Address) => Array<{
@@ -108,8 +112,11 @@ function calculateUserEquity(trader: Address): bigint {
   const balance = getBalanceFunc(trader);
   const positions = getPositionsFunc(trader);
 
-  // Total balance from Settlement + wallet
-  let equity = balance.totalBalance;
+  // ★ Merkle equity = SETTLEMENT-ONLY balance (excluding wallet BNB/WBNB)
+  // Using totalBalance - walletBalance gives us: settlementAvailable + mode2Adj + positionMargin
+  // This prevents users from withdrawing non-deposited funds from SettlementV2 pool
+  const walletBal = balance.walletBalance ?? 0n;
+  let equity = balance.totalBalance - walletBal;
 
   // AUDIT-FIX ME-H07: Only include OPEN positions (size > 0)
   // Closed positions (size=0) may have stale unrealizedPnL that inflates equity

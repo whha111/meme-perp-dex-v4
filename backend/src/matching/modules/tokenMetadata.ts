@@ -160,28 +160,29 @@ export async function saveTokenMetadata(data: CreateTokenMetadataRequest): Promi
   const now = new Date().toISOString();
   const key = `${METADATA_PREFIX}${data.instId}`;
 
-  // Check if metadata already exists
+  // Check if metadata already exists — merge to preserve fields from earlier saves
   const existing = await redis.get(key);
-  const createdAt = existing ? JSON.parse(existing).createdAt : now;
+  const prev: Partial<TokenMetadata> = existing ? JSON.parse(existing) : {};
+  const createdAt = prev.createdAt || now;
 
-  // Sanitize string inputs
+  // Sanitize string inputs. Merge: new non-empty values win, fall back to existing.
   const metadata: TokenMetadata = {
     instId: data.instId,
     tokenAddress: data.tokenAddress,
     name: sanitizeString(data.name),
     symbol: sanitizeString(data.symbol),
-    description: data.description ? sanitizeString(data.description) : undefined,
-    logoUrl: data.logoUrl,
-    imageUrl: data.imageUrl,
-    website: data.website,
-    twitter: data.twitter,
-    telegram: data.telegram,
-    discord: data.discord,
+    description: data.description ? sanitizeString(data.description) : (prev.description || undefined),
+    logoUrl: data.logoUrl || prev.logoUrl,
+    imageUrl: data.imageUrl || prev.imageUrl,
+    website: data.website || prev.website,
+    twitter: data.twitter || prev.twitter,
+    telegram: data.telegram || prev.telegram,
+    discord: data.discord || prev.discord,
     creatorAddress: data.creatorAddress,
     totalSupply: data.totalSupply,
-    initialBuyAmount: data.initialBuyAmount,
-    isGraduated: existing ? JSON.parse(existing).isGraduated : false,
-    graduationTime: existing ? JSON.parse(existing).graduationTime : undefined,
+    initialBuyAmount: data.initialBuyAmount || prev.initialBuyAmount,
+    isGraduated: prev.isGraduated || false,
+    graduationTime: prev.graduationTime,
     createdAt,
     updatedAt: now,
   };

@@ -72,6 +72,33 @@ export interface PgOrderMirror {
   updated_at: number;
 }
 
+/** PostgreSQL 中存储的仓位镜像 */
+export interface PgPositionMirror {
+  id: string;                    // pairId (UUID)
+  trader: string;                // 钱包地址 (lowercase)
+  token: string;                 // token 合约地址 (lowercase)
+  symbol: string;                // "0xabc...-ETH"
+  is_long: boolean;
+  size: string;                  // 1e18 字符串
+  entry_price: string;
+  leverage: number;
+  collateral: string;            // 保证金 (1e18 ETH) — 用 collateral 不用 initialMargin 避免字段名歧义
+  maintenance_margin: string;
+  mark_price: string;
+  liquidation_price: string;
+  unrealized_pnl: string;
+  margin_ratio: string;
+  funding_index: string;
+  funding_fee: string;
+  is_liquidating: boolean;
+  risk_level: string;
+  adl_score: string;
+  adl_ranking: number;
+  status: string;                // "OPEN" | "CLOSED" | "LIQUIDATED"
+  created_at: number;
+  updated_at: number;
+}
+
 // ============================================================
 // PostgreSQL Client
 // ============================================================
@@ -175,6 +202,45 @@ async function ensureMirrorTable(): Promise<void> {
   `;
 
   logger.info("Postgres", "Mirror table ready: perp_order_mirror");
+
+  // ── Position mirror table ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS perp_position_mirror (
+      id VARCHAR(256) PRIMARY KEY,
+      trader VARCHAR(42) NOT NULL,
+      token VARCHAR(42) NOT NULL,
+      symbol VARCHAR(64) NOT NULL,
+      is_long BOOLEAN NOT NULL,
+      size VARCHAR(78) NOT NULL,
+      entry_price VARCHAR(78) NOT NULL,
+      leverage REAL NOT NULL,
+      collateral VARCHAR(78) NOT NULL DEFAULT '0',
+      maintenance_margin VARCHAR(78) NOT NULL DEFAULT '0',
+      mark_price VARCHAR(78) NOT NULL DEFAULT '0',
+      liquidation_price VARCHAR(78) NOT NULL DEFAULT '0',
+      unrealized_pnl VARCHAR(78) NOT NULL DEFAULT '0',
+      margin_ratio VARCHAR(78) NOT NULL DEFAULT '10000',
+      funding_index VARCHAR(78) NOT NULL DEFAULT '0',
+      funding_fee VARCHAR(78) NOT NULL DEFAULT '0',
+      is_liquidating BOOLEAN NOT NULL DEFAULT FALSE,
+      risk_level VARCHAR(16) NOT NULL DEFAULT 'low',
+      adl_score VARCHAR(78) NOT NULL DEFAULT '0',
+      adl_ranking INTEGER NOT NULL DEFAULT 1,
+      status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+      created_at BIGINT NOT NULL,
+      updated_at BIGINT NOT NULL
+    )
+  `;
+
+  // Migration: widen id column if existing table has varchar(64)
+  await sql`ALTER TABLE perp_position_mirror ALTER COLUMN id TYPE VARCHAR(256)`.catch(() => {});
+
+  await sql`CREATE INDEX IF NOT EXISTS idx_ppm_trader ON perp_position_mirror(trader)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_ppm_token ON perp_position_mirror(token)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_ppm_status ON perp_position_mirror(status)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_ppm_trader_token ON perp_position_mirror(trader, token, is_long) WHERE status = 'OPEN'`;
+
+  logger.info("Postgres", "Mirror table ready: perp_position_mirror");
 }
 
 // ============================================================
@@ -313,6 +379,119 @@ export const OrderMirrorRepo = {
 };
 
 // ============================================================
+// Position Mirror Repository
+// ============================================================
+
+export const PositionMirrorRepo = {
+  /**
+   * 创建或更新仓位镜像 (Upsert)
+   * 每次 savePositionToRedis 成功后调用
+   */
+  async upsert(position: PgPositionMirror): Promise<void> {
+    if (!sql || !isConnected) return;
+
+    try {
+      await sql`
+        INSERT INTO perp_position_mirror (
+          id, trader, token, symbol, is_long, size, entry_price, leverage,
+          collateral, maintenance_margin, mark_price, liquidation_price,
+          unrealized_pnl, margin_ratio, funding_index, funding_fee,
+          is_liquidating, risk_level, adl_score, adl_ranking,
+          status, created_at, updated_at
+        ) VALUES (
+          ${position.id}, ${position.trader}, ${position.token}, ${position.symbol},
+          ${position.is_long}, ${position.size}, ${position.entry_price}, ${position.leverage},
+          ${position.collateral}, ${position.maintenance_margin}, ${position.mark_price},
+          ${position.liquidation_price}, ${position.unrealized_pnl}, ${position.margin_ratio},
+          ${position.funding_index}, ${position.funding_fee}, ${position.is_liquidating},
+          ${position.risk_level}, ${position.adl_score}, ${position.adl_ranking},
+          ${position.status}, ${position.created_at}, ${position.updated_at}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          size = EXCLUDED.size,
+          entry_price = EXCLUDED.entry_price,
+          leverage = EXCLUDED.leverage,
+          collateral = EXCLUDED.collateral,
+          maintenance_margin = EXCLUDED.maintenance_margin,
+          mark_price = EXCLUDED.mark_price,
+          liquidation_price = EXCLUDED.liquidation_price,
+          unrealized_pnl = EXCLUDED.unrealized_pnl,
+          margin_ratio = EXCLUDED.margin_ratio,
+          funding_index = EXCLUDED.funding_index,
+          funding_fee = EXCLUDED.funding_fee,
+          is_liquidating = EXCLUDED.is_liquidating,
+          risk_level = EXCLUDED.risk_level,
+          adl_score = EXCLUDED.adl_score,
+          adl_ranking = EXCLUDED.adl_ranking,
+          status = EXCLUDED.status,
+          updated_at = EXCLUDED.updated_at
+      `;
+    } catch (error: any) {
+      logger.error("Postgres", `Failed to upsert position ${position.id}: ${error.message}`);
+      throw error;
+    }
+  },
+
+  /**
+   * 标记仓位已关闭 (软删除，保留历史数据供审计)
+   * 每次 deletePositionFromRedis 后调用
+   */
+  async markClosed(positionId: string, status: "CLOSED" | "LIQUIDATED" = "CLOSED"): Promise<void> {
+    if (!sql || !isConnected) return;
+
+    try {
+      const now = Date.now();
+      await sql`
+        UPDATE perp_position_mirror
+        SET status = ${status}, size = '0', updated_at = ${now}
+        WHERE id = ${positionId}
+      `;
+    } catch (error: any) {
+      logger.error("Postgres", `Failed to mark position ${positionId} as ${status}: ${error.message}`);
+      throw error;
+    }
+  },
+
+  /**
+   * 获取所有活跃仓位 (status = 'OPEN')
+   * 用于 Redis 丢失后恢复
+   */
+  async getActivePositions(): Promise<PgPositionMirror[]> {
+    if (!sql || !isConnected) return [];
+
+    try {
+      const rows = await sql<PgPositionMirror[]>`
+        SELECT * FROM perp_position_mirror
+        WHERE status = 'OPEN'
+        ORDER BY created_at ASC
+      `;
+      return rows;
+    } catch (error: any) {
+      logger.error("Postgres", `Failed to get active positions: ${error.message}`);
+      return [];
+    }
+  },
+
+  /**
+   * 统计活跃仓位数
+   */
+  async countActive(): Promise<number> {
+    if (!sql || !isConnected) return 0;
+
+    try {
+      const [{ count }] = await sql`
+        SELECT COUNT(*) as count FROM perp_position_mirror
+        WHERE status = 'OPEN'
+      `;
+      return Number(count);
+    } catch (error: any) {
+      logger.error("Postgres", `Failed to count active positions: ${error.message}`);
+      return 0;
+    }
+  },
+};
+
+// ============================================================
 // Wallet Repository (Placeholder - 未来实现)
 // ============================================================
 
@@ -353,6 +532,7 @@ export default {
   disconnect: disconnectPostgres,
   isConnected: isPostgresConnected,
   OrderMirrorRepo,
+  PositionMirrorRepo,
   WalletRepo,
   TradeHistoryRepo,
 };

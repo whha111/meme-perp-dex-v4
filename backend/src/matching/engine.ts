@@ -434,7 +434,7 @@ export class MatchingEngine {
    * 旧方法兼容
    */
   configurePriceFeed(rpcUrl: string, priceFeedAddress: Address): void {
-    this.configurePriceSource(rpcUrl, "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8" as Address, priceFeedAddress);
+    this.configurePriceSource(rpcUrl, (process.env.TOKEN_FACTORY_ADDRESS || "0x16e7B4B07Ff82b106f2C1282Bad50Ad2ba94f598") as Address, priceFeedAddress);
   }
 
   // ETH 本位系统: 不再需要 ETH/USD 价格转换

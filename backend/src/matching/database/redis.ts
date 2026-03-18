@@ -274,6 +274,10 @@ export const Keys = {
   mode2Adjustment: (user: Address) => `mode2_adj:${user.toLowerCase()}`,
   allMode2Adjustments: () => "mode2_adj:all",
 
+  // Pending withdrawal mode2 deductions (链上确认前的待回滚记录)
+  pendingWithdrawalMode2: (id: string) => `pending_wd_mode2:${id}`,
+  allPendingWithdrawalMode2: () => "pending_wd_mode2:all",
+
   // Auth nonce keys (防重放攻击，必须持久化)
   userNonce: (user: Address) => `nonce:${user.toLowerCase()}`,
   allUserNonces: () => "nonces:all",
@@ -282,6 +286,10 @@ export const Keys = {
   insuranceFundGlobal: () => "insurance_fund:global",
   insuranceFundToken: (token: Address) => `insurance_fund:token:${token.toLowerCase()}`,
   allInsuranceFundTokens: () => "insurance_fund:tokens:all",
+
+  // Funding state keys (资金费状态，必须持久化 — 重启恢复)
+  fundingState: (token: Address) => `funding:state:${token.toLowerCase()}`,
+  allFundingTokens: () => "funding:tokens:all",
 
   // Referral keys (推荐系统，必须持久化 — 推荐关系 + 佣金累计)
   referrer: (address: Address) => `referral:referrer:${address.toLowerCase()}`,
@@ -320,8 +328,10 @@ export const PositionRepo = {
     // Add to liquidation trigger ZSet
     // 注意: ZSet score 是 64位浮点数，最大安全整数 ~9e15
     // 价格精度 1e12，降为 1e6 存储防止精度丢失 (支持价格到 $9,000,000,000)
-    if (position.liquidationPrice > 0n) {
-      const liqPriceScaled = Number(position.liquidationPrice / 1_000_000n);
+    // ⚠️ liquidationPrice 可能是 bigint 或 string (server.ts 传 string)
+    const liqPrice = safeBigInt(position.liquidationPrice);
+    if (liqPrice > 0n) {
+      const liqPriceScaled = Number(liqPrice / 1_000_000n);
       const triggerKey = position.isLong
         ? Keys.liquidationLong(data.token)
         : Keys.liquidationShort(data.token);
@@ -351,10 +361,12 @@ export const PositionRepo = {
     await client.hset(key, serialized);
 
     // Update liquidation trigger if price changed (1e6 scaled)
+    // ⚠️ updates.liquidationPrice 可能是 bigint 或 string
     if (updates.liquidationPrice !== undefined) {
       const position = await this.get(id);
       if (position) {
-        const liqPriceScaled = Number(updates.liquidationPrice / 1_000_000n);
+        const liqPrice = safeBigInt(updates.liquidationPrice);
+        const liqPriceScaled = Number(liqPrice / 1_000_000n);
         const triggerKey = position.isLong
           ? Keys.liquidationLong(position.token)
           : Keys.liquidationShort(position.token);
@@ -921,6 +933,7 @@ export const MarketStatsRepo = {
 // ============================================================
 
 function serializePosition(pos: Position): Record<string, string> {
+  // ✅ 使用 ?? 防御 undefined/null，避免 .toString() 在缺失字段上 crash
   return {
     id: pos.id,
     pairId: pos.pairId,
@@ -929,38 +942,38 @@ function serializePosition(pos: Position): Record<string, string> {
     // 旧格式兼容 (双写)
     userAddress: pos.trader,
     symbol: `${pos.token}-ETH`,
-    counterparty: pos.counterparty,
-    isLong: pos.isLong.toString(),
-    size: pos.size.toString(),
-    entryPrice: pos.entryPrice.toString(),
-    averageEntryPrice: pos.averageEntryPrice.toString(),
-    leverage: pos.leverage.toString(),
-    marginMode: pos.marginMode.toString(),  // 保证金模式 (0=ISOLATED, 1=CROSS)
-    markPrice: pos.markPrice.toString(),
-    liquidationPrice: pos.liquidationPrice.toString(),
-    bankruptcyPrice: pos.bankruptcyPrice.toString(),
-    breakEvenPrice: pos.breakEvenPrice.toString(),
-    collateral: pos.collateral.toString(),
-    margin: pos.margin.toString(),
-    marginRatio: pos.marginRatio.toString(),
-    mmr: pos.mmr.toString(),
-    maintenanceMargin: pos.maintenanceMargin.toString(),
-    unrealizedPnL: pos.unrealizedPnL.toString(),
-    realizedPnL: pos.realizedPnL.toString(),
-    roe: pos.roe.toString(),
-    accumulatedFunding: pos.accumulatedFunding.toString(),
+    counterparty: pos.counterparty || "",
+    isLong: String(pos.isLong ?? false),
+    size: String(pos.size ?? "0"),
+    entryPrice: String(pos.entryPrice ?? "0"),
+    averageEntryPrice: String(pos.averageEntryPrice ?? pos.entryPrice ?? "0"),
+    leverage: String(pos.leverage ?? "1"),
+    marginMode: String(pos.marginMode ?? 0),  // 保证金模式 (0=ISOLATED, 1=CROSS)
+    markPrice: String(pos.markPrice ?? "0"),
+    liquidationPrice: String(pos.liquidationPrice ?? "0"),
+    bankruptcyPrice: String(pos.bankruptcyPrice ?? "0"),
+    breakEvenPrice: String(pos.breakEvenPrice ?? pos.entryPrice ?? "0"),
+    collateral: String(pos.collateral ?? "0"),
+    margin: String(pos.margin ?? "0"),
+    marginRatio: String(pos.marginRatio ?? "10000"),
+    mmr: String(pos.mmr ?? "200"),
+    maintenanceMargin: String(pos.maintenanceMargin ?? "0"),
+    unrealizedPnL: String(pos.unrealizedPnL ?? "0"),
+    realizedPnL: String(pos.realizedPnL ?? "0"),
+    roe: String(pos.roe ?? "0"),
+    accumulatedFunding: String(pos.accumulatedFunding ?? (pos as any).accFundingFee ?? "0"),
     takeProfitPrice: pos.takeProfitPrice?.toString() || "",
     stopLossPrice: pos.stopLossPrice?.toString() || "",
-    adlRanking: pos.adlRanking.toString(),
-    adlScore: pos.adlScore.toString(),
-    riskLevel: pos.riskLevel,
-    isLiquidatable: pos.isLiquidatable.toString(),
-    isAdlCandidate: pos.isAdlCandidate.toString(),
-    status: pos.status.toString(),
-    fundingIndex: pos.fundingIndex.toString(),
-    isLiquidating: pos.isLiquidating.toString(),
-    createdAt: pos.createdAt.toString(),
-    updatedAt: pos.updatedAt.toString(),
+    adlRanking: String(pos.adlRanking ?? 1),
+    adlScore: String(pos.adlScore ?? "0"),
+    riskLevel: pos.riskLevel || "low",
+    isLiquidatable: String(pos.isLiquidatable ?? false),
+    isAdlCandidate: String(pos.isAdlCandidate ?? false),
+    status: String(pos.status ?? 0),
+    fundingIndex: String(pos.fundingIndex ?? "0"),
+    isLiquidating: String(pos.isLiquidating ?? false),
+    createdAt: String(pos.createdAt ?? Date.now()),
+    updatedAt: String(pos.updatedAt ?? Date.now()),
   };
 }
 
@@ -1405,6 +1418,76 @@ export const Mode2AdjustmentRepo = {
 };
 
 // ============================================================
+// Pending Withdrawal Mode2 Deductions (链上确认前的回滚记录)
+// ============================================================
+// 当后端预扣 mode2 后返回提款签名，但链上 tx 可能回退。
+// 这些记录允许定期对账：deadline 过期 + 链上 totalWithdrawn 未增加 → 自动回滚。
+
+export interface PendingWithdrawalMode2 {
+  id: string;                  // `${trader}:${nonce}`
+  trader: string;              // 用户地址
+  mode2Portion: string;        // 被扣减的 mode2 金额 (bigint string)
+  withdrawAmount: string;      // 请求提款金额 (bigint string)
+  deadline: number;            // 提款签名过期时间 (Unix 秒)
+  nonce: string;               // 提款 nonce (bigint string)
+  totalWithdrawnBefore: string; // 授权时链上 totalWithdrawn 快照 (bigint string)
+  createdAt: number;           // 创建时间 (Date.now())
+}
+
+export const PendingWithdrawalMode2Repo = {
+  async save(record: PendingWithdrawalMode2): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      const key = Keys.pendingWithdrawalMode2(record.id);
+      await client.set(key, JSON.stringify(record));
+      await client.sadd(Keys.allPendingWithdrawalMode2(), record.id);
+    } catch (e) {
+      logger.error("Redis", `Failed to save pending withdrawal mode2: ${e}`);
+    }
+  },
+
+  async remove(id: string): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      await client.del(Keys.pendingWithdrawalMode2(id));
+      await client.srem(Keys.allPendingWithdrawalMode2(), id);
+    } catch (e) {
+      logger.error("Redis", `Failed to remove pending withdrawal mode2: ${e}`);
+    }
+  },
+
+  async getAll(): Promise<PendingWithdrawalMode2[]> {
+    const result: PendingWithdrawalMode2[] = [];
+    if (!isRedisConnected()) return result;
+    try {
+      const client = getRedisClient();
+      const ids = await client.smembers(Keys.allPendingWithdrawalMode2());
+      for (const id of ids) {
+        const key = Keys.pendingWithdrawalMode2(id);
+        const value = await client.get(key);
+        if (value) {
+          try {
+            result.push(JSON.parse(value));
+          } catch {
+            // Corrupted record — clean up
+            await client.del(key);
+            await client.srem(Keys.allPendingWithdrawalMode2(), id);
+          }
+        } else {
+          // Dangling set member — clean up
+          await client.srem(Keys.allPendingWithdrawalMode2(), id);
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load pending withdrawal mode2 records: ${e}`);
+    }
+    return result;
+  },
+};
+
+// ============================================================
 // Insurance Fund Repository (保险基金持久化 — 防重启归零)
 // ============================================================
 
@@ -1496,6 +1579,113 @@ export const InsuranceFundRepo = {
       }
     } catch (e) {
       logger.error("Redis", `Failed to load token insurance funds: ${e}`);
+    }
+    return result;
+  },
+};
+
+// ============================================================
+// Funding State Repository (资金费状态持久化 — 重启恢复)
+// ============================================================
+
+interface FundingStateData {
+  nextSettlement: string;
+  longRate: string;
+  shortRate: string;
+  displayRate: string;
+  lastSettlementTime: string;
+}
+
+export const FundingStateRepo = {
+  /**
+   * 保存代币资金费状态到 Redis
+   */
+  async save(token: Address, state: {
+    nextSettlement: number;
+    longRate: string;
+    shortRate: string;
+    displayRate: string;
+    lastSettlementTime: number;
+  }): Promise<void> {
+    if (!isRedisConnected()) return;
+    try {
+      const client = getRedisClient();
+      await client.hset(Keys.fundingState(token), {
+        nextSettlement: state.nextSettlement.toString(),
+        longRate: state.longRate,
+        shortRate: state.shortRate,
+        displayRate: state.displayRate,
+        lastSettlementTime: state.lastSettlementTime.toString(),
+      });
+      await client.sadd(Keys.allFundingTokens(), token.toLowerCase());
+    } catch (e) {
+      logger.error("Redis", `Failed to save funding state for ${token}: ${e}`);
+    }
+  },
+
+  /**
+   * 读取单个代币资金费状态
+   */
+  async get(token: Address): Promise<{
+    nextSettlement: number;
+    longRate: string;
+    shortRate: string;
+    displayRate: string;
+    lastSettlementTime: number;
+  } | null> {
+    if (!isRedisConnected()) return null;
+    try {
+      const client = getRedisClient();
+      const data = await client.hgetall(Keys.fundingState(token)) as FundingStateData;
+      if (!data || !data.nextSettlement) return null;
+      return {
+        nextSettlement: parseInt(data.nextSettlement) || 0,
+        longRate: data.longRate || "0",
+        shortRate: data.shortRate || "0",
+        displayRate: data.displayRate || "0",
+        lastSettlementTime: parseInt(data.lastSettlementTime) || 0,
+      };
+    } catch (e) {
+      logger.error("Redis", `Failed to load funding state for ${token}: ${e}`);
+      return null;
+    }
+  },
+
+  /**
+   * 读取所有代币资金费状态 (启动时恢复)
+   */
+  async getAll(): Promise<Map<string, {
+    nextSettlement: number;
+    longRate: string;
+    shortRate: string;
+    displayRate: string;
+    lastSettlementTime: number;
+  }>> {
+    const result = new Map<string, {
+      nextSettlement: number;
+      longRate: string;
+      shortRate: string;
+      displayRate: string;
+      lastSettlementTime: number;
+    }>();
+    if (!isRedisConnected()) return result;
+    try {
+      const client = getRedisClient();
+      const tokens = await client.smembers(Keys.allFundingTokens());
+      for (const token of tokens) {
+        const data = await client.hgetall(Keys.fundingState(token as Address)) as FundingStateData;
+        if (data && data.nextSettlement) {
+          result.set(token.toLowerCase(), {
+            nextSettlement: parseInt(data.nextSettlement) || 0,
+            longRate: data.longRate || "0",
+            shortRate: data.shortRate || "0",
+            displayRate: data.displayRate || "0",
+            lastSettlementTime: parseInt(data.lastSettlementTime) || 0,
+          });
+        }
+      }
+    } catch (e) {
+      logger.error("Redis", `Failed to load funding states: ${e}`);
     }
     return result;
   },

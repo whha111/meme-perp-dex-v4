@@ -10,8 +10,8 @@ import type { Address, Hex } from "viem";
 // ============================================================
 
 export const PORT = parseInt(process.env.PORT || "8081");
-export const RPC_URL = process.env.RPC_URL || "https://bsc-dataseed.binance.org/";
-export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "56"); // BSC Mainnet
+export const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "97"); // BSC Testnet
 
 // ============================================================
 // 合约地址
@@ -98,10 +98,10 @@ export const PRECISION_MULTIPLIER = {
 
 export const TRADING = {
   MIN_LEVERAGE: 1n,
-  MAX_LEVERAGE: 10n,   // P2: 同步 Phase 1 设计 — meme 币最大 10x (旧值 100x)
+  MAX_LEVERAGE: 75n,   // 最大 75x — meme 币高波动需要适当杠杆 (链上合约支持 100x)
   MIN_MARGIN: 1n * 10n ** 15n, // 最小保证金 0.001 ETH (约 $2.5)
   MIN_POSITION_SIZE: 1n * 10n ** 15n, // 最小仓位 0.001 ETH (约 $2.5)
-  MAX_POSITION_SIZE: 5n * PRECISION_MULTIPLIER.ETH, // P2: 同步 Phase 1 — 最大仓位 5 ETH (旧值 1000 ETH)
+  MAX_POSITION_SIZE: 500n * PRECISION_MULTIPLIER.ETH, // 最大仓位 500 BNB — 配合 75x 杠杆 (≈ 6.67 BNB 保证金 @ 75x)
   TAKER_FEE_RATE: 5n,  // 0.05% = 5bp
   MAKER_FEE_RATE: 2n,  // 0.02% = 2bp
   BASE_MMR: 200n,      // 基础维持保证金率 2% = 200bp

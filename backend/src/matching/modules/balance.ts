@@ -58,7 +58,7 @@ const SETTLEMENT_ABI = [
 ] as const;
 
 // WBNB 地址 (BSC Testnet)
-const WETH_ADDRESS = (process.env.WETH_ADDRESS || "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c") as Address;
+const WETH_ADDRESS = (process.env.WETH_ADDRESS || process.env.COLLATERAL_TOKEN_ADDRESS || "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd") as Address;
 
 // ============================================================
 // Balance Functions

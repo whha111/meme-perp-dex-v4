@@ -579,10 +579,10 @@ export async function backfillHistoricalTrades(
   const { createPublicClient, http, parseAbiItem } = await import("viem");
   const { bsc: bscChain } = await import("viem/chains");
 
-  // BSC Mainnet RPC for backfill
-  const RPC_URL = process.env.RPC_URL || "https://bsc-dataseed.binance.org/";
-  // 使用部署的 TokenFactory 地址
-  const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0xd05A38E6C2a39762De453D90a670ED0Af65ff2f8") as Address;
+  // BSC RPC — read from env
+  const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+  // TokenFactory — read from env
+  const TOKEN_FACTORY_ADDRESS = (process.env.TOKEN_FACTORY_ADDRESS || "0x16e7B4B07Ff82b106f2C1282Bad50Ad2ba94f598") as Address;
 
   logger.info("SpotHistory", `Using TokenFactory: ${TOKEN_FACTORY_ADDRESS}`);
 
@@ -753,22 +753,33 @@ export async function updateKlineWithCurrentPrice(
   if (existing) {
     bar = JSON.parse(existing);
 
-    // 始终用当前价格更新 close、high、low
-    // 标准交易所 K 线规范: close = 该 K 线周期内最新价格 (不仅是最后一笔成交价)
-    bar.high = Math.max(parseFloat(bar.high), price).toString();
-    bar.low = Math.min(parseFloat(bar.low), price).toString();
-    bar.close = price.toString();
+    // 更新 close，仅在真实新高/新低时更新 high/low
+    // 防止 RPC 返回旧区块价格导致 vol=0 蜡烛出现假下影线
+    const currentClose = parseFloat(bar.close);
+    if (bar.trades === 0 && currentClose > 0) {
+      // 无交易时：仅允许价格向上扩展（bonding curve 没交易价格不会下跌）
+      // 小幅波动（<0.5%）视为精度误差，不更新 low
+      const dropPct = (currentClose - price) / currentClose;
+      if (price > parseFloat(bar.high)) bar.high = price.toString();
+      if (dropPct < 0.005) {
+        // 正常精度范围内，更新 close
+        bar.close = price.toString();
+      }
+      // 超过 0.5% 的下跌在无交易时视为 RPC 旧数据，忽略
+    } else {
+      // 有交易时：正常更新 high/low/close
+      bar.high = Math.max(parseFloat(bar.high), price).toString();
+      bar.low = Math.min(parseFloat(bar.low), price).toString();
+      bar.close = price.toString();
+    }
   } else {
     // 创建新的 K 线
-    // 获取上一根 K 线的收盘价作为开盘价
-    const prevBars = await KlineRepo.getLatest(token, resolution, 1);
-    const prevClose = prevBars.length > 0 ? parseFloat(prevBars[0].close) : price;
-
+    // 使用当前轮询价格作为 open（避免 prevClose 精度不同导致假红蜡烛）
     bar = {
       time: bucketTime,
-      open: prevClose.toString(),
-      high: Math.max(prevClose, price).toString(),
-      low: Math.min(prevClose, price).toString(),
+      open: price.toString(),
+      high: price.toString(),
+      low: price.toString(),
       close: price.toString(),
       volume: "0",
       trades: 0,

@@ -1,11 +1,16 @@
 /**
- * PerpVault 模块 — GMX-style LP Pool 交互
+ * TradingVault 模块 — Unified fund custody (user margin + LP pool)
+ *
+ * Architecture:
+ * TradingVault = SettlementV2 (user margin, withdrawals) + PerpVault (LP pool, settlement, OI)
+ * All funds in ONE contract as WBNB. Settlement is pure bookkeeping (no cross-contract transfers).
  *
  * 功能:
- * 1. 查询链上 PerpVault 池子状态 (poolValue, sharePrice, OI)
+ * 1. 查询链上 TradingVault 池子状态 (poolValue, sharePrice, OI)
  * 2. 在开/平仓时执行链上 OI 更新
  * 3. 在平仓/清算时执行链上结算 (settleTraderProfit/Loss, settleLiquidation)
- * 4. 收取交易手续费 (collectFee)
+ *    — 全部 nonpayable，纯记账，不需要 engine wallet 有 BNB
+ * 4. 收取交易手续费 (collectFee) — nonpayable，纯记账
  *
  * 使用方式:
  * - server.ts 启动时调用 initPerpVault()
@@ -19,7 +24,7 @@ import type { Address, Hex } from "viem";
 import { logger } from "../utils/logger";
 
 // ============================================================
-// PerpVault ABI (minimal — only what we need)
+// TradingVault ABI (minimal — only what we need)
 // ============================================================
 
 const PERP_VAULT_ABI = [
@@ -94,7 +99,7 @@ const PERP_VAULT_ABI = [
     outputs: [{ name: "", type: "uint256" }],
   },
   {
-    name: "getWithdrawalInfo",
+    name: "getLPWithdrawalInfo",
     type: "function",
     stateMutability: "view",
     inputs: [{ name: "lp", type: "address" }],
@@ -126,14 +131,14 @@ const PERP_VAULT_ABI = [
   {
     name: "settleTraderLoss",
     type: "function",
-    stateMutability: "payable",
+    stateMutability: "nonpayable",
     inputs: [{ name: "lossETH", type: "uint256" }],
     outputs: [],
   },
   {
     name: "settleLiquidation",
     type: "function",
-    stateMutability: "payable",
+    stateMutability: "nonpayable",
     inputs: [
       { name: "collateralETH", type: "uint256" },
       { name: "liquidatorReward", type: "uint256" },
@@ -166,7 +171,7 @@ const PERP_VAULT_ABI = [
   {
     name: "collectFee",
     type: "function",
-    stateMutability: "payable",
+    stateMutability: "nonpayable",
     inputs: [{ name: "feeETH", type: "uint256" }],
     outputs: [],
   },
@@ -222,13 +227,13 @@ let lastPoolStatsFetch = 0;
 const POOL_STATS_CACHE_MS = 5000;
 
 // ============================================================
-// Batch Settlement Queue (for payable calls)
+// Batch Settlement Queue
 // ============================================================
 
 /**
- * Payable PerpVault calls (settleTraderLoss, settleLiquidation, collectFee)
- * require msg.value = ETH amount. The engine wallet may not have enough ETH
- * to execute these immediately. Queue them and batch-execute periodically.
+ * TradingVault settlement calls (settleTraderLoss, settleLiquidation, collectFee,
+ * settleTraderProfit) are all nonpayable — pure bookkeeping that adjusts lpPoolBalance.
+ * We still batch them for retry + nonce safety (sequential on-chain tx ordering).
  */
 
 interface PendingLossSettlement {
@@ -398,7 +403,7 @@ export function initPerpVault(
   perpVaultAddress = _perpVaultAddress;
   initialized = true;
 
-  logger.info("PerpVault", `Module initialized, PerpVault: ${perpVaultAddress}`);
+  logger.info("PerpVault", `Module initialized, TradingVault: ${perpVaultAddress}`);
 }
 
 /**
@@ -413,7 +418,7 @@ export function isPerpVaultEnabled(): boolean {
 // ============================================================
 
 /**
- * Get pool value (ETH balance of PerpVault contract)
+ * Get pool value (lpPoolBalance - netPendingPnL from TradingVault)
  */
 export async function getPoolValue(): Promise<bigint> {
   if (!isPerpVaultEnabled()) return 0n;
@@ -563,7 +568,7 @@ export async function getLPInfo(lp: Address): Promise<PerpVaultLPInfo | null> {
       publicClient.readContract({
         address: perpVaultAddress!,
         abi: PERP_VAULT_ABI,
-        functionName: "getWithdrawalInfo",
+        functionName: "getLPWithdrawalInfo",
         args: [lp],
       }) as Promise<readonly [bigint, bigint, bigint, bigint]>,
     ]);
@@ -589,8 +594,10 @@ export async function getLPInfo(lp: Address): Promise<PerpVaultLPInfo | null> {
 /**
  * Settle trader PnL — either profit (pool pays) or loss (pool receives)
  *
- * - Profit: executed immediately (nonpayable — PerpVault sends ETH from pool)
- * - Loss: queued for batch execution (payable — requires engine wallet ETH)
+ * Both are nonpayable in TradingVault — pure bookkeeping:
+ * - Profit: lpPoolBalance -= amount (trader withdraws later via fastWithdraw)
+ * - Loss: lpPoolBalance += amount
+ * Queued for batch execution (nonce safety + retry).
  */
 export async function settleTraderPnL(
   trader: Address,
@@ -605,22 +612,19 @@ export async function settleTraderPnL(
   if (amount === 0n) return { success: true };
 
   if (isProfit) {
-    // P3-P4: Queue profit settlement (was fire-and-forget with no retry)
-    // Profit: pool pays trader — nonpayable, but still queue for retry + nonce safety
     pendingSettlements.push({ type: "profit", trader, amount, timestamp: Date.now() });
     logger.debug("PerpVault", `Profit queued: trader=${trader.slice(0, 10)} amount=${amount} (queue size: ${pendingSettlements.length})`);
-    return { success: true }; // Queued successfully
+    return { success: true };
   } else {
-    // Loss: payable — queue for batch execution
     pendingSettlements.push({ type: "loss", amount, timestamp: Date.now() });
     logger.debug("PerpVault", `Loss queued: amount=${amount} (queue size: ${pendingSettlements.length})`);
-    return { success: true }; // Queued successfully
+    return { success: true };
   }
 }
 
 /**
- * Settle liquidation — collateral goes to pool, reward to liquidator
- * Queued for batch execution (payable — requires engine wallet ETH)
+ * Settle liquidation — collateral goes to pool, reward to liquidator (WBNB)
+ * Nonpayable in TradingVault — pure bookkeeping. Queued for batch execution.
  */
 export async function settleLiquidation(
   collateralETH: bigint,
@@ -677,8 +681,8 @@ export async function decreaseOI(
 }
 
 /**
- * Collect trading fee — ETH goes into pool, increasing share price
- * Queued for batch execution (payable — requires engine wallet ETH)
+ * Collect trading fee — credited to LP pool, increasing share price
+ * Nonpayable in TradingVault — pure bookkeeping. Queued for batch execution.
  */
 export async function collectTradingFee(
   feeETH: bigint
@@ -696,11 +700,12 @@ export async function collectTradingFee(
 // ============================================================
 
 /**
- * Execute all queued payable settlements in priority order.
+ * Execute all queued settlements sequentially.
  * Called every BATCH_INTERVAL_MS (30s).
  *
- * Priority: loss > liquidation > fee
- * If engine wallet balance is insufficient, execute what we can.
+ * All TradingVault settlement calls are nonpayable (pure bookkeeping).
+ * Engine wallet only needs gas — no ETH value transfers.
+ * Priority: profit > loss > liquidation > fee
  */
 export async function executeBatchSettlement(): Promise<void> {
   if (!isPerpVaultEnabled() || !walletClient || !publicClient || globalTxLock) return;
@@ -708,49 +713,38 @@ export async function executeBatchSettlement(): Promise<void> {
 
   globalTxLock = true;
   try {
-    // Check engine wallet ETH balance
     const matcherAddress = walletClient.account?.address;
     if (!matcherAddress) { globalTxLock = false; return; }
 
+    // Only need gas — check minimum balance for tx fees
     const walletBalance = await publicClient.getBalance({ address: matcherAddress });
-
     if (walletBalance < MIN_WALLET_BALANCE_WEI) {
-      logger.warn("PerpVault", `⚠️ Engine wallet balance LOW: ${walletBalance} wei (${Number(walletBalance) / 1e18} ETH). Settlement queue has ${pendingSettlements.length} items.`);
+      logger.warn("PerpVault", `Engine wallet gas LOW: ${Number(walletBalance) / 1e18} BNB. Queue: ${pendingSettlements.length} items.`);
       batchesSkippedLowBalance++;
       globalTxLock = false;
       return;
     }
 
-    // Sort by priority: profit first (nonpayable), loss, liquidation, fee
+    // Sort by priority: profit first, then loss, liquidation, fee
     const priorityOrder: Record<string, number> = { profit: 0, loss: 1, liquidation: 2, fee: 3 };
     const sorted = [...pendingSettlements].sort((a, b) => (priorityOrder[a.type] ?? 9) - (priorityOrder[b.type] ?? 9));
 
-    let remainingBalance = walletBalance - MIN_WALLET_BALANCE_WEI; // Reserve 0.05 ETH for gas
     const executed: number[] = [];
     let totalSettled = 0n;
 
     for (let i = 0; i < sorted.length; i++) {
       const item = sorted[i];
-      // Profit is nonpayable (PerpVault sends from pool), doesn't consume engine wallet
-      const requiredETH = item.type === "profit" ? 0n : item.type === "liquidation" ? item.collateralETH : item.amount;
-
-      if (requiredETH > remainingBalance) {
-        logger.debug("PerpVault", `Batch: skipping ${item.type} (need ${requiredETH}, have ${remainingBalance})`);
-        continue; // Skip items we can't afford, try smaller ones
-      }
 
       try {
         let txHash: string;
 
         if (item.type === "profit") {
-          // P3-P4: Profit settlement — nonpayable, PerpVault sends from pool
           txHash = await walletClient.writeContract({
             address: perpVaultAddress!,
             abi: PERP_VAULT_ABI,
             functionName: "settleTraderProfit",
             args: [item.trader, item.amount],
           });
-          // AUDIT-FIX ME-H04: profit 类型也需要累计 totalSettled（旧代码遗漏）
           totalSettled += item.amount;
           logger.info("PerpVault", `Profit settled: trader=${item.trader.slice(0, 10)} amount=${item.amount} tx=${txHash}`);
         } else if (item.type === "loss") {
@@ -784,11 +778,10 @@ export async function executeBatchSettlement(): Promise<void> {
           totalSettled += item.amount;
         }
 
-        remainingBalance -= requiredETH;
         executed.push(pendingSettlements.indexOf(item));
         settlementsExecuted++;
 
-        logger.debug("PerpVault", `Batch ${item.type}: ${requiredETH} wei settled, tx=${txHash}`);
+        logger.debug("PerpVault", `Batch ${item.type}: settled, tx=${txHash}`);
       } catch (error: any) {
         settlementsFailed++;
         const msg = error?.shortMessage || error?.message || String(error);
@@ -798,8 +791,7 @@ export async function executeBatchSettlement(): Promise<void> {
       }
     }
 
-    // L-15 FIX: 使用 Set<number> 追踪已执行项的索引，从后往前删除
-    // 旧代码用 indexOf(item) 依赖引用相等，sorted 是 spread 副本导致 indexOf 总是 -1
+    // Remove executed items from queue (reverse order to preserve indices)
     const executedIndices = new Set(executed.filter(idx => idx >= 0));
     for (let i = pendingSettlements.length - 1; i >= 0; i--) {
       if (executedIndices.has(i)) {

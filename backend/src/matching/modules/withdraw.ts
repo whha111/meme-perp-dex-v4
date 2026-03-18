@@ -1,17 +1,19 @@
 /**
- * Withdrawal Authorization Module for Mode 2 (Off-chain Execution + On-chain Attestation)
+ * Withdrawal Authorization Module for TradingVault
  *
- * Purpose:
- * - Generate EIP-712 withdrawal signatures
- * - Verify Merkle proofs before signing
- * - Track withdrawal nonces to prevent replay
+ * Two withdrawal paths:
  *
- * Withdrawal Flow:
- * 1. User requests withdrawal with amount
- * 2. Backend verifies: user equity >= amount (from latest snapshot)
- * 3. Backend generates: Merkle proof + EIP-712 signature
- * 4. User submits to SettlementV2.withdraw(amount, proof, signature)
- * 5. Contract verifies proof + signature, then transfers funds
+ * 1. FAST WITHDRAW (daily path):
+ *    - User requests → backend signs EIP-712 FastWithdrawal(user, amount, nonce, deadline)
+ *    - User calls TradingVault.fastWithdraw(amount, nonce, deadline, signature)
+ *    - No Merkle proof needed — platform vouches for balance
+ *
+ * 2. MERKLE WITHDRAW (fallback — platform offline):
+ *    - Backend generates Merkle proof + EIP-712 Withdrawal signature
+ *    - User calls TradingVault.withdraw(amount, equity, proof, deadline, signature)
+ *    - Proves equity from last on-chain snapshot
+ *
+ * Separate nonce spaces: fastWithdrawalNonces[user] vs withdrawalNonces[user]
  */
 
 import {
@@ -29,18 +31,18 @@ import { getUserProof, verifyProof as verifyMerkleProof } from "./snapshot";
 import { type MerkleProof } from "./merkle";
 
 /**
- * EIP-712 Domain for withdrawal authorization
- * Must match SettlementV2 contract's domain
+ * EIP-712 Domain — must match SettlementV2 contract's EIP712("SettlementV2", "1")
+ * ⚠️ 之前用 "TradingVault" 但 TradingVault 从未部署，实际合约是 SettlementV2
  */
 const EIP712_DOMAIN = {
   name: "SettlementV2",
   version: "1",
-  chainId: parseInt(process.env.CHAIN_ID || "56"),
+  chainId: parseInt(process.env.CHAIN_ID || "97"),
   verifyingContract: "0x0000000000000000000000000000000000000000" as Address, // Will be set on init
 };
 
 /**
- * EIP-712 Types for withdrawal authorization
+ * EIP-712 Types for Merkle withdrawal (fallback path)
  */
 const EIP712_TYPES = {
   Withdrawal: [
@@ -49,6 +51,18 @@ const EIP712_TYPES = {
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
     { name: "merkleRoot", type: "bytes32" },
+  ],
+} as const;
+
+/**
+ * EIP-712 Types for fast withdrawal (daily path — no Merkle proof)
+ */
+const FAST_WITHDRAWAL_TYPES = {
+  FastWithdrawal: [
+    { name: "user", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
   ],
 } as const;
 
@@ -85,12 +99,24 @@ export interface WithdrawalResult {
 }
 
 /**
+ * Fast withdrawal authorization (to be submitted on-chain)
+ */
+export interface FastWithdrawalAuthorization {
+  user: Address;
+  amount: bigint;
+  nonce: bigint;
+  deadline: number;
+  signature: Hex;
+}
+
+/**
  * Withdrawal module state
  */
 interface WithdrawModuleState {
   signer: PrivateKeyAccount | null;
   contractAddress: Address | null;
-  nonces: Map<string, bigint>; // user -> nonce
+  nonces: Map<string, bigint>; // user -> merkle withdrawal nonce
+  fastNonces: Map<string, bigint>; // user -> fast withdrawal nonce
   pendingWithdrawals: Map<string, WithdrawalAuthorization>; // hash -> authorization
 }
 
@@ -98,6 +124,7 @@ const state: WithdrawModuleState = {
   signer: null,
   contractAddress: null,
   nonces: new Map(),
+  fastNonces: new Map(),
   pendingWithdrawals: new Map(),
 };
 
@@ -119,7 +146,8 @@ export function initializeWithdrawModule(config: {
 }
 
 /**
- * Sync withdrawal nonces from on-chain SettlementV2 contract.
+ * Sync withdrawal nonces from on-chain TradingVault contract.
+ * Syncs both Merkle nonces and fast withdrawal nonces.
  * Call this on engine restart to prevent nonce reuse / replay attacks.
  *
  * @param publicClient - viem PublicClient connected to the correct chain
@@ -142,22 +170,37 @@ export async function syncNoncesFromChain(
       stateMutability: "view",
       type: "function",
     },
+    {
+      inputs: [{ name: "user", type: "address" }],
+      name: "fastWithdrawalNonces",
+      outputs: [{ type: "uint256" }],
+      stateMutability: "view",
+      type: "function",
+    },
   ] as const;
 
   let synced = 0;
   for (const user of users) {
     try {
-      const nonce = await publicClient.readContract({
-        address: state.contractAddress,
-        abi: NONCE_ABI,
-        functionName: "withdrawalNonces",
-        args: [user],
-      }) as bigint;
+      const [merkleNonce, fastNonce] = await Promise.all([
+        publicClient.readContract({
+          address: state.contractAddress,
+          abi: NONCE_ABI,
+          functionName: "withdrawalNonces",
+          args: [user],
+        }) as Promise<bigint>,
+        publicClient.readContract({
+          address: state.contractAddress,
+          abi: NONCE_ABI,
+          functionName: "fastWithdrawalNonces",
+          args: [user],
+        }) as Promise<bigint>,
+      ]);
 
-      if (nonce > 0n) {
-        state.nonces.set(user.toLowerCase(), nonce);
-        synced++;
-      }
+      const key = user.toLowerCase();
+      if (merkleNonce > 0n) state.nonces.set(key, merkleNonce);
+      if (fastNonce > 0n) state.fastNonces.set(key, fastNonce);
+      if (merkleNonce > 0n || fastNonce > 0n) synced++;
     } catch {
       // Skip users that fail (e.g., contract not deployed on this chain)
     }
@@ -217,22 +260,27 @@ export async function canWithdraw(user: Address, amount: bigint): Promise<{ canW
     };
   }
 
-  // M-07 FIX: 检查链上可用余额 (deposits - totalWithdrawn)
+  // M-07 FIX: 检查链上可提额 — 必须与 SettlementV2.withdraw() 合约逻辑一致
+  // 合约公式: maxWithdrawable = userEquity - totalWithdrawn[user]  (line 285-286)
+  // 其中 userEquity 来自 Merkle 树叶节点 (包含已实现利润)
+  // ⚠️ 旧代码错误地用 deposits - totalWithdrawn，导致已实现利润无法提取
   try {
-    const { getUserDeposits, getUserTotalWithdrawn } = await import("./relay");
-    const deposits = await getUserDeposits(user);
+    const { getUserTotalWithdrawn } = await import("./relay");
     const totalWithdrawn = await getUserTotalWithdrawn(user);
-    const onChainAvailable = deposits > totalWithdrawn ? deposits - totalWithdrawn : 0n;
+    // 用 Merkle equity (与合约一致)，而不是 deposits (只有链上存款)
+    const maxWithdrawable = proof.equity > totalWithdrawn
+      ? proof.equity - totalWithdrawn
+      : 0n;
 
-    if (amount > onChainAvailable) {
+    if (amount > maxWithdrawable) {
       return {
         canWithdraw: false,
-        reason: `On-chain available insufficient: deposits=${deposits}, withdrawn=${totalWithdrawn}, available=${onChainAvailable} < ${amount}`,
-        availableEquity: onChainAvailable,
+        reason: `Exceeds withdrawable: equity=${proof.equity}, withdrawn=${totalWithdrawn}, maxWithdrawable=${maxWithdrawable} < ${amount}`,
+        availableEquity: maxWithdrawable,
       };
     }
   } catch (e) {
-    console.warn(`[Withdraw] Failed to check on-chain balance for ${user.slice(0, 10)}, proceeding with equity check only:`, e);
+    console.warn(`[Withdraw] Failed to check on-chain totalWithdrawn for ${user.slice(0, 10)}, proceeding with equity check only:`, e);
   }
 
   return {
@@ -423,6 +471,93 @@ export async function requestWithdrawal(
 ): Promise<WithdrawalResult> {
   const request = createWithdrawalRequest(user, amount, deadlineMinutes);
   return generateWithdrawalAuthorization(request);
+}
+
+// ============================================================
+// Fast Withdrawal (daily path — no Merkle proof)
+// ============================================================
+
+/**
+ * Get current fast withdrawal nonce for a user
+ */
+export function getFastNonce(user: Address): bigint {
+  return state.fastNonces.get(user.toLowerCase()) ?? 0n;
+}
+
+/**
+ * Increment fast withdrawal nonce (after successful signing)
+ */
+function incrementFastNonce(user: Address): bigint {
+  const key = user.toLowerCase();
+  const current = getFastNonce(user as Address);
+  const next = current + 1n;
+  state.fastNonces.set(key, next);
+  return next;
+}
+
+/**
+ * Generate a fast withdrawal signature (daily withdrawal path).
+ *
+ * Signs EIP-712 FastWithdrawal(user, amount, nonce, deadline) — no Merkle proof.
+ * The caller (server.ts) must verify the user's balance before calling this.
+ *
+ * @param user - trader address
+ * @param amount - withdrawal amount in WBNB (18 decimals)
+ * @param deadlineMinutes - signature validity (default 30 min)
+ * @returns { nonce, deadline, signature } or error
+ */
+export async function generateFastWithdrawalSignature(
+  user: Address,
+  amount: bigint,
+  deadlineMinutes: number = 30,
+): Promise<{ success: boolean; data?: FastWithdrawalAuthorization; error?: string }> {
+  if (!state.signer) {
+    return { success: false, error: "Withdraw module not initialized" };
+  }
+
+  if (amount === 0n) {
+    return { success: false, error: "Amount must be > 0" };
+  }
+
+  const nonce = getFastNonce(user);
+  const deadline = Math.floor(Date.now() / 1000) + deadlineMinutes * 60;
+
+  const typedData = {
+    domain: EIP712_DOMAIN,
+    types: FAST_WITHDRAWAL_TYPES,
+    primaryType: "FastWithdrawal" as const,
+    message: {
+      user,
+      amount,
+      nonce,
+      deadline: BigInt(deadline),
+    },
+  };
+
+  try {
+    const signature = await state.signer.signTypedData(typedData);
+
+    // Increment nonce immediately to prevent double-signing
+    incrementFastNonce(user);
+
+    const authorization: FastWithdrawalAuthorization = {
+      user,
+      amount,
+      nonce,
+      deadline,
+      signature,
+    };
+
+    console.log(`[Withdraw] Fast withdrawal signed: user=${user.slice(0, 10)} amount=${amount} nonce=${nonce}→${getFastNonce(user)}`);
+
+    return { success: true, data: authorization };
+  } catch (e) {
+    console.error("[Withdraw] Failed to sign fast withdrawal:", e);
+    return {
+      success: false,
+      error: `Signing failed: ${e instanceof Error ? e.message : "Unknown error"}`,
+    };
+  }
 }
 
 /**
