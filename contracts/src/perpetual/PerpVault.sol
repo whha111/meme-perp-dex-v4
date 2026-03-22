@@ -118,6 +118,14 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     /// @notice Accumulated total OI (avoids looping oiTokens array)
     uint256 public totalOIAccumulator;
 
+    // ── Trader Margin (Derived Wallet → PerpVault custody) ──
+
+    /// @notice Per-trader locked margin (BNB)
+    mapping(address => uint256) public traderMargin;
+
+    /// @notice Total trader margin held in custody (NOT part of LP pool value)
+    uint256 public totalTraderMargin;
+
     // ── LP state ──
 
     mapping(address => uint256) public shares;
@@ -169,6 +177,12 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     event RescueRequested(address indexed to, uint256 amount, uint256 executeAfter);
     event RescueExecuted(address indexed to, uint256 amount);
     event RescueCancelled();
+    // Trader Margin events
+    event MarginDeposited(address indexed trader, uint256 amount);
+    event MarginWithdrawn(address indexed trader, uint256 amount);
+    event MarginSettled(address indexed trader, int256 pnl, uint256 marginReleased, uint256 returnedToTrader);
+    event BatchMarginDeposited(uint256 count, uint256 totalAmount);
+    event BatchMarginSettled(uint256 count);
 
     // ============================================================
     // Errors
@@ -192,6 +206,9 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     error WETHNotSet();
     error NoPendingRescue();
     error RescueTimelockActive();
+    error InsufficientTraderMargin();
+    error ArrayLengthMismatch();
+    error MarginValueMismatch();
 
     // ── M-23: Emergency rescue timelock ──
 
@@ -345,8 +362,8 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
             // C1: Use getPoolValue() which now includes unrealized PnL
             // GMX V1: uses getAumInUsdg(true) (maximized) for deposits
             // Note: address(this).balance already includes msg.value, so we calculate
-            // poolValueBefore = (balance - msg.value) adjusted for pending PnL
-            uint256 rawBalanceBefore = address(this).balance - msg.value;
+            // poolValueBefore = (balance - msg.value - traderMargin) adjusted for pending PnL
+            uint256 rawBalanceBefore = address(this).balance - msg.value - totalTraderMargin;
             int256 adjustedBefore = int256(rawBalanceBefore) - netPendingPnL;
             uint256 poolValueBefore = adjustedBefore > 0 ? uint256(adjustedBefore) : 0;
 
@@ -427,11 +444,12 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
         uint256 fee = (grossETH * withdrawalFeeBps) / FEE_PRECISION;
         uint256 ethAmount = grossETH - fee;
 
-        if (grossETH > address(this).balance) revert InsufficientPoolBalance();
+        uint256 lpBalance = getRawBalance();
+        if (grossETH > lpBalance) revert InsufficientPoolBalance();
 
         // Check minimum liquidity after withdrawal
         // Exception: if only dead shares remain after this withdrawal, allow full exit
-        uint256 remainingBalance = address(this).balance - grossETH;
+        uint256 remainingBalance = lpBalance - grossETH;
         uint256 remainingUserShares = totalShares - pendingShares;
         bool onlyDeadSharesRemain = remainingUserShares <= DEAD_SHARES;
         if (remainingBalance < MIN_LIQUIDITY && remainingBalance != 0 && !onlyDeadSharesRemain) {
@@ -440,7 +458,7 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
 
         // Safety: pool must retain enough to cover active OI
         // Pool after withdrawal should be >= totalOI (at minimum)
-        uint256 poolAfter = address(this).balance - grossETH;
+        uint256 poolAfter = lpBalance - grossETH;
         uint256 currentOI = totalOIAccumulator;
         if (currentOI > 0 && poolAfter > 0 && poolAfter < currentOI) {
             revert InsufficientPoolForOI();
@@ -514,12 +532,13 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     function settleTraderProfit(address trader, uint256 profitETH) external onlyAuthorized nonReentrant {
         if (profitETH == 0) return;
 
-        // C2: ADL-aware settlement — pay what's available instead of reverting
+        // C2: ADL-aware settlement — pay what's available from LP pool (not trader margin)
+        uint256 lpBalance = getRawBalance();
         uint256 actualPay = profitETH;
-        if (address(this).balance < profitETH) {
-            // ADL scenario: can only pay partial profit
-            actualPay = address(this).balance;
-            emit ADLTriggered(profitETH, address(this).balance);
+        if (lpBalance < profitETH) {
+            // ADL scenario: can only pay partial profit from LP pool
+            actualPay = lpBalance;
+            emit ADLTriggered(profitETH, lpBalance);
             if (actualPay == 0) revert InsufficientPoolBalance();
         }
 
@@ -678,7 +697,8 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
      *      Jupiter: aum = nav ± unrealized_pnl
      */
     function getPoolValue() public view returns (uint256) {
-        int256 adjusted = int256(address(this).balance) - netPendingPnL;
+        // Trader margin is custody, NOT LP assets — must be excluded
+        int256 adjusted = int256(address(this).balance) - int256(totalTraderMargin) - netPendingPnL;
         return adjusted > 0 ? uint256(adjusted) : 0;
     }
 
@@ -687,7 +707,9 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
      * @dev Useful for checking actual available ETH for settlements
      */
     function getRawBalance() public view returns (uint256) {
-        return address(this).balance;
+        // Raw LP balance excluding trader margin custody
+        uint256 bal = address(this).balance;
+        return bal > totalTraderMargin ? bal - totalTraderMargin : 0;
     }
 
     /**
@@ -719,9 +741,9 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
     function shouldADL() public view returns (bool shouldTrigger, uint256 pnlToPoolBps) {
         if (netPendingPnL <= 0) return (false, 0);
         uint256 pendingProfit = uint256(netPendingPnL);
-        uint256 rawBalance = address(this).balance;
-        if (rawBalance == 0) return (true, type(uint256).max);
-        pnlToPoolBps = (pendingProfit * FEE_PRECISION) / rawBalance;
+        uint256 lpBalance = getRawBalance(); // Excludes trader margin
+        if (lpBalance == 0) return (true, type(uint256).max);
+        pnlToPoolBps = (pendingProfit * FEE_PRECISION) / lpBalance;
         shouldTrigger = pnlToPoolBps >= adlThresholdBps;
     }
 
@@ -869,6 +891,180 @@ contract PerpVault is IPerpVault, Ownable, ReentrancyGuard, Pausable {
         if (pendingRescue.amount == 0) revert NoPendingRescue();
         delete pendingRescue;
         emit RescueCancelled();
+    }
+
+    // ============================================================
+    // Trader Margin Functions (Derived Wallet ↔ PerpVault)
+    // ============================================================
+
+    /**
+     * @notice Deposit BNB as trading margin (called by derived wallet or engine)
+     * @dev Anyone can deposit margin for themselves. Funds are held in custody,
+     *      NOT mixed with LP pool. totalTraderMargin is excluded from getPoolValue().
+     */
+    function depositMargin() external payable whenNotPaused {
+        if (msg.value == 0) revert InvalidAmount();
+        // CEI: state update before any external interaction
+        traderMargin[msg.sender] += msg.value;
+        totalTraderMargin += msg.value;
+        emit MarginDeposited(msg.sender, msg.value);
+    }
+
+    /**
+     * @notice Withdraw margin back to trader's derived wallet (reduce margin)
+     * @param trader Trader address to withdraw to
+     * @param amount Amount of BNB to withdraw
+     * @dev Only callable by authorized contracts (matching engine).
+     *      Used for: reduce margin, cancel order refund.
+     */
+    function withdrawMargin(address trader, uint256 amount) external onlyAuthorized nonReentrant {
+        if (amount == 0) revert InvalidAmount();
+        if (traderMargin[trader] < amount) revert InsufficientTraderMargin();
+
+        // CEI: state updates before transfer
+        traderMargin[trader] -= amount;
+        totalTraderMargin -= amount;
+
+        (bool success,) = trader.call{value: amount}("");
+        if (!success) revert TransferFailed();
+
+        emit MarginWithdrawn(trader, amount);
+    }
+
+    /**
+     * @notice Settle a closed position — release margin and handle PnL
+     * @param trader Trader address
+     * @param pnl Realized PnL (positive = profit from LP, negative = loss to LP)
+     * @param marginRelease Amount of margin to release from custody
+     * @dev Only callable by authorized contracts (matching engine).
+     *
+     *      Flow for profit (pnl > 0):
+     *        - Return marginRelease to trader
+     *        - Pay pnl from LP pool to trader
+     *        - LP pool shrinks by pnl
+     *
+     *      Flow for loss (pnl < 0):
+     *        - loss = |pnl|
+     *        - If loss < marginRelease: return (marginRelease - loss) to trader, loss stays in pool as LP gain
+     *        - If loss >= marginRelease: trader gets 0, all margin becomes LP gain
+     *
+     *      CEI pattern: all state updates before transfers.
+     */
+    function settleClose(address trader, int256 pnl, uint256 marginRelease) external onlyAuthorized nonReentrant {
+        _settleCloseInternal(trader, pnl, marginRelease);
+    }
+
+    /**
+     * @notice Batch deposit margin for multiple traders (engine collects from derived wallets, deposits in one tx)
+     * @param traders Array of trader addresses
+     * @param amounts Array of margin amounts per trader
+     * @dev Only callable by authorized contracts. msg.value must equal sum of amounts.
+     */
+    function batchDepositMargin(
+        address[] calldata traders,
+        uint256[] calldata amounts
+    ) external payable onlyAuthorized {
+        if (traders.length != amounts.length) revert ArrayLengthMismatch();
+
+        uint256 total;
+        for (uint256 i; i < traders.length; ++i) {
+            if (amounts[i] == 0) continue;
+            traderMargin[traders[i]] += amounts[i];
+            total += amounts[i];
+            emit MarginDeposited(traders[i], amounts[i]);
+        }
+
+        if (msg.value != total) revert MarginValueMismatch();
+        totalTraderMargin += total;
+
+        emit BatchMarginDeposited(traders.length, total);
+    }
+
+    /**
+     * @notice Batch settle closed positions
+     * @param traders Array of trader addresses
+     * @param pnls Array of realized PnL per trader
+     * @param marginReleases Array of margin to release per trader
+     * @dev Only callable by authorized contracts. Executes settleClose for each entry.
+     */
+    function batchSettleClose(
+        address[] calldata traders,
+        int256[] calldata pnls,
+        uint256[] calldata marginReleases
+    ) external onlyAuthorized nonReentrant {
+        if (traders.length != pnls.length || traders.length != marginReleases.length) {
+            revert ArrayLengthMismatch();
+        }
+
+        for (uint256 i; i < traders.length; ++i) {
+            if (marginReleases[i] == 0 && pnls[i] == 0) continue;
+            _settleCloseInternal(traders[i], pnls[i], marginReleases[i]);
+        }
+
+        emit BatchMarginSettled(traders.length);
+    }
+
+    /**
+     * @dev Internal settle close logic (shared by settleClose and batchSettleClose)
+     */
+    function _settleCloseInternal(address trader, int256 pnl, uint256 marginRelease) internal {
+        if (traderMargin[trader] < marginRelease) revert InsufficientTraderMargin();
+
+        // Snapshot LP balance BEFORE modifying totalTraderMargin
+        // (so released margin doesn't inflate LP balance calculation)
+        uint256 lpBalance = getRawBalance();
+
+        uint256 returnToTrader;
+
+        traderMargin[trader] -= marginRelease;
+        totalTraderMargin -= marginRelease;
+
+        if (pnl >= 0) {
+            uint256 profit = uint256(pnl);
+            returnToTrader = marginRelease + profit;
+            totalProfitsPaid += profit;
+
+            // ADL: profit can only come from LP pool
+            if (profit > lpBalance) {
+                uint256 actualProfit = lpBalance;
+                returnToTrader = marginRelease + actualProfit;
+                totalProfitsPaid = totalProfitsPaid - profit + actualProfit;
+                emit ADLTriggered(profit, lpBalance);
+            }
+        } else {
+            uint256 loss = uint256(-pnl);
+            if (loss >= marginRelease) {
+                returnToTrader = 0;
+                totalLossesReceived += marginRelease;
+            } else {
+                returnToTrader = marginRelease - loss;
+                totalLossesReceived += loss;
+            }
+        }
+
+        if (returnToTrader > 0) {
+            (bool success,) = trader.call{value: returnToTrader}("");
+            if (!success) {
+                if (weth == address(0)) revert WETHNotSet();
+                IWETH_PerpVault(weth).deposit{value: returnToTrader}();
+                require(IWETH_PerpVault(weth).transfer(trader, returnToTrader), "WETH transfer failed");
+                emit WETHFallbackUsed(trader, returnToTrader);
+            }
+        }
+
+        emit MarginSettled(trader, pnl, marginRelease, returnToTrader);
+    }
+
+    // ── Trader Margin View Functions ──
+
+    /// @notice Get trader's locked margin
+    function getTraderMargin(address trader) external view returns (uint256) {
+        return traderMargin[trader];
+    }
+
+    /// @notice Get total trader margin in custody
+    function getTotalTraderMargin() external view returns (uint256) {
+        return totalTraderMargin;
     }
 
     // ============================================================

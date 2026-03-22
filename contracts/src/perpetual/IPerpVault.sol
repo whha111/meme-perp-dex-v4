@@ -23,6 +23,13 @@ interface IPerpVault {
     // ── C1: Unrealized PnL ──
     function updatePendingPnL(int256 _netPnL) external;
 
+    // ── Trader Margin ──
+    function depositMargin() external payable;
+    function withdrawMargin(address trader, uint256 amount) external;
+    function settleClose(address trader, int256 pnl, uint256 marginRelease) external;
+    function batchDepositMargin(address[] calldata traders, uint256[] calldata amounts) external payable;
+    function batchSettleClose(address[] calldata traders, int256[] calldata pnls, uint256[] calldata marginReleases) external;
+
     // ── View ──
     function getPoolValue() external view returns (uint256);
     function getRawBalance() external view returns (uint256);
@@ -32,4 +39,6 @@ interface IPerpVault {
     function getLPValue(address lp) external view returns (uint256);
     function shouldADL() external view returns (bool shouldTrigger, uint256 pnlToPoolBps);
     function netPendingPnL() external view returns (int256);
+    function getTraderMargin(address trader) external view returns (uint256);
+    function getTotalTraderMargin() external view returns (uint256);
 }
