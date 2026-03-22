@@ -36,7 +36,8 @@ import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
 import { useETHPrice } from "@/hooks/common/useETHPrice";
 import { usePoolState } from "@/hooks/spot/usePoolState";
 import { useWalletBalance } from "@/contexts/WalletBalanceContext";
-import { Copy, Check, Key, RefreshCw, ExternalLink } from "lucide-react";
+import { Copy, Check, Key, RefreshCw, ExternalLink, Plus, Minus } from "lucide-react";
+import { MATCHING_ENGINE_URL } from "@/config/api";
 
 // AUDIT-FIX H-06: Leverage options must match engine MAX_LEVERAGE (10x).
 // Previously allowed up to 100x which caused confusing UX failures when engine rejected >10x.
@@ -102,6 +103,11 @@ export function PerpetualOrderPanelV2({
   // Wrap and Deposit 状态
   const [wrapAmount, setWrapAmount] = useState("");
 
+  // 增减保证金 Modal 状态
+  const [marginModal, setMarginModal] = useState<{ pairId: string; action: "add" | "remove"; collateral: number } | null>(null);
+  const [marginAmount, setMarginAmount] = useState("");
+  const [isAdjustingMargin, setIsAdjustingMargin] = useState(false);
+
   // V2 Hook - 使用 Settlement 合约 + 撮合引擎
   // 传入交易钱包信息用于签名订单
   const {
@@ -122,8 +128,8 @@ export function PerpetualOrderPanelV2({
     tradingWalletSignature: tradingWalletSignature || undefined,
   });
 
-  // Global wallet balance context (ERC20 on-chain balances)
-  const { refreshBalance: refreshWalletBalance } = useWalletBalance();
+  // Global wallet balance context (on-chain balances — fallback when WS balance unavailable)
+  const { refreshBalance: refreshWalletBalance, totalBalance: onChainBalance } = useWalletBalance();
 
   // ── Balance 实时更新: System B (WebSocketManager) → tradingDataStore ──
   const storeBalance = useTradingDataStore(state => state.balance);
@@ -233,23 +239,27 @@ export function PerpetualOrderPanelV2({
   }, [requiredMarginETH]);
 
   // Check if balance is sufficient
-  // 显示: Settlement 可用 + 钱包可存入 (下单时后端会自动从钱包存入 Settlement)
-  // 判断: 同上，因为 autoDepositIfNeeded 会在下单时自动转入
+  // 优先使用 WS balance，fallback 到链上余额 (WalletBalanceContext)
   const { hasSufficientBalance, availableBalanceETH } = useMemo(() => {
-    // Settlement 合约可用余额 (ETH, 1e18 精度)
-    const settlementBalanceETH = balance ? Number(balance.available) / 1e18 : 0;
-    // 派生钱包余额 (可以在下单时自动存入 Settlement)
-    const walletETH = balance?.walletBalance ? Number(balance.walletBalance) / 1e18 : 0;
-    // gas 预留
-    const gasReserve = 0.001;
-    const usableWalletETH = walletETH > gasReserve ? walletETH - gasReserve : 0;
-    // 总可用 = Settlement 可用 + 钱包可存入
-    const totalAvailable = settlementBalanceETH + usableWalletETH;
+    if (balance) {
+      // WS/HTTP balance available — use engine-reported values
+      const settlementBalanceETH = Number(balance.available) / 1e18;
+      const walletETH = balance.walletBalance ? Number(balance.walletBalance) / 1e18 : 0;
+      const gasReserve = 0.001;
+      const usableWalletETH = walletETH > gasReserve ? walletETH - gasReserve : 0;
+      const totalAvailable = settlementBalanceETH + usableWalletETH;
+      return {
+        hasSufficientBalance: totalAvailable >= requiredMarginETH,
+        availableBalanceETH: totalAvailable,
+      };
+    }
+    // Fallback: use on-chain balance from WalletBalanceContext
+    const onChainETH = Number(onChainBalance) / 1e18;
     return {
-      hasSufficientBalance: totalAvailable >= requiredMarginETH,
-      availableBalanceETH: totalAvailable,
+      hasSufficientBalance: onChainETH >= requiredMarginETH,
+      availableBalanceETH: onChainETH,
     };
-  }, [balance, requiredMarginETH]);
+  }, [balance, onChainBalance, requiredMarginETH]);
 
   // Find positions for current token
   const currentTokenPositions = useMemo(() => {
@@ -397,6 +407,61 @@ export function PerpetualOrderPanelV2({
     },
     [isConnected, openConnectModal, closePair, showToast]
   );
+
+  // 增减保证金处理
+  const handleAdjustMargin = useCallback(async () => {
+    if (!marginModal || !marginAmount || !tradingWalletAddress) return;
+    const amountWei = BigInt(Math.floor(parseFloat(marginAmount) * 1e18)).toString();
+    if (BigInt(amountWei) <= 0n) {
+      showToast("请输入有效金额", "error");
+      return;
+    }
+
+    setIsAdjustingMargin(true);
+    try {
+      // 签名验证消息
+      const { pairId, action } = marginModal;
+      const sigMsg = action === "add"
+        ? `Add margin ${amountWei} to ${pairId} for ${tradingWalletAddress.toLowerCase()}`
+        : `Remove margin ${amountWei} from ${pairId} for ${tradingWalletAddress.toLowerCase()}`;
+
+      // 使用 useTradingWallet 导出私钥签名
+      const keyData = exportKey?.();
+      if (!keyData?.privateKey) {
+        showToast("交易钱包未激活", "error");
+        return;
+      }
+      const signerAccount = privateKeyToAccount(keyData.privateKey);
+      const { createWalletClient, http } = await import("viem");
+      const { bscTestnet } = await import("viem/chains");
+      const tempClient = createWalletClient({
+        account: signerAccount,
+        chain: bscTestnet,
+        transport: http(),
+      });
+      const signature = await tempClient.signMessage({ account: signerAccount, message: sigMsg });
+
+      const endpoint = action === "add" ? "margin/add" : "margin/remove";
+      const res = await fetch(`${MATCHING_ENGINE_URL}/api/position/${pairId}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amountWei, trader: tradingWalletAddress, signature }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`保证金${action === "add" ? "追加" : "减少"}成功`, "success");
+        setMarginModal(null);
+        setMarginAmount("");
+        refreshWalletBalance();
+      } else {
+        showToast(data.error || "操作失败", "error");
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "操作失败", "error");
+    } finally {
+      setIsAdjustingMargin(false);
+    }
+  }, [marginModal, marginAmount, tradingWalletAddress, exportKey, showToast, refreshWalletBalance]);
 
   return (
     <div className={`bg-okx-bg-secondary rounded-lg ${className}`}>
@@ -1041,6 +1106,20 @@ export function PerpetualOrderPanelV2({
                   </div>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => setMarginModal({ pairId: pos.pairId, action: "add", collateral: collateralETH })}
+                      className="py-1.5 px-2 text-xs bg-okx-bg-tertiary hover:bg-okx-up/20 text-okx-up border border-okx-up/30 rounded transition-colors"
+                      title="追加保证金"
+                    >
+                      <Plus size={12} />
+                    </button>
+                    <button
+                      onClick={() => setMarginModal({ pairId: pos.pairId, action: "remove", collateral: collateralETH })}
+                      className="py-1.5 px-2 text-xs bg-okx-bg-tertiary hover:bg-okx-down/20 text-okx-down border border-okx-down/30 rounded transition-colors"
+                      title="减少保证金"
+                    >
+                      <Minus size={12} />
+                    </button>
+                    <button
                       onClick={() => handleClosePosition(pos.pairId)}
                       disabled={isSubmittingOrder || isPending}
                       className="flex-1 py-1.5 text-xs bg-okx-down/80 hover:bg-okx-down text-white rounded disabled:opacity-50 transition-colors"
@@ -1072,6 +1151,57 @@ export function PerpetualOrderPanelV2({
           </div>
         </div>
       </div>
+
+      {/* 增减保证金 Modal */}
+      {marginModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setMarginModal(null)}>
+          <div className="bg-okx-bg-secondary rounded-lg p-5 w-80 max-w-[90vw]" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-okx-text-primary mb-3">
+              {marginModal.action === "add" ? "追加保证金" : "减少保证金"}
+            </h3>
+            <div className="text-xs text-okx-text-secondary mb-3">
+              当前保证金: BNB {marginModal.collateral.toFixed(4)}
+            </div>
+            <input
+              type="number"
+              value={marginAmount}
+              onChange={e => setMarginAmount(e.target.value)}
+              placeholder="输入 BNB 数量"
+              step="0.001"
+              min="0"
+              className="w-full px-3 py-2 mb-3 bg-okx-bg-primary border border-okx-border-primary rounded text-sm text-okx-text-primary outline-none focus:border-okx-brand"
+            />
+            <div className="flex gap-2 mb-3">
+              {[0.005, 0.01, 0.05, 0.1].map(v => (
+                <button
+                  key={v}
+                  onClick={() => setMarginAmount(v.toString())}
+                  className="flex-1 py-1 text-xs border border-okx-border-primary rounded hover:bg-okx-bg-hover text-okx-text-secondary"
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setMarginModal(null); setMarginAmount(""); }}
+                className="flex-1 py-2 text-xs border border-okx-border-primary rounded text-okx-text-secondary hover:bg-okx-bg-hover"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAdjustMargin}
+                disabled={isAdjustingMargin || !marginAmount}
+                className={`flex-1 py-2 text-xs text-white rounded disabled:opacity-50 ${
+                  marginModal.action === "add" ? "bg-okx-up hover:bg-okx-up/80" : "bg-okx-down hover:bg-okx-down/80"
+                }`}
+              >
+                {isAdjustingMargin ? "处理中..." : marginModal.action === "add" ? "追加" : "减少"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

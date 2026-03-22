@@ -2318,8 +2318,16 @@ async function processLiquidations(): Promise<void> {
     // 5. 调用链上强平 (TODO: 实际合约调用 - 目前仅链下执行)
     // 链上强平功能待实现，当前版本在链下完成强平处理
 
-    // 6. 广播强平事件
+    // 6. 广播强平事件 + position_closed (双重保障前端移除仓位)
     broadcastLiquidationEvent(pos);
+    // 额外发送 position_closed，前端 WS handler 会调用 removePosition()
+    const closedMsg = JSON.stringify({ type: "position_closed", data: { pairId: pos.pairId } });
+    const liqWsSet = wsTraderClients.get(normalizedTrader);
+    if (liqWsSet) {
+      for (const ws of liqWsSet) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(closedMsg);
+      }
+    }
 
     // 7. 广播仓位和余额更新 (确保前端即时反映强平后状态)
     broadcastPositionUpdate(normalizedTrader, normalizedToken);
@@ -10774,6 +10782,7 @@ function getMarginAdjustmentInfo(pairId: string): {
 
   const currentCollateral = BigInt(position.collateral);
   const currentPrice = BigInt(position.markPrice);
+  const entryPrice = BigInt(position.entryPrice);
   // position.size 已经是 ETH 名义价值 (1e18 精度)
   const positionValue = BigInt(position.size);
   const mmr = BigInt(position.mmr);
@@ -10784,7 +10793,20 @@ function getMarginAdjustmentInfo(pairId: string): {
     ? minCollateralForLeverage
     : minCollateralForHealth;
 
-  const maxRemovable = currentCollateral > minCollateral ? currentCollateral - minCollateral : 0n;
+  // ── 行业标准 (Binance/Bybit): 扣除未实现浮亏 ──
+  // maxRemovable = max(0, collateral - minCollateral - max(0, unrealizedLoss))
+  // GMX PnL: delta = size * |currentPrice - avgPrice| / avgPrice
+  let unrealizedLoss = 0n;
+  if (entryPrice > 0n) {
+    const priceDiffAbs = currentPrice > entryPrice ? currentPrice - entryPrice : entryPrice - currentPrice;
+    const pnlDelta = (positionValue * priceDiffAbs) / entryPrice;
+    const hasProfit = position.isLong ? (currentPrice > entryPrice) : (entryPrice > currentPrice);
+    if (!hasProfit) {
+      unrealizedLoss = pnlDelta; // 浮亏为正数
+    }
+  }
+  const effectiveMinCollateral = minCollateral + unrealizedLoss;
+  const maxRemovable = currentCollateral > effectiveMinCollateral ? currentCollateral - effectiveMinCollateral : 0n;
 
   return {
     pairId,
