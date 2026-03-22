@@ -35,24 +35,29 @@ const CHAIN = {
   explorer: "https://testnet.bscscan.com",
 };
 
+// Read addresses from deployments/97.json — single source of truth
+const deploymentsPath = resolve(import.meta.dir, "../deployments/97.json");
+const deployments = JSON.parse(readFileSync(deploymentsPath, "utf-8"));
+const C = deployments.contracts;
+
 const ADDRESSES = {
-  // Core — Deployed 2026-03-18
-  TOKEN_FACTORY: "0xd75be83c73fb331cc566e3d58563f74058e4ca0b",
-  SETTLEMENT: "0xe866e042dc6ec594c7534974cff0f9eaeebc2a1a",
-  SETTLEMENT_V2: "0xac85c7ed31fa521bfdb7ae63d6e9385e4af79f1b",
-  PERP_VAULT: "0xeafa2fad2bb336da8cd8309669b0c16f597decdb",
-  PRICE_FEED: "0x5c727ea9ac9be9036e538064e7db245cc09545fd",
-  POSITION_MANAGER: "0x5176a9f4093dede515c3a524f218cb4324500d22",
-  VAULT: "0xf00a94a1ae8a276c3aed24f5b542f4ec5e1f373c",
-  LIQUIDATION: "0x6c9a628219501c3271ea5b95b5aab8d1b593383e",
-  FUNDING_RATE: "0x05a2bb4ad567f2b078a7028d4ca47998fb7f88d6",
-  INSURANCE_FUND: "0x6140b2f99a95b4e056d0bc6360c17232f1a8ab91",
-  RISK_MANAGER: "0x6338608189d8153608d1d014e928490a33cfabf4",
-  CONTRACT_REGISTRY: "0x4bd177026918c774feaad56aa6ce3d69e0d67021",
-  ROUTER: "0xD99D1c33F9fC3444f8101754aBC46c52416550D1",
+  // Core — from deployments/97.json
+  TOKEN_FACTORY: C.TokenFactory,
+  SETTLEMENT: C.Settlement,
+  SETTLEMENT_V2: C.SettlementV2,
+  PERP_VAULT: C.PerpVault,
+  PRICE_FEED: C.PriceFeed,
+  POSITION_MANAGER: C.PositionManager,
+  VAULT: C.Vault,
+  LIQUIDATION: C.Liquidation,
+  FUNDING_RATE: C.FundingRate,
+  INSURANCE_FUND: C.InsuranceFund,
+  RISK_MANAGER: C.RiskManager,
+  CONTRACT_REGISTRY: C.ContractRegistry,
+  ROUTER: C.PancakeRouterV2,
 
   // Tokens
-  WBNB: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd",
+  WBNB: C.WBNB,
   USDT: "0x050C988477F818b19a2f44Feee87a147D8f04DfF",
   USDC: "0xC9067996aF0b55414EF025002121Bf289D28c32B",
   USD1: "0x0A0FbEac39BeF8258795a742A82d170E8a255025",
@@ -62,7 +67,7 @@ const ADDRESSES = {
 
   // External
   PANCAKESWAP_FACTORY: "0x6725F303b657a9451d8BA641348b6733DCBd9f4c",
-  DEPLOYER: "0xAecb229194314999E396468eb091b42E44Bc3c8c",
+  DEPLOYER: deployments.deployer,
 } as const;
 
 // ============================================================

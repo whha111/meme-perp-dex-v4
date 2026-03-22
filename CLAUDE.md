@@ -32,18 +32,18 @@ cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 
 | 合约 | 地址 |
 |------|------|
-| TokenFactory | `0xd75be83c73fb331cc566e3d58563f74058e4ca0b` |
-| SettlementV2 | `0xac85c7ed31fa521bfdb7ae63d6e9385e4af79f1b` |
-| Settlement V1 | `0xe866e042dc6ec594c7534974cff0f9eaeebc2a1a` |
-| PerpVault | `0xeafa2fad2bb336da8cd8309669b0c16f597decdb` |
-| PriceFeed | `0x5c727ea9ac9be9036e538064e7db245cc09545fd` |
-| PositionManager | `0x5176a9f4093dede515c3a524f218cb4324500d22` |
-| Vault | `0xf00a94a1ae8a276c3aed24f5b542f4ec5e1f373c` |
-| Liquidation | `0x6c9a628219501c3271ea5b95b5aab8d1b593383e` |
-| FundingRate | `0x05a2bb4ad567f2b078a7028d4ca47998fb7f88d6` |
-| InsuranceFund | `0x6140b2f99a95b4e056d0bc6360c17232f1a8ab91` |
-| RiskManager | `0x6338608189d8153608d1d014e928490a33cfabf4` |
-| ContractRegistry | `0x4bd177026918c774feaad56aa6ce3d69e0d67021` |
+| TokenFactory | `0xaf727EeF35Ff8b5D8F4Da7215d8CF5CE91bE2946` |
+| SettlementV2 | `0xAAee334783de1DE25fBdaA37C2C57EF8c9EB4F1E` |
+| Settlement V1 | `0x17B74c408f7906F677f639B7c449e1ef708962Cb` |
+| PerpVault | `0xAaFafb22c16C20E138e0cF35bB98Be672E33A984` |
+| PriceFeed | `0x2b14DdF4761Eea5C36F93776E8F59F2928F9Cdeb` |
+| PositionManager | `0x620d6C0dcF4d4d9b6a9f3c650669aF4b02AB660e` |
+| Vault | `0xe813093B55a2975c5E839A766AEb00D0cf2c98f7` |
+| Liquidation | `0x14d9DA599A6e5288c9DEB95A1BE504cb79B28b0c` |
+| FundingRate | `0xcAe2860330eb9B66Ee6bc79a2CC74f93b8334326` |
+| InsuranceFund | `0xfbC7f1f449e06c73F4d1b8134C6C2D52B244a9Aa` |
+| RiskManager | `0xd3EE03cbF56C69463F2B6fef60D5284D5676CFF3` |
+| ContractRegistry | `0x197B0370Ba7d2e81F2A6046BFD5966fd8A3E4ABE` |
 | WBNB | `0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd` |
 | PancakeRouter V2 | `0xD99D1c33F9fC3444f8101754aBC46c52416550D1` |
 | Deployer | `0xAecb229194314999E396468eb091b42E44Bc3c8c` |

@@ -12,24 +12,30 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# ── New Contract Addresses (from latest deployment) ──
-PRICE_FEED="0x5c727Ea9AC9be9036e538064e7Db245cC09545Fd"
-VAULT="0xf00A94A1ae8A276C3AeD24F5B542f4ec5E1F373C"
-CONTRACT_REGISTRY="0x4Bd177026918c774FEaAd56AA6cE3D69E0D67021"
-TOKEN_FACTORY="0xD75BE83c73fb331Cc566E3d58563f74058E4cA0b"
-POSITION_MANAGER="0x5176a9F4093DEdE515C3a524F218cB4324500D22"
-SETTLEMENT_V1="0xe866e042Dc6Ec594c7534974cff0F9eaEEbC2a1a"
-SETTLEMENT_V2="0xAc85c7ED31fA521Bfdb7AE63D6e9385E4aF79F1b"
-PERP_VAULT="0xEafa2faD2bb336dA8Cd8309669B0C16f597DeCdb"
-RISK_MANAGER="0x6338608189d8153608d1D014E928490a33cfabF4"
-FUNDING_RATE="0x05a2bb4ad567F2B078a7028d4ca47998Fb7F88D6"
-LIQUIDATION="0x6c9A628219501C3271eA5b95b5aAb8d1B593383e"
-INSURANCE_FUND="0x6140B2F99A95b4E056D0bc6360c17232f1A8ab91"
+# ── Read addresses from deployments/97.json (single source of truth) ──
+DEPLOY_JSON="$ROOT/deployments/97.json"
+if [ ! -f "$DEPLOY_JSON" ]; then
+  echo "ERROR: $DEPLOY_JSON not found"; exit 1
+fi
 
-# Constants (not redeployed)
-WBNB="0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd"
-PANCAKE_ROUTER="0xD99D1c33F9fC3444f8101754aBC46c52416550D1"
-DEPLOYER="0xAecb229194314999E396468eb091b42E44Bc3c8c"
+# Parse with python3 (available on macOS)
+get_addr() { python3 -c "import json; d=json.load(open('$DEPLOY_JSON')); print(d['contracts']['$1'])"; }
+
+PRICE_FEED=$(get_addr PriceFeed)
+VAULT=$(get_addr Vault)
+CONTRACT_REGISTRY=$(get_addr ContractRegistry)
+TOKEN_FACTORY=$(get_addr TokenFactory)
+POSITION_MANAGER=$(get_addr PositionManager)
+SETTLEMENT_V1=$(get_addr Settlement)
+SETTLEMENT_V2=$(get_addr SettlementV2)
+PERP_VAULT=$(get_addr PerpVault)
+RISK_MANAGER=$(get_addr RiskManager)
+FUNDING_RATE=$(get_addr FundingRate)
+LIQUIDATION=$(get_addr Liquidation)
+INSURANCE_FUND=$(get_addr InsuranceFund)
+WBNB=$(get_addr WBNB)
+PANCAKE_ROUTER=$(get_addr PancakeRouterV2)
+DEPLOYER=$(python3 -c "import json; print(json.load(open('$DEPLOY_JSON'))['deployer'])")
 
 echo "═══════════════════════════════════════════"
 echo "  Contract Address Updater"
