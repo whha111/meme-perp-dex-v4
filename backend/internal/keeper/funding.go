@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -285,7 +286,11 @@ func (k *FundingKeeper) getPositionsFromEngine() ([]model.Position, error) {
 		return nil, fmt.Errorf("matching engine URL not configured")
 	}
 
-	resp, err := k.httpClient.Get(k.matchingEngineURL + "/api/internal/positions/all")
+	internalKey := os.Getenv("MEMEPERP_INTERNAL_API_KEY")
+	if internalKey == "" {
+		internalKey = "memeperp-internal-2026"
+	}
+	resp, err := k.httpClient.Get(k.matchingEngineURL + "/api/internal/positions/all?key=" + internalKey)
 	if err != nil {
 		return nil, fmt.Errorf("engine request failed: %w", err)
 	}

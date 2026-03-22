@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -185,6 +186,7 @@ type enginePosition struct {
 	EntryPrice       string `json:"entryPrice"`
 	Leverage         string `json:"leverage"`
 	LiquidationPrice string `json:"liquidationPrice"`
+	MarkPrice        string `json:"markPrice"`
 	UnrealizedPnl    string `json:"unrealizedPnl"`
 	Timestamp        int64  `json:"timestamp"`
 }
@@ -195,7 +197,11 @@ func (k *LiquidationKeeper) getPositionsFromEngine() ([]model.Position, error) {
 		return nil, fmt.Errorf("matching engine URL not configured")
 	}
 
-	resp, err := k.httpClient.Get(k.matchingEngineURL + "/api/internal/positions/all")
+	internalKey := os.Getenv("MEMEPERP_INTERNAL_API_KEY")
+	if internalKey == "" {
+		internalKey = "memeperp-internal-2026"
+	}
+	resp, err := k.httpClient.Get(k.matchingEngineURL + "/api/internal/positions/all?key=" + internalKey)
 	if err != nil {
 		return nil, fmt.Errorf("engine request failed: %w", err)
 	}
@@ -238,6 +244,10 @@ func (k *LiquidationKeeper) getPositionsFromEngine() ([]model.Position, error) {
 		}
 		if m, ok := new(big.Int).SetString(ep.Collateral, 10); ok {
 			pos.Margin = model.Decimal{Decimal: decimal.NewFromBigInt(m, -18)}
+		}
+		// Mark price from engine (avoids Redis key mismatch — engine uses token address, Redis uses instId)
+		if mp, ok := new(big.Int).SetString(ep.MarkPrice, 10); ok && mp.Sign() > 0 {
+			pos.MarkPx = model.Decimal{Decimal: decimal.NewFromBigInt(mp, -18)}
 		}
 
 		positions = append(positions, pos)
@@ -296,18 +306,26 @@ func (k *LiquidationKeeper) checkPositions(ctx context.Context) {
 	}
 
 	for _, pos := range positions {
-		// Get mark price from cache (local, fast)
-		markPriceStr, err := k.cache.GetMarkPrice(ctx, pos.InstID)
-		if err != nil {
-			k.logger.Debug("Failed to get mark price from cache",
-				zap.String("instId", pos.InstID),
-				zap.Error(err))
-			continue
-		}
-
-		markPrice, err := model.NewDecimalFromString(markPriceStr)
-		if err != nil {
-			continue
+		// Get mark price: prefer engine-provided value (avoids Redis key format mismatch),
+		// fall back to Redis cache
+		var markPrice model.Decimal
+		if !pos.MarkPx.IsZero() {
+			// Engine already provided mark price (Mode 2: positions from matching engine)
+			markPrice = pos.MarkPx
+		} else {
+			// Fallback: try Redis cache (Mode 1: positions from DB)
+			markPriceStr, err := k.cache.GetMarkPrice(ctx, pos.InstID)
+			if err != nil {
+				k.logger.Debug("Failed to get mark price from cache",
+					zap.String("instId", pos.InstID),
+					zap.Error(err))
+				continue
+			}
+			var parseErr error
+			markPrice, parseErr = model.NewDecimalFromString(markPriceStr)
+			if parseErr != nil {
+				continue
+			}
 		}
 
 		// Local pre-check: is position in danger zone?
