@@ -80,6 +80,8 @@ import {
   settleLiquidation as vaultSettleLiquidation,
   collectTradingFee as vaultCollectFee,
   startOIFlush,
+  txLockRef,
+  updateGraduatedTokens as vaultUpdateGraduatedTokens,
 } from "./modules/perpVault";
 import {
   initMarginBatch,
@@ -5476,6 +5478,9 @@ async function registerGraduatedToken(token: Address, pairAddress: Address): Pro
     pairAddress: normalizedPair,
     isWethToken0,
   });
+
+  // Sync graduated tokens set to PerpVault for per-token OI tracking
+  vaultUpdateGraduatedTokens(graduatedTokens);
 
   console.log(`[Graduation] ✅ Registered graduated token: ${normalizedToken.slice(0, 10)}`);
   console.log(`[Graduation]    Pair: ${normalizedPair.slice(0, 10)}, WETH is token${isWethToken0 ? '0' : '1'}`);
@@ -14460,6 +14465,55 @@ async function startServer(): Promise<void> {
     }
   };
 
+  // ── updatePriceFeedOnChain: 定期更新 PriceFeed 合约的毕业代币价格 ──
+  // 毕业代币的价格源是 Uniswap V2 Pair，但链上 PriceFeed 需要被显式调用
+  const PRICE_FEED_UPDATE_INTERVAL_MS = 30_000; // 30 seconds
+
+  const PRICE_FEED_ABI = [{
+    name: "updateTokenPriceFromUniswap",
+    type: "function",
+    stateMutability: "nonpayable" as const,
+    inputs: [{ name: "token", type: "address" as const }],
+    outputs: [],
+  }] as const;
+
+  const updatePriceFeedOnChain = async () => {
+    if (graduatedTokens.size === 0) return;
+    if (!PRICE_FEED_ADDRESS || !MATCHER_PRIVATE_KEY) return;
+
+    for (const [token] of graduatedTokens.entries()) {
+      try {
+        // Acquire global tx lock to avoid nonce conflicts with OI/settlement batches
+        if (txLockRef.locked) {
+          console.log(`[PriceFeed] ⏳ TX lock held, skipping update cycle`);
+          return; // Will retry next interval
+        }
+        txLockRef.locked = true;
+
+        const matcherAccount = privateKeyToAccount(MATCHER_PRIVATE_KEY);
+        const priceFeedWallet = createWalletClient({
+          account: matcherAccount,
+          chain: activeChain,
+          transport: http(RPC_URL),
+        });
+
+        await priceFeedWallet.writeContract({
+          address: PRICE_FEED_ADDRESS,
+          abi: PRICE_FEED_ABI,
+          functionName: "updateTokenPriceFromUniswap",
+          args: [token as Address],
+        });
+
+        console.log(`[PriceFeed] ✅ Updated on-chain price for ${token.slice(0, 10)}`);
+      } catch (e: any) {
+        console.error(`[PriceFeed] ❌ Failed to update ${token.slice(0, 10)}: ${(e?.message || "").slice(0, 120)}`);
+        // Continue with other tokens
+      } finally {
+        txLockRef.locked = false;
+      }
+    }
+  };
+
   // 从 TokenFactory 同步支持的代币列表 (必须在 syncSpotPrices 之前)
   await syncSupportedTokens();
 
@@ -14762,6 +14816,10 @@ async function startServer(): Promise<void> {
   // 定时同步现货价格 (仍需要，供现货交易使用)
   setInterval(syncSpotPrices, SPOT_PRICE_SYNC_INTERVAL_MS);
   console.log(`[Server] Spot price sync interval: ${SPOT_PRICE_SYNC_INTERVAL_MS}ms`);
+
+  // 定时更新 PriceFeed 合约的毕业代币价格 (每 30 秒)
+  setInterval(updatePriceFeedOnChain, PRICE_FEED_UPDATE_INTERVAL_MS);
+  console.log(`[Server] PriceFeed on-chain update interval: ${PRICE_FEED_UPDATE_INTERVAL_MS}ms`);
 
   // 定时刷新 token pool cache (60秒, 覆盖新上币/状态变化)
   setInterval(async () => {

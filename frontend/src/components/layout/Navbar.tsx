@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: '/perp', key: 'perpetual' },
   { href: '/create', key: 'launch' },
   { href: '/account', key: 'assets' },
+  { href: '/vault', key: 'vault' },
   { href: '/earnings', key: 'invite' },
   { href: '/leaderboard', key: 'leaderboard' },
 ] as const;

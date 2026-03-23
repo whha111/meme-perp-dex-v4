@@ -287,6 +287,37 @@ export const txLockRef = {
 };
 
 // ============================================================
+// Per-token OI tracking: graduated (DEX) tokens track OI, internal (bonding curve) skip
+// ============================================================
+let graduatedTokensSet = new Set<string>();
+
+/**
+ * Update the set of graduated tokens (called from server.ts on graduation events).
+ * Graduated tokens have LP pool as counterparty → must track OI.
+ * Internal (bonding curve) tokens are pure P2P → skip OI.
+ */
+export function updateGraduatedTokens(tokens: Map<string, any>): void {
+  const newSet = new Set<string>();
+  for (const key of tokens.keys()) {
+    newSet.add(key.toLowerCase());
+  }
+  graduatedTokensSet = newSet;
+  logger.info("PerpVault", `Graduated tokens set updated: ${graduatedTokensSet.size} tokens`);
+}
+
+/**
+ * Determine whether OI should be tracked for a given token.
+ * - If SKIP_OI_TRACKING=true: only track graduated (DEX) tokens
+ * - Otherwise: track all tokens
+ */
+function shouldTrackOI(token: Address): boolean {
+  if (process.env.SKIP_OI_TRACKING === "true") {
+    return graduatedTokensSet.has(token.toLowerCase());
+  }
+  return true;
+}
+
+// ============================================================
 // Batched OI Queue (prevents nonce conflicts from concurrent calls)
 // ============================================================
 // Key: `${token}_${isLong}` → net delta (positive = increase, negative = decrease)
@@ -381,8 +412,15 @@ async function flushOIQueue(): Promise<void> {
 
 export function startOIFlush(): void {
   if (oiFlushIntervalId) return;
+  // Always start the timer — graduated tokens may appear later.
+  // The flush function already skips when pendingOIDelta is empty.
+  // Per-token filtering happens in increaseOI/decreaseOI via shouldTrackOI().
   oiFlushIntervalId = setInterval(flushOIQueue, OI_FLUSH_INTERVAL_MS);
-  logger.info("PerpVault", `OI batch flush started (interval: ${OI_FLUSH_INTERVAL_MS}ms)`);
+  if (process.env.SKIP_OI_TRACKING === "true") {
+    logger.info("PerpVault", `OI flush timer started (per-token mode: only graduated tokens tracked)`);
+  } else {
+    logger.info("PerpVault", `OI batch flush started (interval: ${OI_FLUSH_INTERVAL_MS}ms)`);
+  }
 }
 
 export function stopOIFlush(): void {
@@ -656,12 +694,17 @@ export async function settleLiquidation(
 /**
  * Increase open interest (on position open)
  * Queued for batch execution to avoid nonce conflicts from concurrent calls.
+ *
+ * Pure P2P mode (SKIP_OI_TRACKING=true): OI tracking is skipped because
+ * risk is symmetric between traders, not borne by an LP pool. The OI cap
+ * protects LPs — in P2P mode there are no LPs during internal matching.
  */
 export async function increaseOI(
   token: Address,
   isLong: boolean,
   sizeETH: bigint
 ): Promise<{ success: boolean }> {
+  if (!shouldTrackOI(token)) return { success: true };
   if (!isPerpVaultEnabled() || !walletClient) return { success: false };
   if (sizeETH === 0n) return { success: true };
 
@@ -679,6 +722,7 @@ export async function decreaseOI(
   isLong: boolean,
   sizeETH: bigint
 ): Promise<{ success: boolean }> {
+  if (!shouldTrackOI(token)) return { success: true };
   if (!isPerpVaultEnabled() || !walletClient) return { success: false };
   if (sizeETH === 0n) return { success: true };
 
@@ -967,4 +1011,5 @@ export default {
   stopBatchSettlement,
   getPendingSettlementInfo,
   getPerpVaultMetrics,
+  updateGraduatedTokens,
 };
