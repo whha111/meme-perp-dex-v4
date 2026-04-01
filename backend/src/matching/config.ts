@@ -119,8 +119,8 @@ export const TRADING = {
   MIN_MARGIN: 1n * 10n ** 16n, // 最小保证金 0.01 BNB
   MIN_POSITION_SIZE: 1n * 10n ** 15n, // 最小仓位 0.001 BNB
   MAX_POSITION_SIZE: 500n * PRECISION_MULTIPLIER.ETH, // fallback 上限 (动态 OI 优先)
-  TAKER_FEE_RATE: 30n,  // 0.3% = 30bp
-  MAKER_FEE_RATE: 5n,   // 0.05% = 5bp
+  TAKER_FEE_RATE: 5n,   // 0.05% = 5bp (市价单)
+  MAKER_FEE_RATE: 3n,   // 0.03% = 3bp (限价单)
   BASE_MMR: 3000n,      // 维持保证金率 30% = 3000bp
   INITIAL_MARGIN_RATE: 4000n, // 初始保证金率 40% = 4000bp
   MAX_TOKENS_PER_ACCOUNT: 5, // 单账户最多持仓 5 个 token

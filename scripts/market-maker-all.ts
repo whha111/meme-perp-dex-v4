@@ -449,6 +449,33 @@ async function setup() {
     await depositOnChain(w, parseEther(PERP_DEPOSIT_ETH.toString()));
   }
 
+  // Register wallet keys directly for all perp wallets (enables engine MarginBatch to sign on-chain txs)
+  // 参考 Hyperliquid approveAgent 模式 — 做市商直接注册私钥，无需 session 派生
+  // Session 派生 (keccak256(signature)) 会产生不同的地址，做市商需要用原始私钥
+  log("SETUP", "🔑", "Registering wallet keys for perp wallets (direct key mode)...");
+  const INTERNAL_KEY = process.env.INTERNAL_API_KEY;
+  if (!INTERNAL_KEY) {
+    log("SETUP", "⚠️", "INTERNAL_API_KEY not set — skipping wallet key registration (engine margin deposits will fail)");
+  } else {
+    for (const w of perpWs) {
+      try {
+        const res = await fetch(`${API_URL}/api/internal/register-wallet-key`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-internal-key": INTERNAL_KEY },
+          body: JSON.stringify({ trader: w.addr, privateKey: w.key }),
+        });
+        const data = (await res.json()) as any;
+        if (data.success) {
+          log("SETUP", "✅", `Wallet key registered: ${w.addr.slice(0, 10)} (direct key — no session derivation)`);
+        } else {
+          log("SETUP", "⚠️", `Key registration failed for ${w.addr.slice(0, 10)}: ${data.error}`);
+        }
+      } catch (e: any) {
+        log("SETUP", "❌", `Key registration error for ${w.addr.slice(0, 10)}: ${e.message}`);
+      }
+    }
+  }
+
   // Wait for engine to detect deposit events via watchContractEvent
   log("SETUP", "⏳", "Waiting 15s for engine to process deposit events...");
   await sleep(15_000);

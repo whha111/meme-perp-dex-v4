@@ -31,7 +31,7 @@ import db, {
 } from "./database";
 import { connectRedis as connectNewRedis, disconnectRedis, PositionRepo, TradeRepo, OrderMarginRepo, Mode2AdjustmentRepo, NonceRepo, InsuranceFundRepo, ReferralRepo, SettlementLogRepo as RedisSettlementLogRepo, PendingWithdrawalMode2Repo, BalanceRepo as RedisBalanceRepo, type PendingWithdrawalMode2, withLock, safeBigInt, cleanupStaleOrders, cleanupClosedPositions, type PerpTrade } from "./database/redis";
 // P1-5: PostgreSQL 订单镜像 (Write-Through Cache)
-import { connectPostgres, disconnectPostgres, isPostgresConnected, OrderMirrorRepo, PositionMirrorRepo, TradeMirrorRepo, Mode2AdjustmentMirrorRepo, BillMirrorRepo, BalanceSnapshotRepo, pgMirrorWrite, getPgMirrorStats, type PgOrderMirror, type PgPositionMirror, type PgTradeMirror, type PgBill } from "./database/postgres";
+import { connectPostgres, disconnectPostgres, isPostgresConnected, OrderMirrorRepo, PositionMirrorRepo, TradeMirrorRepo, Mode2AdjustmentMirrorRepo, BillMirrorRepo, BalanceSnapshotRepo, FundingRateMirrorRepo, SyncStateRepo, pgMirrorWrite, pgMirrorWriteWithRetry, getPgMirrorStats, type PgOrderMirror, type PgPositionMirror, type PgTradeMirror, type PgBill } from "./database/postgres";
 // P2-4: 仓位大小限制常量
 import { TRADING, ALLOW_FAKE_DEPOSIT, RESET_MODE2_ON_START, PRECISION_MULTIPLIER, WETH_ADDRESS as WETH_ADDR_FROM_CONFIG, PANCAKESWAP_FACTORY_ADDRESS } from "./config";
 import { verifyOrderSignature } from "./utils/crypto";
@@ -56,7 +56,7 @@ async function requestWithdrawal(..._args: any[]): Promise<any> { return { succe
 async function generateFastWithdrawalSignature(..._args: any[]): Promise<any> { return null; }
 function getWithdrawModuleStatus(): any { return { deprecated: true }; }
 function cleanupExpiredWithdrawals() {}
-import { createEventPoller, stopAllPollers, getPollerStats } from "./modules/eventPoller";
+import { createEventPoller, stopAllPollers, getPollerStats, setBlockPersistPgCallback } from "./modules/eventPoller";
 import {
   initLendingLiquidation,
   detectLendingLiquidations,
@@ -95,6 +95,7 @@ import {
   setOnDepositFailure,
   getOnChainTraderMargin,
   getMarginBatchMetrics,
+  registerWalletKey,
   type PendingMarginOp,
 } from "./modules/marginBatch";
 
@@ -2470,19 +2471,38 @@ function getTokenInsuranceFund(token: Address): InsuranceFund {
 function contributeToInsuranceFund(amount: bigint, token?: Address): void {
   if (token) {
     const fund = getTokenInsuranceFund(token);
+    const balBefore = fund.balance;
     fund.balance += amount;
     fund.totalContributions += amount;
     fund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Token ${token.slice(0, 10)} contribution: +$${Number(amount) / 1e18}, balance: $${Number(fund.balance) / 1e18}`);
-    // 持久化到 Redis (fire-and-forget)
     InsuranceFundRepo.saveToken(token, fund).catch(() => {});
+    // L3: Bill for insurance fund contribution
+    if (isPostgresConnected()) {
+      pgMirrorWrite(BillMirrorRepo.insert({
+        id: crypto.randomUUID(), trader: "insurance_fund",
+        type: "INSURANCE_CONTRIBUTION", amount: amount.toString(),
+        balance_before: balBefore.toString(), balance_after: fund.balance.toString(),
+        on_chain_status: "OFF_CHAIN", proof_data: JSON.stringify({ token }),
+        position_id: null, order_id: null, timestamp: Date.now(), created_at: Date.now(),
+      }), `InsuranceBill:contrib:${token.slice(0, 10)}`);
+    }
   } else {
+    const balBefore = insuranceFund.balance;
     insuranceFund.balance += amount;
     insuranceFund.totalContributions += amount;
     insuranceFund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Global contribution: +$${Number(amount) / 1e18}, balance: $${Number(insuranceFund.balance) / 1e18}`);
-    // 持久化到 Redis (fire-and-forget)
     InsuranceFundRepo.saveGlobal(insuranceFund).catch(() => {});
+    if (isPostgresConnected()) {
+      pgMirrorWrite(BillMirrorRepo.insert({
+        id: crypto.randomUUID(), trader: "insurance_fund",
+        type: "INSURANCE_CONTRIBUTION", amount: amount.toString(),
+        balance_before: balBefore.toString(), balance_after: insuranceFund.balance.toString(),
+        on_chain_status: "OFF_CHAIN", proof_data: "{}",
+        position_id: null, order_id: null, timestamp: Date.now(), created_at: Date.now(),
+      }), `InsuranceBill:contrib:global`);
+    }
   }
 }
 
@@ -2495,22 +2515,41 @@ function contributeToInsuranceFund(amount: bigint, token?: Address): void {
 function payFromInsuranceFund(amount: bigint, token?: Address): bigint {
   if (token) {
     const fund = getTokenInsuranceFund(token);
+    const balBefore = fund.balance;
     const actualPayout = amount > fund.balance ? fund.balance : amount;
     fund.balance -= actualPayout;
     fund.totalPayouts += actualPayout;
     fund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Token ${token.slice(0, 10)} payout: -$${Number(actualPayout) / 1e18}, balance: $${Number(fund.balance) / 1e18}`);
-    // 持久化到 Redis (fire-and-forget)
     InsuranceFundRepo.saveToken(token, fund).catch(() => {});
+    // L3: Bill for insurance fund payout
+    if (actualPayout > 0n && isPostgresConnected()) {
+      pgMirrorWrite(BillMirrorRepo.insert({
+        id: crypto.randomUUID(), trader: "insurance_fund",
+        type: "INSURANCE_PAYOUT", amount: (-actualPayout).toString(),
+        balance_before: balBefore.toString(), balance_after: fund.balance.toString(),
+        on_chain_status: "OFF_CHAIN", proof_data: JSON.stringify({ token }),
+        position_id: null, order_id: null, timestamp: Date.now(), created_at: Date.now(),
+      }), `InsuranceBill:payout:${token.slice(0, 10)}`);
+    }
     return actualPayout;
   } else {
+    const balBefore = insuranceFund.balance;
     const actualPayout = amount > insuranceFund.balance ? insuranceFund.balance : amount;
     insuranceFund.balance -= actualPayout;
     insuranceFund.totalPayouts += actualPayout;
     insuranceFund.lastUpdated = Date.now();
     console.log(`[InsuranceFund] Global payout: -$${Number(actualPayout) / 1e18}, balance: $${Number(insuranceFund.balance) / 1e18}`);
-    // 持久化到 Redis (fire-and-forget)
     InsuranceFundRepo.saveGlobal(insuranceFund).catch(() => {});
+    if (actualPayout > 0n && isPostgresConnected()) {
+      pgMirrorWrite(BillMirrorRepo.insert({
+        id: crypto.randomUUID(), trader: "insurance_fund",
+        type: "INSURANCE_PAYOUT", amount: (-actualPayout).toString(),
+        balance_before: balBefore.toString(), balance_after: insuranceFund.balance.toString(),
+        on_chain_status: "OFF_CHAIN", proof_data: "{}",
+        position_id: null, order_id: null, timestamp: Date.now(), created_at: Date.now(),
+      }), `InsuranceBill:payout:global`);
+    }
     return actualPayout;
   }
 }
@@ -3148,6 +3187,23 @@ async function settleFunding(token: Address): Promise<void> {
       lastSettlementTime: Date.now(),
     }).catch(() => {});
   } catch { /* Redis module import fail — non-blocking */ }
+
+  // M2: Persist funding rate snapshot to PG (audit trail + historical queries)
+  if (isPostgresConnected()) {
+    const { longOI: frLongOI, shortOI: frShortOI } = calculateOpenInterest(normalizedToken);
+    pgMirrorWrite(
+      FundingRateMirrorRepo.insert({
+        token: normalizedToken,
+        longRate: longRate.toString(),
+        shortRate: shortRate.toString(),
+        displayRate: displayRate.toString(),
+        totalCollected: totalCollected.toString(),
+        longOi: frLongOI.toString(),
+        shortOi: frShortOI.toString(),
+      }),
+      `FundingRate:${normalizedToken.slice(0, 10)}`
+    );
+  }
 
   console.log(`[DynamicFunding] Settled: longPaid=${totalLongPayment} shortPaid=${totalShortPayment} payments=${payments.length}`);
 
@@ -4643,8 +4699,8 @@ function addMode2Adjustment(trader: Address, amount: bigint, reason: string): vo
     console.error(`[Mode2Adj] Failed to persist to Redis: ${e}`)
   );
   // P0-2: 双写 PG (累计值 + 变动明细)
-  pgMirrorWrite(
-    Mode2AdjustmentMirrorRepo.upsert(normalized, updated, amount, reason),
+  pgMirrorWriteWithRetry(
+    () => Mode2AdjustmentMirrorRepo.upsert(normalized, updated, amount, reason),
     `Mode2Adj:${normalized.slice(0, 10)}:${reason}`
   );
 }
@@ -4682,8 +4738,8 @@ function createTradeWithMirror(data: Omit<PerpTrade, "id">, type: string = "norm
  *  Accepts both bigint and string for amount fields (server.ts uses mixed types). */
 function createBillWithMirror(data: any): void {
   RedisSettlementLogRepo.create(data).then(log => {
-    pgMirrorWrite(
-      BillMirrorRepo.insert({
+    pgMirrorWriteWithRetry(
+      () => BillMirrorRepo.insert({
         id: log.id,
         trader: log.userAddress,
         type: log.type,
@@ -4865,6 +4921,15 @@ function deposit(trader: Address, amount: bigint): void {
   balance.availableBalance += amount;
   // ★ Also track as mode2 adjustment so it survives syncUserBalanceFromChain
   addMode2Adjustment(trader, amount, "API_DEPOSIT");
+  // P1-1: Persist to Redis (same pattern as adjustUserBalance)
+  const normalized = trader.toLowerCase() as Address;
+  RedisBalanceRepo.update(normalized, {
+    walletBalance: balance.totalBalance,
+    availableBalance: balance.availableBalance,
+    usedMargin: balance.usedMargin || 0n,
+    frozenMargin: balance.frozenMargin || 0n,
+    lastSyncTime: Date.now(),
+  }).catch(e => console.error(`[Balance] Redis persist failed (deposit): ${e}`));
   console.log(`[Balance] Deposit: ${trader.slice(0, 10)} +$${Number(amount) / 1e18}, total: $${Number(balance.totalBalance) / 1e18}`);
 }
 
@@ -4879,6 +4944,15 @@ function withdraw(trader: Address, amount: bigint): boolean {
   }
   balance.totalBalance -= amount;
   balance.availableBalance -= amount;
+  // P1-1: Persist to Redis
+  const normalized = trader.toLowerCase() as Address;
+  RedisBalanceRepo.update(normalized, {
+    walletBalance: balance.totalBalance,
+    availableBalance: balance.availableBalance,
+    usedMargin: balance.usedMargin || 0n,
+    frozenMargin: balance.frozenMargin || 0n,
+    lastSyncTime: Date.now(),
+  }).catch(e => console.error(`[Balance] Redis persist failed (withdraw): ${e}`));
   console.log(`[Balance] Withdraw: ${trader.slice(0, 10)} -$${Number(amount) / 1e18}, total: $${Number(balance.totalBalance) / 1e18}`);
   return true;
 }
@@ -4955,8 +5029,8 @@ function releaseMargin(trader: Address, margin: bigint, realizedPnL: bigint): vo
 // 订单保证金扣除/退还 (下单时扣，撤单时退)
 // ============================================================
 
-// 手续费率 0.3% = 30 / 10000 (Taker 费率，用于预扣)
-const ORDER_FEE_RATE = 30n;
+// 手续费率: 从 config.ts 统一读取 (Taker 费率用于预扣，Maker 成交后退差额)
+const ORDER_FEE_RATE = TRADING.TAKER_FEE_RATE;
 
 // 记录每个订单的保证金和手续费 (用于撤单退款)
 interface OrderMarginInfo {
@@ -4987,7 +5061,7 @@ function calculateOrderCost(size: bigint, _price: bigint, leverage: bigint): { m
   // 保证金 = size * 10000 / leverage
   const margin = (size * 10000n) / leverage;
 
-  // 手续费 = size * 0.3% (ORDER_FEE_RATE = 30, Taker 预扣)
+  // 手续费 = size * Taker费率 (预扣最大费率，Maker 成交后退差额)
   const fee = (size * ORDER_FEE_RATE) / 10000n;
 
   // 总计 = 保证金 + 手续费
@@ -5347,10 +5421,8 @@ function settleOrderMargin(trader: Address, orderId: string, filledSize: bigint,
   // 预扣的手续费 (按 Taker 费率 0.05%)
   const preDeductedFee = (marginInfo.fee * fillRatio) / 10000n;
 
-  // 实际手续费: Maker 0.05%, Taker 0.3%
-  const TAKER_FEE_RATE = 30n;
-  const MAKER_FEE_RATE = 5n;
-  const actualFeeRate = isMaker ? MAKER_FEE_RATE : TAKER_FEE_RATE;
+  // 实际手续费: 从 config.ts 统一读取 (Maker 3bp, Taker 5bp)
+  const actualFeeRate = isMaker ? TRADING.MAKER_FEE_RATE : TRADING.TAKER_FEE_RATE;
   const actualFee = (filledSize * actualFeeRate) / 10000n;
 
   balance.usedMargin += settleMargin;
@@ -5365,20 +5437,33 @@ function settleOrderMargin(trader: Address, orderId: string, filledSize: bigint,
   // 但 positionMargin 只增加 margin，所以 fee 部分会虚增 available
   // 需要通过 mode2Adj -= fee 来抵消
   if (actualFee > 0n) {
+    const balBefore = balance.totalBalance;
     addMode2Adjustment(trader, -actualFee, "OPEN_FEE");
+    // Bill: record opening fee for audit trail
+    createBillWithMirror({
+      userAddress: trader, type: "OPEN_FEE", amount: (-actualFee).toString(),
+      balanceBefore: balBefore.toString(), balanceAfter: (balBefore - actualFee).toString(),
+      positionId: marginInfo?.orderId || "", onChainStatus: "OFF_CHAIN",
+    });
     // ✅ 手续费 80/20 分配: 80% LP (PerpVault) + 20% 保险基金
     addMode2Adjustment(FEE_RECEIVER_ADDRESS, actualFee, "PLATFORM_FEE");
     distributeTradingFee(actualFee);
-    console.log(`[Fee] Open fee Ξ${Number(actualFee) / 1e18} (${isMaker ? "Maker 0.05%" : "Taker 0.3%"}) → 80% LP + 20% insurance`);
+    console.log(`[Fee] Open fee Ξ${Number(actualFee) / 1e18} (${isMaker ? `Maker ${TRADING.MAKER_FEE_RATE}bp` : `Taker ${TRADING.TAKER_FEE_RATE}bp`}) → 80% LP + 20% insurance`);
   }
 
-  // Maker 退还多扣的手续费差额 (预扣 Taker 0.3% - 实际 Maker 0.05% = 0.25%)
+  // Maker 退还多扣的手续费差额 (预扣 Taker fee - 实际 Maker fee)
   if (isMaker && preDeductedFee > actualFee) {
     const refund = preDeductedFee - actualFee;
+    const refundBalBefore = balance.totalBalance;
     balance.availableBalance += refund;
     // mode2Adj 只扣了 actualFee，而预扣里包含了 preDeductedFee
     // 差额 refund 需要补回 mode2Adj (因为 pendingOrdersLocked 仍按原额释放)
     addMode2Adjustment(trader, refund, "MAKER_FEE_REFUND");
+    createBillWithMirror({
+      userAddress: trader, type: "MAKER_FEE_REFUND", amount: refund.toString(),
+      balanceBefore: refundBalBefore.toString(), balanceAfter: (refundBalBefore + refund).toString(),
+      onChainStatus: "OFF_CHAIN",
+    });
     console.log(`[Fee] Maker fee refund Ξ${Number(refund) / 1e18} → ${trader.slice(0, 10)}`);
   }
 
@@ -6743,15 +6828,14 @@ async function createOrUpdatePosition(
   // 例如 10x: marginRatio = 1e8 / 100000 = 1000 (10%)
   const marginRatio = (10n ** 8n) / leverage;
 
-  // 计算开仓手续费 (0.05% of position value)
+  // 计算开仓手续费 (Taker 费率 — 开仓初始显示用)
   // 行业标准: 刚开仓时价格没变，未实现盈亏 = -手续费
-  const feeRate = 5n; // 0.05% = 5 / 10000
-  const openFee = (positionValue * feeRate) / 10000n; // USD, 1e18 精度
+  const openFee = (positionValue * TRADING.TAKER_FEE_RATE) / 10000n; // USD, 1e18 精度
 
   // 盈亏平衡价格 = 开仓价 ± 手续费对应的价格变动
   const breakEvenPrice = isLong
-    ? entryPrice + (entryPrice * feeRate) / 10000n
-    : entryPrice - (entryPrice * feeRate) / 10000n;
+    ? entryPrice + (entryPrice * TRADING.TAKER_FEE_RATE) / 10000n
+    : entryPrice - (entryPrice * TRADING.TAKER_FEE_RATE) / 10000n;
 
   // 计算维持保证金 (使用动态 MMR)
   const maintenanceMargin = (positionValue * effectiveMmr) / 10000n; // USD, 1e18 精度
@@ -6937,9 +7021,8 @@ async function closePositionByMatch(
     ? (closeSize * (closePrice - entryPrice)) / entryPrice
     : (closeSize * (entryPrice - closePrice)) / entryPrice;
 
-  // 平仓手续费 (0.3% taker)
-  const feeRate = 30n; // 0.3%
-  const closeFee = (closeSize * feeRate) / 10000n;
+  // 平仓手续费 (Taker 费率 — 市价平仓)
+  const closeFee = (closeSize * TRADING.TAKER_FEE_RATE) / 10000n;
 
   if (closeSize >= posSize) {
     // 全部平仓
@@ -7024,6 +7107,17 @@ async function closePositionByMatch(
   }
 
   broadcastPositionUpdate(normalizedTrader, normalizedToken);
+
+  // Bill: record close fee as separate audit entry
+  if (closeFee > 0n) {
+    const traderBal = getUserBalance(normalizedTrader);
+    createBillWithMirror({
+      userAddress: normalizedTrader, type: "CLOSE_FEE", amount: (-closeFee).toString(),
+      balanceBefore: (traderBal.totalBalance + closeFee).toString(),
+      balanceAfter: traderBal.totalBalance.toString(),
+      positionId: pos.pairId, onChainStatus: "OFF_CHAIN",
+    });
+  }
 
   // 扣除平仓手续费 (从 FEE_RECEIVER 收取)
   const feeReceiver = (process.env.FEE_RECEIVER_ADDRESS || "").toLowerCase() as Address;
@@ -7686,10 +7780,8 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       // Maker/Taker 判定: incoming order = Taker, 订单簿中的 = Maker
       // incoming order 就是当前提交的 order，另一方是订单簿中已有的
       const longIsMaker = match.longOrder.createdAt < match.shortOrder.createdAt;
-      const TAKER_FEE_RATE = 30n; // 0.3%
-      const MAKER_FEE_RATE = 5n; // 0.05%
-      const longFeeRate = longIsMaker ? MAKER_FEE_RATE : TAKER_FEE_RATE;
-      const shortFeeRate = longIsMaker ? TAKER_FEE_RATE : MAKER_FEE_RATE;
+      const longFeeRate = longIsMaker ? TRADING.MAKER_FEE_RATE : TRADING.TAKER_FEE_RATE;
+      const shortFeeRate = longIsMaker ? TRADING.TAKER_FEE_RATE : TRADING.MAKER_FEE_RATE;
       const longFee = (tradeValue * longFeeRate) / 10000n;
       const shortFee = (tradeValue * shortFeeRate) / 10000n;
 
@@ -12275,6 +12367,27 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
+  // POST /api/internal/register-wallet-key — 做市商/API trader 直接注册私钥
+  // 参考 Hyperliquid approveAgent — 无需 session 派生流程
+  if (path === "/api/internal/register-wallet-key" && method === "POST") {
+    const internalKey = url.searchParams.get("key") || req.headers.get("x-internal-key");
+    const expectedKey = process.env.INTERNAL_API_KEY;
+    if (!expectedKey || internalKey !== expectedKey) {
+      return errorResponse("Unauthorized: internal API key required", 401);
+    }
+    try {
+      const body = await req.json();
+      const { trader, privateKey } = body as { trader: string; privateKey: string };
+      if (!trader || !privateKey) {
+        return errorResponse("trader and privateKey required", 400);
+      }
+      registerWalletKey(trader.toLowerCase() as Address, privateKey as `0x${string}`);
+      return jsonResponse({ success: true, message: `Wallet key registered for ${trader.slice(0, 10)}` });
+    } catch (e: any) {
+      return errorResponse(e.message || "Failed to register wallet key");
+    }
+  }
+
   // ============================================================
   // 保险基金 API (P1)
   // ============================================================
@@ -13812,6 +13925,10 @@ async function startServer(): Promise<void> {
   const pgConnected = await connectPostgres();
   if (pgConnected) {
     console.log("[Server] ✅ PostgreSQL connected — order + position mirroring enabled");
+    // L1: Register PG dual-write callback for event poller block cursors
+    setBlockPersistPgCallback((name, block) => {
+      pgMirrorWrite(SyncStateRepo.upsert(`eventPoller:lastBlock:${name}`, block.toString()), `SyncState:${name}`);
+    });
   } else {
     console.warn("[Server] ⚠️ PostgreSQL not available — running with Redis only (orders not mirrored)");
   }

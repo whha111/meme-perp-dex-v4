@@ -244,13 +244,30 @@ async function pollEvents(
 // Internal: Redis 持久化
 // ============================================================
 
+// Optional PG dual-write callback — set by server.ts at init time
+let pgPersistBlockFn: ((name: string, block: bigint) => void) | null = null;
+
+export function setBlockPersistPgCallback(fn: (name: string, block: bigint) => void): void {
+  pgPersistBlockFn = fn;
+}
+
 async function persistLastBlock(name: string, block: bigint, prefix?: string): Promise<void> {
-  if (!isRedisConnected()) return;
-  try {
-    const redis = getRedisClient();
-    await redis.set(lastBlockKey(name, prefix), block.toString());
-  } catch (e: any) {
-    console.warn(`[EventPoller:${name}] Failed to persist lastBlock: ${e.message}`);
+  // Dual-write: Redis (primary, fast) + PG (backup, survives Redis flush)
+  // Pattern: Ponder checkpoint — multiple watermarks persisted to PG
+  if (isRedisConnected()) {
+    try {
+      const redis = getRedisClient();
+      await redis.set(lastBlockKey(name, prefix), block.toString());
+    } catch (e: any) {
+      console.warn(`[EventPoller:${name}] Failed to persist lastBlock to Redis: ${e.message}`);
+    }
+  }
+
+  // L1: PG dual-write (fire-and-forget)
+  if (pgPersistBlockFn) {
+    try {
+      pgPersistBlockFn(name, block);
+    } catch { /* best-effort */ }
   }
 }
 

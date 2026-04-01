@@ -338,6 +338,9 @@ async function ensureMirrorTable(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_ppm_token ON perp_position_mirror(token)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ppm_status ON perp_position_mirror(status)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_ppm_trader_token ON perp_position_mirror(trader, token, is_long) WHERE status = 'OPEN'`;
+  // Unique constraint: one OPEN position per trader+token+side (dYdX v4 keys positions by subaccountId+perpetualId)
+  // This prevents duplicate PG rows when pairId format changes between restarts
+  await sql.unsafe(`CREATE UNIQUE INDEX IF NOT EXISTS uq_ppm_open_position ON perp_position_mirror(trader, token, is_long) WHERE status = 'OPEN'`).catch(() => {});
 
   logger.info("Postgres", "Mirror table ready: perp_position_mirror (V2)");
 
@@ -383,8 +386,11 @@ async function ensureMirrorTable(): Promise<void> {
       timestamp BIGINT NOT NULL
     )
   `;
+  // L2: Add auto-incrementing sequence column for strict ordering
+  await sql.unsafe(`ALTER TABLE mode2_adjustment_log ADD COLUMN IF NOT EXISTS seq SERIAL`).catch(() => {});
   await sql`CREATE INDEX IF NOT EXISTS idx_m2log_trader ON mode2_adjustment_log(trader)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_m2log_timestamp ON mode2_adjustment_log(timestamp)`;
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_m2log_seq ON mode2_adjustment_log(seq)`).catch(() => {});
   logger.info("Postgres", "Mirror tables ready: mode2_adjustments + mode2_adjustment_log");
 
   // ── P0-2: Bill (settlement log) table ──
@@ -425,6 +431,34 @@ async function ensureMirrorTable(): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS idx_bs_trader ON balance_snapshots(trader)`;
   await sql`CREATE INDEX IF NOT EXISTS idx_bs_time ON balance_snapshots(snapshot_time)`;
   logger.info("Postgres", "Mirror table ready: balance_snapshots");
+
+  // ── M2: Funding rate history table ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS funding_rate_history (
+      id SERIAL PRIMARY KEY,
+      token VARCHAR(128) NOT NULL,
+      long_rate VARCHAR(78) NOT NULL DEFAULT '0',
+      short_rate VARCHAR(78) NOT NULL DEFAULT '0',
+      display_rate VARCHAR(78) NOT NULL DEFAULT '0',
+      total_collected VARCHAR(78) NOT NULL DEFAULT '0',
+      long_oi VARCHAR(78) NOT NULL DEFAULT '0',
+      short_oi VARCHAR(78) NOT NULL DEFAULT '0',
+      funding_time BIGINT NOT NULL
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_frh_token ON funding_rate_history(token)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_frh_time ON funding_rate_history(funding_time)`;
+  logger.info("Postgres", "Mirror table ready: funding_rate_history");
+
+  // ── L1: Sync states (event poller block cursors, etc.) ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS sync_states (
+      key VARCHAR(128) PRIMARY KEY,
+      value VARCHAR(256) NOT NULL,
+      updated_at BIGINT NOT NULL
+    )
+  `;
+  logger.info("Postgres", "Mirror table ready: sync_states");
 }
 
 // ============================================================
@@ -569,12 +603,16 @@ export const OrderMirrorRepo = {
 export const PositionMirrorRepo = {
   /**
    * 创建或更新仓位镜像 (Upsert) — V2 完整字段
-   * 每次 savePositionToRedis 成功后调用
+   * Uses unique partial index uq_ppm_open_position(trader, token, is_long) WHERE status='OPEN'
+   * to prevent duplicate rows when pairId format varies between restarts.
+   * Pattern: dYdX v4 keys positions by (subaccountId, perpetualId), not by UUID.
    */
   async upsert(position: PgPositionMirror): Promise<void> {
     if (!sql || !isConnected) return;
 
     try {
+      // Use ON CONFLICT on the unique partial index for OPEN positions
+      // This ensures only one OPEN row per trader+token+side, regardless of ID format
       await sql`
         INSERT INTO perp_position_mirror (
           id, trader, token, symbol, counterparty,
@@ -632,6 +670,45 @@ export const PositionMirrorRepo = {
           updated_at = EXCLUDED.updated_at
       `;
     } catch (error: any) {
+      // If ON CONFLICT (id) missed but unique index caught it, try update by trader+token+is_long
+      if (error.message?.includes("uq_ppm_open_position")) {
+        try {
+          await sql`
+            UPDATE perp_position_mirror SET
+              id = ${position.id},
+              size = ${position.size},
+              entry_price = ${position.entry_price},
+              average_entry_price = ${position.average_entry_price},
+              leverage = ${position.leverage},
+              mark_price = ${position.mark_price},
+              liquidation_price = ${position.liquidation_price},
+              bankruptcy_price = ${position.bankruptcy_price},
+              break_even_price = ${position.break_even_price},
+              collateral = ${position.collateral},
+              margin = ${position.margin},
+              margin_ratio = ${position.margin_ratio},
+              mmr = ${position.mmr},
+              maintenance_margin = ${position.maintenance_margin},
+              unrealized_pnl = ${position.unrealized_pnl},
+              realized_pnl = ${position.realized_pnl},
+              roe = ${position.roe},
+              accumulated_funding = ${position.accumulated_funding},
+              tp_price = ${position.tp_price},
+              sl_price = ${position.sl_price},
+              funding_index = ${position.funding_index},
+              is_liquidating = ${position.is_liquidating},
+              status = ${position.status},
+              updated_at = ${position.updated_at}
+            WHERE trader = ${position.trader}
+              AND token = ${position.token}
+              AND is_long = ${position.is_long}
+              AND status = 'OPEN'
+          `;
+          return;
+        } catch (e2: any) {
+          logger.error("Postgres", `Position fallback update failed: ${e2.message}`);
+        }
+      }
       logger.error("Postgres", `Failed to upsert position ${position.id}: ${error.message}`);
       throw error;
     }
@@ -650,7 +727,8 @@ export const PositionMirrorRepo = {
 
     try {
       const now = Date.now();
-      await sql`
+      // Try by id first; if no rows affected, try by pairId-like composite match
+      const result = await sql`
         UPDATE perp_position_mirror
         SET status = ${status},
             updated_at = ${now},
@@ -658,8 +736,24 @@ export const PositionMirrorRepo = {
             close_price = COALESCE(${closeData?.closePrice ?? null}, close_price),
             closing_pnl = COALESCE(${closeData?.closingPnl ?? null}, closing_pnl),
             close_fee = COALESCE(${closeData?.closeFee ?? null}, close_fee)
-        WHERE id = ${positionId}
+        WHERE id = ${positionId} AND status = 'OPEN'
       `;
+      // If the positionId contains trader info (composite key format), try extracting and matching
+      if (result.count === 0 && positionId.includes("_")) {
+        const parts = positionId.toLowerCase().split("_");
+        if (parts.length >= 2) {
+          await sql`
+            UPDATE perp_position_mirror
+            SET status = ${status},
+                updated_at = ${now},
+                closed_at = ${now},
+                close_price = COALESCE(${closeData?.closePrice ?? null}, close_price),
+                closing_pnl = COALESCE(${closeData?.closingPnl ?? null}, closing_pnl),
+                close_fee = COALESCE(${closeData?.closeFee ?? null}, close_fee)
+            WHERE LOWER(token) = ${parts[0]} AND LOWER(trader) = ${parts[1]} AND status = 'OPEN'
+          `;
+        }
+      }
     } catch (error: any) {
       logger.error("Postgres", `Failed to mark position ${positionId} as ${status}: ${error.message}`);
       throw error;
@@ -859,7 +953,11 @@ export interface PgMode2AdjustmentLog {
 }
 
 export const Mode2AdjustmentMirrorRepo = {
-  /** UPSERT 累计值 + 插入变动明细 */
+  /**
+   * Atomic increment + append log in a single transaction.
+   * Avoids race condition where two concurrent UPSERTs overwrite each other.
+   * Pattern: dYdX Ender — SQL-level arithmetic, not application-level.
+   */
   async upsert(
     trader: string,
     cumulativeAmount: bigint,
@@ -870,22 +968,27 @@ export const Mode2AdjustmentMirrorRepo = {
 
     const now = Date.now();
     const logId = crypto.randomUUID();
+    const changeStr = changeAmount.toString();
 
     try {
-      // 累计值 UPSERT
-      await sql`
-        INSERT INTO mode2_adjustments (trader, cumulative_amount, updated_at)
-        VALUES (${trader}, ${cumulativeAmount.toString()}, ${now})
-        ON CONFLICT (trader) DO UPDATE SET
-          cumulative_amount = EXCLUDED.cumulative_amount,
-          updated_at = EXCLUDED.updated_at
-      `;
+      // Single transaction: atomic increment + append log
+      await sql.begin(async (tx) => {
+        // Atomic cumulative increment (not EXCLUDED.cumulative — avoids race)
+        const [row] = await tx`
+          INSERT INTO mode2_adjustments (trader, cumulative_amount, updated_at)
+          VALUES (${trader}, ${changeStr}, ${now})
+          ON CONFLICT (trader) DO UPDATE SET
+            cumulative_amount = (CAST(mode2_adjustments.cumulative_amount AS NUMERIC) + ${changeStr})::VARCHAR,
+            updated_at = ${now}
+          RETURNING cumulative_amount
+        `;
 
-      // 变动明细 (append-only)
-      await sql`
-        INSERT INTO mode2_adjustment_log (id, trader, amount, reason, cumulative_after, timestamp)
-        VALUES (${logId}, ${trader}, ${changeAmount.toString()}, ${reason}, ${cumulativeAmount.toString()}, ${now})
-      `;
+        // Append-only log with accurate cumulative_after from RETURNING
+        await tx`
+          INSERT INTO mode2_adjustment_log (id, trader, amount, reason, cumulative_after, timestamp)
+          VALUES (${logId}, ${trader}, ${changeStr}, ${reason}, ${row.cumulative_amount}, ${now})
+        `;
+      });
     } catch (error: any) {
       logger.error("Postgres", `Failed to upsert mode2 adj for ${trader}: ${error.message}`);
       throw error;
@@ -1090,13 +1193,88 @@ export const BalanceSnapshotRepo = {
 };
 
 // ============================================================
+// Sync State Repository (L1 — event poller block cursors)
+// ============================================================
+
+export const SyncStateRepo = {
+  async upsert(key: string, value: string): Promise<void> {
+    if (!sql || !isConnected) return;
+    try {
+      await sql`
+        INSERT INTO sync_states (key, value, updated_at) VALUES (${key}, ${value}, ${Date.now()})
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+      `;
+    } catch (error: any) {
+      logger.error("Postgres", `Failed to upsert sync state ${key}: ${error.message}`);
+    }
+  },
+
+  async get(key: string): Promise<string | null> {
+    if (!sql || !isConnected) return null;
+    try {
+      const [row] = await sql`SELECT value FROM sync_states WHERE key = ${key}`;
+      return row?.value ?? null;
+    } catch {
+      return null;
+    }
+  },
+};
+
+// ============================================================
+// Funding Rate History Repository (M2)
+// ============================================================
+
+export const FundingRateMirrorRepo = {
+  async insert(data: {
+    token: string;
+    longRate: string;
+    shortRate: string;
+    displayRate: string;
+    totalCollected: string;
+    longOi: string;
+    shortOi: string;
+  }): Promise<void> {
+    if (!sql || !isConnected) return;
+
+    try {
+      await sql`
+        INSERT INTO funding_rate_history (token, long_rate, short_rate, display_rate, total_collected, long_oi, short_oi, funding_time)
+        VALUES (${data.token}, ${data.longRate}, ${data.shortRate}, ${data.displayRate}, ${data.totalCollected}, ${data.longOi}, ${data.shortOi}, ${Date.now()})
+      `;
+    } catch (error: any) {
+      logger.error("Postgres", `Failed to insert funding rate: ${error.message}`);
+      throw error;
+    }
+  },
+
+  async getByToken(token: string, limit = 100): Promise<any[]> {
+    if (!sql || !isConnected) return [];
+
+    try {
+      return await sql`
+        SELECT * FROM funding_rate_history
+        WHERE token = ${token}
+        ORDER BY funding_time DESC
+        LIMIT ${limit}
+      `;
+    } catch (error: any) {
+      logger.error("Postgres", `Failed to get funding rates for ${token}: ${error.message}`);
+      return [];
+    }
+  },
+};
+
+// ============================================================
 // P0-2: pgMirrorWrite Helper (可靠镜像写入 + 失败计数)
 // ============================================================
 // 替换现有的静默 .catch(console.error) 模式
 // 写入失败不阻塞主流程，但累计计数 + 定期告警
 
 let pgWriteFailures = 0;
+let pgWriteRetries = 0;
 const PG_FAILURE_ALERT_THRESHOLD = 10;
+const PG_MAX_RETRIES = 3;
+const PG_RETRY_BASE_MS = 500; // exponential backoff: 500ms, 1s, 2s
 
 export function pgMirrorWrite(repoCall: Promise<void>, context: string): void {
   repoCall.catch((e: any) => {
@@ -1104,6 +1282,32 @@ export function pgMirrorWrite(repoCall: Promise<void>, context: string): void {
     logger.error("PG-MIRROR", `${context} failed (#${pgWriteFailures}): ${e.message}`);
     if (pgWriteFailures % PG_FAILURE_ALERT_THRESHOLD === 0) {
       logger.error("PG-MIRROR", `🚨 ${pgWriteFailures} total failures — check PostgreSQL connection`);
+    }
+  });
+}
+
+/**
+ * Enhanced pgMirrorWrite with retry + exponential backoff.
+ * Use for critical writes (bills, mode2, positions) that must not be silently lost.
+ * Pattern: Drift Protocol retry queue with bounded attempts.
+ */
+export function pgMirrorWriteWithRetry(
+  repoCallFn: () => Promise<void>,
+  context: string,
+  attempt = 0,
+): void {
+  repoCallFn().catch((e: any) => {
+    pgWriteFailures++;
+    if (attempt < PG_MAX_RETRIES) {
+      const delayMs = PG_RETRY_BASE_MS * Math.pow(2, attempt);
+      pgWriteRetries++;
+      logger.warn("PG-MIRROR", `${context} retry ${attempt + 1}/${PG_MAX_RETRIES} in ${delayMs}ms: ${e.message}`);
+      setTimeout(() => pgMirrorWriteWithRetry(repoCallFn, context, attempt + 1), delayMs);
+    } else {
+      logger.error("PG-MIRROR", `${context} PERMANENTLY FAILED after ${PG_MAX_RETRIES} retries: ${e.message}`);
+      if (pgWriteFailures % PG_FAILURE_ALERT_THRESHOLD === 0) {
+        logger.error("PG-MIRROR", `🚨 ${pgWriteFailures} total failures — check PostgreSQL connection`);
+      }
     }
   });
 }
@@ -1122,8 +1326,11 @@ export default {
   Mode2AdjustmentMirrorRepo,
   BillMirrorRepo,
   BalanceSnapshotRepo,
+  FundingRateMirrorRepo,
+  SyncStateRepo,
   WalletRepo,
   TradeHistoryRepo,
   pgMirrorWrite,
+  pgMirrorWriteWithRetry,
   getPgMirrorStats,
 };

@@ -425,6 +425,23 @@ export function invalidateWalletClient(traderAddress: Address): void {
   walletClientCache.delete(traderAddress.toLowerCase() as Address);
 }
 
+/**
+ * 直接注册交易钱包私钥（用于 API-only 做市商 / 内部服务）
+ * 参考 Hyperliquid approveAgent 模式 — 做市商无需 session 派生流程
+ */
+export function registerWalletKey(traderAddress: Address, privateKey: Hex): void {
+  const normalized = traderAddress.toLowerCase() as Address;
+  const account = privateKeyToAccount(privateKey);
+  const chain = CHAIN_ID === 56 ? bsc : bscTestnet;
+  const client = createWalletClient({
+    account,
+    chain,
+    transport: http(RPC_URL),
+  });
+  walletClientCache.set(normalized, client);
+  logger.info("MarginBatch", `Registered wallet key directly for ${normalized.slice(0, 10)}`);
+}
+
 // ============================================================
 // Chain Read Functions
 // ============================================================
