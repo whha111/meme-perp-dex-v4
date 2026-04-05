@@ -11,7 +11,7 @@ import { enableStructuredConsole } from "./utils/logger";
 enableStructuredConsole(); // In production: all console.* outputs become JSON
 import { type Address, type Hex, verifyTypedData, verifyMessage, createPublicClient, http, webSocket, parseEther, formatEther, formatUnits, getAddress } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
-import { CHAIN_ID as CONFIG_CHAIN_ID } from "./config";
+import { CHAIN_ID as CONFIG_CHAIN_ID, rpcTransport } from "./config";
 const activeChain = CONFIG_CHAIN_ID === 97 ? bscTestnet : bsc;
 import { WebSocketServer, WebSocket } from "ws";
 import { MatchingEngine, OrderType, OrderStatus, TimeInForce, OrderSource, registerPriceChangeCallback, type Order, type Match, type Trade, type Kline, type TokenStats } from "./engine";
@@ -43,19 +43,8 @@ import { getTokenState, isTradingEnabled, getTokenHeatTier, getCoverageRatio, pa
 // ============================================================
 // Mode 2 Modules (Off-chain Execution + On-chain Attestation)
 // ============================================================
-// [DEPRECATED] snapshot, withdraw modules removed — replaced by marginBatch.ts
-// Stub functions for backward compatibility (server.ts references)
-function initializeSnapshotModule(..._args: any[]) {}
-function startSnapshotJob(..._args: any[]) {}
-function stopSnapshotJob() {}
-function getUserProof(_user: any): any { return null; }
-function getSnapshotJobStatus(): any { return { running: false, deprecated: true }; }
-function initializeWithdrawModule(..._args: any[]) {}
-async function syncNoncesFromChain(..._args: any[]): Promise<number> { return 0; }
-async function requestWithdrawal(..._args: any[]): Promise<any> { return { success: false, reason: "DEPRECATED: use direct wallet transfer" }; }
-async function generateFastWithdrawalSignature(..._args: any[]): Promise<any> { return null; }
-function getWithdrawModuleStatus(): any { return { deprecated: true }; }
-function cleanupExpiredWithdrawals() {}
+import { initializeSnapshotModule, startSnapshotJob, stopSnapshotJob, getUserProof, getSnapshotJobStatus, runSnapshotCycle } from "./modules/snapshot";
+import { initializeWithdrawModule, syncNoncesFromChain, resetNonceFromChain, requestWithdrawal, generateFastWithdrawalSignature, getWithdrawModuleStatus, cleanupExpiredWithdrawals } from "./modules/withdraw";
 import { createEventPoller, stopAllPollers, getPollerStats, setBlockPersistPgCallback } from "./modules/eventPoller";
 import {
   initLendingLiquidation,
@@ -86,6 +75,10 @@ import {
   updateGraduatedTokens as vaultUpdateGraduatedTokens,
   getAvailableOIHeadroom,
   getPoolStats,
+  canOpenPosition,
+  isCircuitBreakerOpen,
+  getCircuitBreakerStatus,
+  getEngineTotalOI,
 } from "./modules/perpVault";
 import {
   initMarginBatch,
@@ -109,6 +102,8 @@ const PORT = parseInt(process.env.PORT || "8081");
 const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const WSS_URL = process.env.WSS_URL || "wss://bsc-testnet-rpc.publicnode.com";
 const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
+// Role separation: PLATFORM_SIGNER_KEY signs EIP-712 withdrawals, MATCHER_PRIVATE_KEY sends on-chain txs
+const PLATFORM_SIGNER_KEY = (process.env.PLATFORM_SIGNER_KEY || process.env.MATCHER_PRIVATE_KEY) as Hex;
 const SETTLEMENT_ADDRESS = process.env.SETTLEMENT_ADDRESS as Address;
 const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address; // dYdX v3 style Merkle withdrawal contract
 // All contract addresses loaded from env vars (no fallbacks — fail fast via config.ts validation)
@@ -766,6 +761,19 @@ interface Position {
   isAdlCandidate: boolean;        // 是否为 ADL 候选 (盈利方)
 }
 const userPositions = new Map<Address, Position[]>();
+
+// ════════════════════════════════════════════════════════════════
+// Price staleness tracking (GMX Oracle.sol maxPriceAge pattern)
+// Records when each token's price was last successfully updated.
+// Orders are rejected if price is older than TRADING.MAX_PRICE_AGE_MS.
+// ════════════════════════════════════════════════════════════════
+const priceLastUpdatedAt = new Map<string, number>(); // token (lowercase) → Date.now() ms
+
+function isPriceStale(token: Address): boolean {
+  const lastUpdate = priceLastUpdatedAt.get(token.toLowerCase());
+  if (!lastUpdate) return true; // never updated = stale
+  return (Date.now() - lastUpdate) > TRADING.MAX_PRICE_AGE_MS;
+}
 
 // 主钱包 → 派生钱包地址映射 (register-session 时填充, Redis 持久化)
 const traderToDerivedWallet = new Map<Address, Address>();
@@ -1491,6 +1499,16 @@ async function executeADL(
         const adlAdjustment = refund - BigInt(position.collateral);
         addMode2Adjustment(normalizedTrader, adlAdjustment, "ADL_CLOSE");
 
+        // ★ FIX: Sync Redis + PG mirror (was missing — caused PG OPEN count drift)
+        try {
+          await deletePositionFromRedis(position.pairId, "LIQUIDATED", normalizedTrader, {
+            closePrice: currentPrice.toString(),
+            closingPnl: adlAdjustment.toString(),
+          });
+        } catch (e) {
+          console.error(`[ADL] CRITICAL: Failed to delete position from Redis/PG: ${e}`);
+        }
+
         console.log(`[ADL] Position ${position.pairId} fully closed, refund: $${Number(refund) / 1e18}`);
       } else {
         // 部分平仓 - 减少仓位大小和抵押品
@@ -1501,6 +1519,13 @@ async function executeADL(
         position.collateral = newCollateral.toString();
         position.size = newSize.toString();
         position.margin = newCollateral.toString();
+
+        // ★ FIX: Persist partial ADL to Redis + PG mirror (was missing)
+        try {
+          await savePositionToRedis(position);
+        } catch (e) {
+          console.error(`[ADL] CRITICAL: Failed to persist partial ADL to Redis/PG: ${e}`);
+        }
 
         console.log(`[ADL] Position ${position.pairId} reduced by ${(adlRatio * 100).toFixed(2)}%`);
       }
@@ -1574,7 +1599,7 @@ async function executeADL(
         const adlWalletClient = createWalletClient({
           account: adlAccount,
           chain: activeChain,
-          transport: http(RPC_URL),
+          transport: rpcTransport,
         });
 
         const tx = await adlWalletClient.writeContract({
@@ -1873,6 +1898,11 @@ function runRiskCheck(): void {
         // 没有有效价格，跳过此仓位的风险计算
         continue;
       }
+
+      // ========== 安全检查: 价格过时 (GMX Oracle.sol maxPriceAge) ==========
+      // 不在过时价格上执行清算 — 可能导致错误清算
+      // GMX: Oracle 过时 → 整个交易回滚; 我们: 跳过该仓位的风险检查
+      if (isPriceStale(token)) continue;
 
       const entryPrice = BigInt(pos.entryPrice);
 
@@ -4960,6 +4990,16 @@ async function reconcilePendingWithdrawals(): Promise<void> {
         addMode2Adjustment(record.trader as Address, mode2Portion, "WITHDRAW_REVERSAL");
         console.log(`[Reconcile] 🔄 REVERSED mode2 deduction for ${record.trader.slice(0, 10)}: ` +
           `+Ξ${Number(mode2Portion) / 1e18} (withdrawal expired without on-chain confirmation)`);
+
+        // Reset nonce from chain — prevents InvalidSignature on next withdrawal attempt
+        // (engine incremented nonce optimistically, but chain tx never landed)
+        try {
+          const { createPublicClient } = await import("viem");
+          const reconClient = createPublicClient({ chain: activeChain, transport: rpcTransport });
+          await resetNonceFromChain(reconClient, record.trader as Address);
+        } catch (nonceErr) {
+          console.warn(`[Reconcile] Failed to reset nonce for ${record.trader.slice(0, 10)}:`, nonceErr);
+        }
       }
 
       // Clean up — whether confirmed or reversed
@@ -5272,7 +5312,7 @@ async function syncUserBalanceFromChain(trader: Address): Promise<void> {
   try {
     const publicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     // 1. 读取派生钱包余额 (native BNB + WBNB)
@@ -5453,7 +5493,7 @@ async function autoDepositIfNeeded(trader: Address, requiredAmount: bigint): Pro
     const normalizedTrader = trader.toLowerCase() as Address;
     const publicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     // 读取派生钱包链上余额 (原生 BNB + WBNB)
@@ -5708,7 +5748,7 @@ async function syncSupportedTokens(): Promise<void> {
   try {
     const publicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     const tokens = await publicClient.readContract({
@@ -5768,7 +5808,7 @@ async function syncTokenInfoCache(): Promise<void> {
   try {
     const publicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     // 构建 multicall: 每个代币 2 个调用 (name + symbol)
@@ -5808,7 +5848,7 @@ async function syncFullTokenData(): Promise<void> {
   try {
     const publicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     // multicall: 每个代币 2 个调用 (getPoolState + getCurrentPrice)
@@ -5895,12 +5935,10 @@ async function syncFullTokenData(): Promise<void> {
         ? Number((soldTokens * 100n) / REAL_TOKEN_SUPPLY)
         : 0;
 
-      // Holder count: use cached value from tokenHolders module, default to 1 (creator)
+      // Holder count: lazy-load only (don't block startup with 2M block scan)
+      // getTokenHolders() scans historical Transfer events — too slow for BSC Testnet pruned RPCs
+      // Holders will be populated on first API request to /api/token/:address/holders
       let holderCount = 1;
-      try {
-        const holdersResult = await getTokenHolders(token);
-        holderCount = holdersResult?.total_holders ?? 1;
-      } catch { /* ignore */ }
 
       updateOnChainData(token, reserveETH, 0n, holderCount, bcProgressPct);
     }
@@ -6072,6 +6110,7 @@ function startSwapEventWatching(
           if (priceBigInt > 0n) {
             engine.updatePrice(normalizedToken as Address, priceBigInt);
             engine.setSpotPrice(normalizedToken as Address, priceBigInt);
+            priceLastUpdatedAt.set((normalizedToken as string).toLowerCase(), Date.now());
             updateVolatility(normalizedToken as Address, priceEth);
             broadcastOrderBook(normalizedToken as Address);
           }
@@ -6125,7 +6164,7 @@ async function detectGraduatedTokens(): Promise<void> {
 
   const publicClient = createPublicClient({
     chain: activeChain,
-    transport: http(RPC_URL),
+    transport: rpcTransport,
   });
 
   console.log(`[Graduation] Checking ${SUPPORTED_TOKENS.length} tokens for graduation status...`);
@@ -6389,10 +6428,55 @@ async function startEventWatching(): Promise<void> {
           const { user, amount, nonce } = (log as any).args as {
             user: Address; amount: bigint; nonce: bigint;
           };
-          console.log(`[EventPoller:V2] Withdrawn: ${user.slice(0, 10)} -Ξ${Number(amount) / 1e18} (nonce: ${nonce})`);
+          const normalizedUser = user.toLowerCase() as Address;
+          console.log(`[EventPoller:V2] Withdrawn: ${normalizedUser.slice(0, 10)} -Ξ${Number(amount) / 1e18} (nonce: ${nonce})`);
           try {
-            await syncUserBalanceFromChain(user);
-            broadcastBalanceUpdate(user);
+            // ★ BUG FIX: Deduct mode2Adj by withdrawal amount BEFORE syncing balance.
+            // Without this, syncUserBalanceFromChain sees walletBalance INCREASE (WBNB arrived
+            // in user's wallet from SettlementV2) but mode2Adj stays the same → balance inflates.
+            //
+            // The handler (/api/wallet/withdraw) may have already pre-deducted a "profit portion"
+            // from mode2 (the part exceeding chainDeposit). We deduct the FULL amount here because
+            // walletBalance will increase by the full withdrawal amount. If the handler already
+            // deducted some mode2, that pre-deduction covered a different scenario (walletBalance
+            // was zero at request time, so profit portion was mode2-only money).
+            // After chain withdrawal: walletBalance↑ by `amount`, so we need mode2↓ by `amount`.
+            //
+            // Check if handler already deducted mode2 for this withdrawal (via pending record)
+            let alreadyDeducted = 0n;
+            for (const [, record] of pendingWithdrawalMode2s) {
+              if (record.trader.toLowerCase() === normalizedUser &&
+                  BigInt(record.withdrawAmount) === amount) {
+                alreadyDeducted = BigInt(record.mode2Portion);
+                // Clean up the pending record — withdrawal confirmed
+                pendingWithdrawalMode2s.delete(record.id || "");
+                PendingWithdrawalMode2Repo.remove(record.id || "").catch(() => {});
+                break;
+              }
+            }
+            const remainingDeduction = amount - alreadyDeducted;
+            if (remainingDeduction > 0n) {
+              addMode2Adjustment(normalizedUser, -remainingDeduction, "CHAIN_WITHDRAWN");
+            }
+            if (alreadyDeducted > 0n) {
+              console.log(`[EventPoller:V2] Withdrawn: handler pre-deducted Ξ${Number(alreadyDeducted) / 1e18}, event deducted Ξ${Number(remainingDeduction) / 1e18}`);
+            }
+
+            // Write WITHDRAWAL bill
+            const balanceBefore = computeSettlementBalance(normalizedUser);
+            await syncUserBalanceFromChain(normalizedUser);
+            const balanceAfter = computeSettlementBalance(normalizedUser);
+            createBillWithMirror({
+              userAddress: normalizedUser,
+              type: "WITHDRAWAL",
+              amount: (-amount).toString(),
+              balanceBefore: balanceBefore.toString(),
+              balanceAfter: balanceAfter.toString(),
+              timestamp: Date.now(),
+              note: `on-chain withdrawal nonce=${nonce}`,
+            });
+
+            broadcastBalanceUpdate(normalizedUser);
           } catch (e: any) {
             console.error(`[EventPoller:V2] Failed to sync after Withdrawn: ${e.message}`);
           }
@@ -6531,7 +6615,7 @@ async function startEventWatching(): Promise<void> {
         // 创建初始 K 线
         try {
           const { initializeTokenKline } = await import("../spot/spotHistory");
-          const rpcClient = createPublicClient({ chain: activeChain, transport: http(RPC_URL) });
+          const rpcClient = createPublicClient({ chain: activeChain, transport: rpcTransport });
           const getCurrentPriceAbi = [{
             inputs: [{ name: "token", type: "address" }], name: "getCurrentPrice",
             outputs: [{ type: "uint256" }], stateMutability: "view", type: "function",
@@ -6580,10 +6664,16 @@ async function startEventWatching(): Promise<void> {
           const normalizedFrom = from.toLowerCase() as Address;
 
           // 转入派生钱包 → 同步余额 + 推送
-          if (getUserBalance(normalizedTo).totalBalance !== undefined) {
+          // ★ Skip if from SettlementV2 — Withdrawn event handler will handle mode2Adj + sync
+          // Without this, walletBalance inflates before mode2 deduction → 60s race window
+          const isFromSettlement = SETTLEMENT_V2_ADDRESS &&
+            normalizedFrom === SETTLEMENT_V2_ADDRESS.toLowerCase();
+          if (!isFromSettlement && getUserBalance(normalizedTo).totalBalance !== undefined) {
             console.log(`[Events] WETH Transfer IN: ${from.slice(0, 10)} → ${to.slice(0, 10)}, +Ξ${Number(value) / 1e18}`);
             await syncUserBalanceFromChain(normalizedTo);
             broadcastBalanceUpdate(normalizedTo);
+          } else if (isFromSettlement) {
+            console.log(`[Events] WETH Transfer IN (from SettlementV2, skip sync — Withdrawn handler will reconcile): ${to.slice(0, 10)}, +Ξ${Number(value) / 1e18}`);
           }
 
           // 从派生钱包转出 → 同步余额 + 推送
@@ -6629,7 +6719,7 @@ async function startTradeEventPoller(): Promise<void> {
 
   const pollClient = createPublicClient({
     chain: activeChain,
-    transport: http(RPC_URL),
+    transport: rpcTransport,
   });
 
   const TRADE_EVENT_ABI = parseAbiItem(
@@ -7388,7 +7478,7 @@ async function closePositionByMatch(
   const traderCloseTrades = userTrades.get(normalizedTrader) || [];
   traderCloseTrades.push(closeTradeRecord);
   userTrades.set(normalizedTrader, traderCloseTrades);
-  TradeRepo.create({
+  createTradeWithMirror({
     orderId: closeTradeRecord.orderId,
     pairId: closeTradeRecord.pairId,
     token: normalizedToken,
@@ -7401,7 +7491,7 @@ async function closePositionByMatch(
     realizedPnL: closeTradeRecord.realizedPnL,
     timestamp: closeTradeRecord.timestamp,
     type: closeType,
-  }).catch(e => console.error(`[DB] Failed to save close trade record:`, e));
+  }, `close:${closeType}`);
 
   // ════════════════════════════════════════════════════════════
   // ★ FIX: 写 Bill (SETTLE_PNL / TRADING_FEE)
@@ -7410,7 +7500,7 @@ async function closePositionByMatch(
   const billType = closeType === "adl" ? "SETTLE_PNL"
     : closeType === "liquidation" ? "LIQUIDATION" : "SETTLE_PNL";
 
-  RedisSettlementLogRepo.create({
+  createBillWithMirror({
     userAddress: normalizedTrader,
     type: billType,
     amount: pnl.toString(),
@@ -7424,11 +7514,11 @@ async function closePositionByMatch(
       entryPrice: entryPrice.toString(), pnl: pnl.toString(),
     }),
     positionId: pos.pairId, orderId, txHash: null,
-  }).catch(e => console.error(`[Bill] Failed to log close PnL:`, e));
+  });
 
   // 手续费单独记 Bill
   if (closeFee > 0n) {
-    RedisSettlementLogRepo.create({
+    createBillWithMirror({
       userAddress: normalizedTrader,
       type: "TRADING_FEE" as any,
       amount: (-closeFee).toString(),
@@ -7439,7 +7529,7 @@ async function closePositionByMatch(
         token: normalizedToken, closeType, feeRate: "0.3%",
       }),
       positionId: pos.pairId, orderId, txHash: null,
-    }).catch(e => console.error(`[Bill] Failed to log close fee:`, e));
+    });
   }
 
   // PerpVault: 减少 OI
@@ -7704,6 +7794,18 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       if (!uniqueTokens.has(normalizedTokenCheck) && uniqueTokens.size >= TRADING.MAX_TOKENS_PER_ACCOUNT) {
         return errorResponse(`Maximum ${TRADING.MAX_TOKENS_PER_ACCOUNT} tokens per account. Close a position first.`);
       }
+
+      // ════════════════════════════════════════════════════════════
+      // ★ OI Circuit Breaker Pre-check (engine-side, no RPC call)
+      // Rejects new positions when OI exceeds pool capacity.
+      // Reduce-only orders always pass (closing reduces risk).
+      // ════════════════════════════════════════════════════════════
+      if (isPerpVaultEnabled()) {
+        const oiCheck = await canOpenPosition(normalizedTokenCheck, sizeBigInt);
+        if (!oiCheck.allowed) {
+          return errorResponse(`Position rejected: ${oiCheck.reason}`);
+        }
+      }
     }
 
     // ============================================================
@@ -7770,6 +7872,17 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     // ============================================================
     if (postOnly && (orderType === OrderType.MARKET || priceBigInt === 0n)) {
       return errorResponse("Post-Only orders cannot be market orders");
+    }
+
+    // ============================================================
+    // Price staleness check (GMX Oracle.sol maxPriceAge pattern)
+    // Reject ALL orders when price data is stale — prevents trading
+    // on outdated prices when RPC is down or syncSpotPrices fails.
+    // ============================================================
+    if (!reduceOnly && isPriceStale(token as Address)) {
+      const lastUpdate = priceLastUpdatedAt.get((token as string).toLowerCase());
+      const ageMs = lastUpdate ? Date.now() - lastUpdate : Infinity;
+      return errorResponse(`Price data stale for this token (age: ${Math.round(ageMs / 1000)}s, max: ${TRADING.MAX_PRICE_AGE_MS / 1000}s). Trading paused until price feed recovers.`);
     }
 
     // ============================================================
@@ -8454,7 +8567,7 @@ async function handleGetNonce(trader: string): Promise<Response> {
     try {
       const publicClient = createPublicClient({
         chain: activeChain,
-        transport: http(RPC_URL),
+        transport: rpcTransport,
       });
       const chainNonce = await publicClient.readContract({
         address: SETTLEMENT_ADDRESS,
@@ -9403,7 +9516,7 @@ async function handleGetUserBalance(trader: string): Promise<Response> {
 
   const publicClient = createPublicClient({
     chain: activeChain,
-    transport: http(RPC_URL),
+    transport: rpcTransport,
   });
 
   const derivedWallet2 = traderToDerivedWallet.get(normalizedTrader);
@@ -11971,6 +12084,8 @@ async function handleRequest(req: Request): Promise<Response> {
           userPositions: userPositions.size,
         },
       },
+      oiCircuitBreakers: getCircuitBreakerStatus(),
+      engineTotalOI: getEngineTotalOI().toString(),
     };
 
     return new Response(JSON.stringify(body), {
@@ -12004,6 +12119,28 @@ async function handleRequest(req: Request): Promise<Response> {
       `# HELP memeperp_pending_matches Number of pending order matches`,
       `# TYPE memeperp_pending_matches gauge`,
       `memeperp_pending_matches ${engine.getPendingMatches().length}`,
+      // ── Snapshot health ──
+      `# HELP memeperp_snapshot_total Total Merkle snapshots created`,
+      `# TYPE memeperp_snapshot_total counter`,
+      `memeperp_snapshot_total ${getSnapshotJobStatus().totalSnapshots}`,
+      `# HELP memeperp_snapshot_last_time_seconds Last snapshot Unix timestamp`,
+      `# TYPE memeperp_snapshot_last_time_seconds gauge`,
+      `memeperp_snapshot_last_time_seconds ${Math.floor(getSnapshotJobStatus().lastSnapshotTime / 1000)}`,
+      // ── Price staleness ──
+      `# HELP memeperp_price_stale_tokens Number of tokens with stale prices`,
+      `# TYPE memeperp_price_stale_tokens gauge`,
+      `memeperp_price_stale_tokens ${SUPPORTED_TOKENS.filter(t => isPriceStale(t)).length}`,
+      // ── Withdrawal reconciliation ──
+      `# HELP memeperp_pending_withdrawals Number of pending withdrawal reconciliations`,
+      `# TYPE memeperp_pending_withdrawals gauge`,
+      `memeperp_pending_withdrawals ${pendingWithdrawalMode2s.size}`,
+      // ── User/position counts ──
+      `# HELP memeperp_user_balances Number of tracked user balances`,
+      `# TYPE memeperp_user_balances gauge`,
+      `memeperp_user_balances ${userBalances.size}`,
+      `# HELP memeperp_user_positions Number of users with open positions`,
+      `# TYPE memeperp_user_positions gauge`,
+      `memeperp_user_positions ${userPositions.size}`,
     ].join("\n");
 
     return new Response(metrics + "\n", {
@@ -12048,7 +12185,16 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!user) {
       return errorResponse("Missing user parameter");
     }
-    const proof = getUserProof(user);
+    let proof = getUserProof(user);
+    // On-demand snapshot: if user has no proof, generate one immediately
+    if (!proof) {
+      try {
+        await runSnapshotCycle({ submitToChain: true });
+        proof = getUserProof(user);
+      } catch (e) {
+        console.error(`[Snapshot:Proof] On-demand snapshot failed:`, e);
+      }
+    }
     if (!proof) {
       return errorResponse("No proof available for user");
     }
@@ -12098,6 +12244,24 @@ async function handleRequest(req: Request): Promise<Response> {
       if (!balance || balance.availableBalance < withdrawAmount) {
         const avail = balance ? balance.availableBalance.toString() : "0";
         return errorResponse(`Insufficient balance: available=${avail}, requested=${withdrawAmount.toString()}`);
+      }
+
+      // Ensure Merkle proof exists — generate on-demand if missing
+      let existingProofV2 = getUserProof(normalizedUser);
+      if (!existingProofV2) {
+        console.log(`[Withdraw:V2] No snapshot proof for ${normalizedUser.slice(0, 10)} — generating on-demand snapshot...`);
+        try {
+          const snapshot = await runSnapshotCycle({ submitToChain: true });
+          if (snapshot) {
+            console.log(`[Withdraw:V2] On-demand snapshot created: root=${snapshot.root.slice(0, 18)}, users=${snapshot.equities.length}`);
+            existingProofV2 = getUserProof(normalizedUser);
+          }
+        } catch (e) {
+          console.error(`[Withdraw:V2] On-demand snapshot failed:`, e);
+        }
+        if (!existingProofV2) {
+          return errorResponse("No equity snapshot available for user — snapshot generation failed");
+        }
       }
 
       // Deduct balance atomically (freeze the withdrawal amount)
@@ -12518,7 +12682,27 @@ async function handleRequest(req: Request): Promise<Response> {
             console.warn(`[Withdraw:Merkle] Failed to read on-chain totalWithdrawn, proceeding: ${e}`);
           }
 
-          // 5. Generate Merkle proof withdrawal authorization
+          // 5. Ensure Merkle proof exists — generate on-demand if missing
+          // ★ 用户要求余额变动实时反映，不能依赖定时快照周期
+          // 如果用户没有 Merkle proof，立即生成一个新快照 + 提交链上
+          let existingProof = getUserProof(normalizedTrader as Address);
+          if (!existingProof) {
+            console.log(`[Withdraw:Merkle] No snapshot proof for ${normalizedTrader.slice(0, 10)} — generating on-demand snapshot...`);
+            try {
+              const snapshot = await runSnapshotCycle({ submitToChain: true });
+              if (snapshot) {
+                console.log(`[Withdraw:Merkle] On-demand snapshot created: root=${snapshot.root.slice(0, 18)}, users=${snapshot.equities.length}`);
+                existingProof = getUserProof(normalizedTrader as Address);
+              }
+            } catch (e) {
+              console.error(`[Withdraw:Merkle] On-demand snapshot failed:`, e);
+            }
+            if (!existingProof) {
+              return errorResponse("No equity snapshot available for user — snapshot generation failed. Please try again in a few seconds.");
+            }
+          }
+
+          // 6. Generate Merkle proof withdrawal authorization
           // SettlementV2 uses: withdraw(amount, userEquity, merkleProof[], deadline, signature)
           const result = await requestWithdrawal(normalizedTrader as Address, withdrawAmount);
           if (!result.success || !result.authorization) {
@@ -12567,13 +12751,14 @@ async function handleRequest(req: Request): Promise<Response> {
           console.log(`[Withdraw:Merkle] ${normalizedTrader.slice(0, 10)} authorized Ξ${Number(withdrawAmount) / 1e18} (balance pre-deducted, reconciliation=${mode2Portion > 0n ? 'tracked' : 'n/a'})`);
 
           // 7. Return Merkle proof authorization for frontend
-          // Frontend calls SettlementV2.withdraw(amount, userEquity, merkleProof, deadline, signature)
+          // Frontend calls SettlementV2.withdraw(amount, userEquity, merkleProof, merkleRoot, deadline, signature)
           return jsonResponse({
             success: true,
             authorization: {
               amount: withdrawAmount.toString(),
               userEquity: userEquity.toString(),
               merkleProof: result.authorization.merkleProof,
+              merkleRoot: result.authorization.merkleRoot,
               deadline: result.authorization.deadline.toString(),
               signature: result.authorization.signature,
             },
@@ -13155,7 +13340,7 @@ async function handleRequest(req: Request): Promise<Response> {
     try {
       const publicClient = createPublicClient({
         chain: activeChain,
-        transport: http(RPC_URL),
+        transport: rpcTransport,
       });
       const currentBlock = toBlock || await publicClient.getBlockNumber();
       const startBlock = fromBlock > 0n ? fromBlock : currentBlock - 50000n; // 默认回填最近 50000 个区块
@@ -14565,8 +14750,10 @@ async function startServer(): Promise<void> {
     // 注意: 仅恢复 key fields，chain sync 仍会在 syncAllBalances 中更新
     try {
       const allTraders = new Set<string>();
-      // 收集所有已知 trader 地址 (从仓位和 mode2 调整)
+      // 收集所有已知 trader 地址 (从仓位 + nonce 列表)
+      // ★ 必须包含无仓位用户，否则 Merkle 快照会跳过他们 → 无法提款
       for (const [trader] of userPositions) allTraders.add(trader);
+      for (const [trader] of userNonces) allTraders.add(trader);
       // 从 Redis 恢复已持久化的余额
       let restoredCount = 0;
       for (const traderAddr of allTraders) {
@@ -14836,17 +15023,44 @@ async function startServer(): Promise<void> {
     const v2WalletClient = createWalletClient({
       account: v2UpdaterAccount,
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
     const v2PublicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     // ★ 启动时同步所有已知用户的链上余额 (从 nonce 列表获取用户地址)
     // 确保 userBalances Map 被填充，否则 Merkle 快照会是空的
     if (process.env.SKIP_BALANCE_SYNC === "true") {
-      console.log(`[Server] SKIP_BALANCE_SYNC=true — skipping on-chain balance sync`);
+      // ★ Even with SKIP, sync users whose walletBalance is still 0 after Redis restore
+      // Without this, Merkle snapshot calculates equity=0 → user excluded → cannot withdraw
+      const knownTraders = Array.from(userNonces.keys());
+      const missingBalanceTraders = knownTraders.filter(t => {
+        const bal = getUserBalance(t);
+        return bal.walletBalance === 0n && bal.totalBalance === 0n;
+      });
+      if (missingBalanceTraders.length > 0) {
+        console.log(`[Server] SKIP_BALANCE_SYNC=true — but syncing ${missingBalanceTraders.length} users with no Redis balance...`);
+        const BATCH_SIZE = 10;
+        let syncedCount = 0;
+        for (let i = 0; i < missingBalanceTraders.length; i += BATCH_SIZE) {
+          const batch = missingBalanceTraders.slice(i, i + BATCH_SIZE);
+          await Promise.allSettled(
+            batch.map(async (user) => {
+              try {
+                await syncUserBalanceFromChain(user);
+                syncedCount++;
+              } catch (e: any) {
+                console.debug(`[Server] Balance gap-fill skipped for ${user.slice(0, 10)}: ${e.message}`);
+              }
+            })
+          );
+        }
+        console.log(`[Server] Gap-filled ${syncedCount}/${missingBalanceTraders.length} user balances from chain`);
+      } else {
+        console.log(`[Server] SKIP_BALANCE_SYNC=true — all ${knownTraders.length} users have Redis balance, no chain sync needed`);
+      }
     } else {
       const knownTraders = Array.from(userNonces.keys());
       console.log(`[Server] Syncing on-chain balances for ${knownTraders.length} known users...`);
@@ -14896,18 +15110,20 @@ async function startServer(): Promise<void> {
     });
     console.log(`[Server] Mode 2: Snapshot module initialized (SettlementV2: ${SETTLEMENT_V2_ADDRESS})`);
 
-    // 初始化提现模块 — 指向 TradingVault (兼容旧变量名 SETTLEMENT_V2_ADDRESS)
+    // 初始化提现模块 — 使用 PLATFORM_SIGNER_KEY 签名 EIP-712 提款授权
+    // Role separation: signer key ≠ on-chain tx key (dYdX v3 best practice)
     initializeWithdrawModule({
-      signerPrivateKey: MATCHER_PRIVATE_KEY,
+      signerPrivateKey: PLATFORM_SIGNER_KEY,
       contractAddress: SETTLEMENT_V2_ADDRESS,
       chainId: CONFIG_CHAIN_ID,
     });
-    console.log("[Server] Mode 2: Withdraw module initialized (fastWithdraw + Merkle fallback)");
+    const signerAccount = privateKeyToAccount(PLATFORM_SIGNER_KEY);
+    console.log(`[Server] Mode 2: Withdraw module initialized (signer: ${signerAccount.address.slice(0, 10)}...)`);
 
     // 从链上同步提款 nonce（防止引擎重启后 nonce 重放攻击）
     const v2ReadClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
     const knownUsers = Array.from(userBalances.keys()) as Address[];
     if (knownUsers.length > 0) {
@@ -14917,7 +15133,7 @@ async function startServer(): Promise<void> {
     }
 
     // 启动快照定时任务 — 每分钟生成 Merkle root 并提交到链上
-    const snapshotIntervalMs = parseInt(process.env.SNAPSHOT_INTERVAL_MS || "60000"); // 默认 1 分钟
+    const snapshotIntervalMs = parseInt(process.env.SNAPSHOT_INTERVAL_MS || "300000"); // 默认 5 分钟 (testnet), 生产环境设 3600000
     startSnapshotJob({
       intervalMs: snapshotIntervalMs,
       submitToChain: true, // SettlementV2 已配置，启用链上提交
@@ -14933,7 +15149,7 @@ async function startServer(): Promise<void> {
     });
 
     initializeWithdrawModule({
-      signerPrivateKey: MATCHER_PRIVATE_KEY,
+      signerPrivateKey: PLATFORM_SIGNER_KEY,
       contractAddress: SETTLEMENT_ADDRESS,
       chainId: CONFIG_CHAIN_ID,
     });
@@ -14958,7 +15174,7 @@ async function startServer(): Promise<void> {
   {
     const lendingPublicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     let lendingWalletClient = null;
@@ -14967,7 +15183,7 @@ async function startServer(): Promise<void> {
       lendingWalletClient = createWalletClient({
         account: matcherAccount,
         chain: activeChain,
-        transport: http(RPC_URL),
+        transport: rpcTransport,
       });
     }
 
@@ -14985,7 +15201,7 @@ async function startServer(): Promise<void> {
   if (PERP_VAULT_ADDRESS_LOCAL) {
     const vaultPublicClient = createPublicClient({
       chain: activeChain,
-      transport: http(RPC_URL),
+      transport: rpcTransport,
     });
 
     let vaultWalletClient = null;
@@ -14994,7 +15210,7 @@ async function startServer(): Promise<void> {
       vaultWalletClient = createWalletClient({
         account: matcherAccount,
         chain: activeChain,
-        transport: http(RPC_URL),
+        transport: rpcTransport,
       });
     }
 
@@ -15244,8 +15460,25 @@ async function startServer(): Promise<void> {
       // 更新 K线、波动率、引擎价格
       await updateKlineWithCurrentPrice(token, priceEth.toString(), priceEth.toString());
       updateVolatility(token, priceEth);
+      // ── Circuit Breaker (Synthetix CircuitBreaker.sol pattern) ──
+      // If price deviates >20% from last known value, pause the token.
+      // Prevents oracle manipulation / flash loan attacks on bonding curves.
+      const prevPrice = engine.getSpotPrice(token);
+      if (prevPrice > 0n && entry.price > 0n) {
+        const deviation = prevPrice > entry.price
+          ? ((prevPrice - entry.price) * 10000n) / prevPrice
+          : ((entry.price - prevPrice) * 10000n) / prevPrice;
+        if (deviation > TRADING.CIRCUIT_BREAKER_DEVIATION_BPS) {
+          console.warn(`[CircuitBreaker] 🚨 ${token.slice(0, 10)} price deviation ${Number(deviation) / 100}% exceeds threshold. ` +
+            `prev=${prevPrice}, new=${entry.price}. Pausing token.`);
+          pauseToken(token, `Circuit breaker: ${Number(deviation) / 100}% price deviation`);
+          // Still update the price (so it's not stale), but trading is paused
+        }
+      }
+
       engine.updatePrice(token, entry.price);
       engine.setSpotPrice(token, entry.price);
+      priceLastUpdatedAt.set(token.toLowerCase(), Date.now());
       broadcastOrderBook(token);
 
       // 广播K线
@@ -15309,7 +15542,7 @@ async function startServer(): Promise<void> {
         const priceFeedWallet = createWalletClient({
           account: matcherAccount,
           chain: activeChain,
-          transport: http(RPC_URL),
+          transport: rpcTransport,
         });
 
         await priceFeedWallet.writeContract({
@@ -15643,40 +15876,8 @@ async function startServer(): Promise<void> {
     await syncFullTokenData();
   }, 60_000);
 
-  // P1-1: 每 5 分钟全量用户余额快照写 PG
-  const BALANCE_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
-  setInterval(async () => {
-    if (!isPostgresConnected()) return;
-    try {
-      const snapshots: Array<{
-        trader: string; totalBalance: string; availableBalance: string;
-        usedMargin: string; frozenMargin: string; mode2Adjustment: string;
-      }> = [];
-
-      for (const [trader, balance] of userBalances) {
-        const mode2 = mode2PnLAdjustments.get(trader) || 0n;
-        snapshots.push({
-          trader,
-          totalBalance: (balance.totalBalance || 0n).toString(),
-          availableBalance: (balance.availableBalance || 0n).toString(),
-          usedMargin: (balance.usedMargin || 0n).toString(),
-          frozenMargin: (balance.frozenMargin || 0n).toString(),
-          mode2Adjustment: mode2.toString(),
-        });
-      }
-
-      if (snapshots.length > 0) {
-        const count = await BalanceSnapshotRepo.insertBatch(snapshots);
-        console.log(`[BalanceSnapshot] Saved ${count} balance snapshots to PG`);
-      }
-
-      // 清理 7 天前的旧快照
-      await BalanceSnapshotRepo.cleanup();
-    } catch (e: any) {
-      console.error(`[BalanceSnapshot] Failed: ${e.message}`);
-    }
-  }, BALANCE_SNAPSHOT_INTERVAL_MS);
-  console.log(`[Server] Balance snapshot interval: ${BALANCE_SNAPSHOT_INTERVAL_MS / 1000}s`);
+  // NOTE: Balance snapshot already runs at line ~15112 via snapshotBalancesToPG() every 5 min
+  // (removed broken duplicate that called nonexistent insertBatch/cleanup)
 
   // ========================================
   // 启动链上事件监听 (实时同步链上状态)
@@ -15698,7 +15899,7 @@ async function startServer(): Promise<void> {
       const { createPublicClient, http } = await import("viem");
       const backfillClient = createPublicClient({
         chain: activeChain,
-        transport: http(RPC_URL),
+        transport: rpcTransport,
       });
       const currentBlock = await backfillClient.getBlockNumber();
       // BSC Testnet public RPC has strict getLogs limits, use smaller range

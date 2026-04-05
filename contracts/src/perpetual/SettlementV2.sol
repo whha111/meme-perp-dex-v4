@@ -90,6 +90,22 @@ contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
     uint256 public totalDeposited;       // Current total deposits
 
     // ============================================================
+    // Forced Withdrawal (Escape Hatch — dYdX v3 pattern)
+    // ============================================================
+
+    /// @notice Delay before a forced withdrawal can be executed (default: 7 days)
+    uint256 public forcedWithdrawalDelay = 7 days;
+
+    struct ForcedWithdrawalRequest {
+        uint256 amount;          // Amount user wants to withdraw
+        uint256 requestTime;     // When the request was submitted
+        bool active;             // Whether the request is still active
+    }
+
+    /// @notice Pending forced withdrawal requests per user
+    mapping(address => ForcedWithdrawalRequest) public forcedWithdrawals;
+
+    // ============================================================
     // Events
     // ============================================================
 
@@ -103,6 +119,9 @@ contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
     event DepositCapTotalUpdated(uint256 oldCap, uint256 newCap);
     event EmergencyPaused(address indexed by);
     event EmergencyUnpaused(address indexed by);
+    event ForcedWithdrawalRequested(address indexed user, uint256 amount, uint256 executeAfter);
+    event ForcedWithdrawalExecuted(address indexed user, uint256 amount);
+    event ForcedWithdrawalCancelled(address indexed user);
 
     // ============================================================
     // Errors
@@ -118,6 +137,10 @@ contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
     error ZeroAddress();
     error UserDepositCapExceeded();
     error TotalDepositCapExceeded();
+    error ForcedWithdrawalNotActive();
+    error ForcedWithdrawalTooEarly();
+    error ForcedWithdrawalAlreadyActive();
+    error ForcedWithdrawalInsufficientEquity();
 
     // ============================================================
     // Constructor
@@ -335,6 +358,109 @@ contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
     }
 
     // ============================================================
+    // Forced Withdrawal (Escape Hatch — dYdX v3 pattern)
+    //
+    // Flow:
+    //   1. User calls requestForcedWithdrawal(amount) → starts 7-day timer
+    //   2. Platform SHOULD process it normally (via regular withdraw)
+    //   3. If platform doesn't act within 7 days:
+    //      User calls executeForcedWithdrawal(equity, proof) → bypass platform sig
+    //   4. Platform can also cancel if it processes the request off-chain
+    //
+    // This guarantees: even if platform goes offline or censors a user,
+    // the user can ALWAYS recover their funds after the delay period.
+    // ============================================================
+
+    /**
+     * @notice Request a forced withdrawal. Starts the delay timer.
+     * @param amount Amount the user wants to withdraw
+     */
+    function requestForcedWithdrawal(uint256 amount) external nonReentrant whenNotPaused {
+        if (amount == 0) revert InvalidAmount();
+        if (forcedWithdrawals[msg.sender].active) revert ForcedWithdrawalAlreadyActive();
+
+        uint256 executeAfter = block.timestamp + forcedWithdrawalDelay;
+
+        forcedWithdrawals[msg.sender] = ForcedWithdrawalRequest({
+            amount: amount,
+            requestTime: block.timestamp,
+            active: true
+        });
+
+        emit ForcedWithdrawalRequested(msg.sender, amount, executeAfter);
+    }
+
+    /**
+     * @notice Execute a forced withdrawal after the delay period.
+     *         Requires Merkle proof but NO platform signature.
+     * @param userEquity User's equity from the Merkle leaf
+     * @param merkleProof Proof that (user, equity) is in the tree
+     * @param merkleRoot The state root to verify against
+     */
+    function executeForcedWithdrawal(
+        uint256 userEquity,
+        bytes32[] calldata merkleProof,
+        bytes32 merkleRoot
+    ) external nonReentrant {
+        ForcedWithdrawalRequest storage req = forcedWithdrawals[msg.sender];
+        if (!req.active) revert ForcedWithdrawalNotActive();
+        if (block.timestamp < req.requestTime + forcedWithdrawalDelay) {
+            revert ForcedWithdrawalTooEarly();
+        }
+
+        address user = msg.sender;
+        uint256 amount = req.amount;
+
+        // Verify Merkle root is valid (current or recent)
+        if (!_isValidStateRoot(merkleRoot)) revert InvalidProof();
+
+        // Verify user equity in Merkle tree
+        bytes32 leaf = keccak256(abi.encodePacked(user, userEquity));
+        if (!MerkleProof.verify(merkleProof, merkleRoot, leaf)) {
+            revert InvalidProof();
+        }
+
+        // Check withdrawable amount (same formula as regular withdraw)
+        uint256 maxWithdrawable = userEquity > totalWithdrawn[user]
+            ? userEquity - totalWithdrawn[user]
+            : 0;
+        if (amount > maxWithdrawable) revert ForcedWithdrawalInsufficientEquity();
+
+        // Clear the forced withdrawal request
+        delete forcedWithdrawals[user];
+
+        // Update state (CEI pattern — state before transfer)
+        withdrawalNonces[user] += 1;
+        totalWithdrawn[user] += amount;
+        if (totalDeposited >= amount) {
+            totalDeposited -= amount;
+        } else {
+            totalDeposited = 0;
+        }
+
+        // Transfer tokens
+        collateralToken.safeTransfer(user, amount);
+
+        emit ForcedWithdrawalExecuted(user, amount);
+    }
+
+    /**
+     * @notice Cancel a pending forced withdrawal request.
+     *         Can be called by the user (changed their mind) or
+     *         by the platform after processing the withdrawal normally.
+     */
+    function cancelForcedWithdrawal(address user) external {
+        // Only the user themselves or the owner can cancel
+        require(msg.sender == user || msg.sender == owner(), "Not authorized");
+
+        if (!forcedWithdrawals[user].active) revert ForcedWithdrawalNotActive();
+
+        delete forcedWithdrawals[user];
+
+        emit ForcedWithdrawalCancelled(user);
+    }
+
+    // ============================================================
     // Admin Functions
     // ============================================================
 
@@ -383,6 +509,15 @@ contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
     }
 
     /**
+     * @notice Set forced withdrawal delay (minimum 1 day, maximum 30 days)
+     * @dev Owner can only DECREASE the delay, never increase above 30 days
+     */
+    function setForcedWithdrawalDelay(uint256 delay) external onlyOwner {
+        require(delay >= 1 days && delay <= 30 days, "Delay out of range");
+        forcedWithdrawalDelay = delay;
+    }
+
+    /**
      * @notice Set global TVL deposit cap (0 = unlimited)
      */
     function setDepositCapTotal(uint256 cap) external onlyOwner {
@@ -426,6 +561,28 @@ contract SettlementV2 is Ownable2Step, ReentrancyGuard, Pausable, EIP712 {
     ) external view returns (bool) {
         bytes32 leaf = keccak256(abi.encodePacked(user, equity));
         return MerkleProof.verify(proof, currentStateRoot.root, leaf);
+    }
+
+    /**
+     * @notice Get forced withdrawal request status for a user
+     * @return amount Requested amount
+     * @return requestTime When the request was made
+     * @return active Whether the request is active
+     * @return canExecute Whether the delay period has passed
+     */
+    function getForcedWithdrawalStatus(address user) external view returns (
+        uint256 amount,
+        uint256 requestTime,
+        bool active,
+        bool canExecute
+    ) {
+        ForcedWithdrawalRequest storage req = forcedWithdrawals[user];
+        return (
+            req.amount,
+            req.requestTime,
+            req.active,
+            req.active && block.timestamp >= req.requestTime + forcedWithdrawalDelay
+        );
     }
 
     /**

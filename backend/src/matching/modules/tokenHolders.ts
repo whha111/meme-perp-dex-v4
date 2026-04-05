@@ -5,9 +5,9 @@
  * Supports top holders list and per-address PnL calculation.
  */
 
-import { createPublicClient, http, type Address, parseAbiItem, formatUnits } from "viem";
+import { createPublicClient, type Address, parseAbiItem, formatUnits } from "viem";
 import { bsc } from "viem/chains";
-import { RPC_URL, TOKEN_FACTORY_ADDRESS } from "../config";
+import { TOKEN_FACTORY_ADDRESS, rpcTransport } from "../config";
 import { getRedisClient } from "../database/redis";
 import { logger } from "../utils/logger";
 
@@ -17,7 +17,7 @@ import { logger } from "../utils/logger";
 
 const publicClient = createPublicClient({
   chain: bsc,
-  transport: http(RPC_URL),
+  transport: rpcTransport,
 });
 
 const TRANSFER_EVENT = parseAbiItem(

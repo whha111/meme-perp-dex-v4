@@ -9,11 +9,11 @@
  */
 
 import { Wallet } from "ethers";
-import { createWalletClient, http, keccak256, type Address, type Hex } from "viem";
+import { createWalletClient, keccak256, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { bsc } from "viem/chains";
 import { v4 as uuidv4 } from "uuid";
-import { RPC_URL } from "../config";
+import { rpcTransport } from "../config";
 import { encryptPrivateKey, decryptPrivateKey, generateSessionId, hashPassword, verifyPassword } from "../utils/crypto";
 import { logger } from "../utils/logger";
 import { getRedisClient, Keys, WalletRepo } from "../database/redis";
@@ -383,7 +383,7 @@ export async function createWalletClientFromSession(sessionId: string) {
   return createWalletClient({
     account,
     chain: bsc,
-    transport: http(RPC_URL),
+    transport: rpcTransport,
   });
 }
 

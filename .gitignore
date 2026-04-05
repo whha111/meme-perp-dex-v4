@@ -77,3 +77,10 @@ testnet/pids/
 testnet/postgres_data/
 testnet/redis_data/
 dump.rdb
+
+# E2E test sensitive data
+e2e-test/data/wallets.json
+e2e-test/data/token-addresses.json
+e2e-test/reports/report.md
+e2e-test/reports/report.html
+e2e-test/reports/results.json

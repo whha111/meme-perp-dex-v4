@@ -291,6 +291,218 @@ export const txLockRef = {
 // ============================================================
 let graduatedTokensSet = new Set<string>();
 
+// ============================================================
+// Engine-side OI mirror + Circuit Breaker
+// ============================================================
+// Engine maintains its own OI tracking so we don't need to hit RPC for every pre-check.
+// Circuit breaker trips when on-chain OI update fails with ExceedsMaxOI — pauses new
+// positions for that token until pool grows or OI decreases enough.
+
+/** Engine-side OI mirror per token per side */
+const engineOI = new Map<string, bigint>(); // key: `${token}_${isLong}` → size in wei
+
+/** Circuit breaker state per token */
+interface CircuitBreakerState {
+  status: "CLOSED" | "OPEN";     // CLOSED = normal, OPEN = paused
+  trippedAt: number;             // timestamp when breaker opened
+  reason: string;                // why it tripped
+  lastCheckAt: number;           // last time we checked if pool grew
+  consecutiveFailures: number;   // how many OI flush failures in a row
+}
+const circuitBreakers = new Map<string, CircuitBreakerState>();
+
+const BREAKER_RECHECK_INTERVAL_MS = 60_000;  // Re-check every 60s if breaker can close
+const BREAKER_MAX_CONSECUTIVE = 3;            // Trip after 3 consecutive ExceedsMaxOI
+
+/** Get engine-tracked OI for a token side */
+export function getEngineOI(token: string, isLong: boolean): bigint {
+  return engineOI.get(`${token.toLowerCase()}_${isLong}`) || 0n;
+}
+
+/** Get total engine-tracked OI across all tokens */
+export function getEngineTotalOI(): bigint {
+  let total = 0n;
+  for (const v of engineOI.values()) {
+    total += v > 0n ? v : 0n;
+  }
+  return total;
+}
+
+/** Update engine OI mirror (called on position open/close) */
+function updateEngineOI(token: string, isLong: boolean, delta: bigint): void {
+  const key = `${token.toLowerCase()}_${isLong}`;
+  const current = engineOI.get(key) || 0n;
+  const updated = current + delta;
+  engineOI.set(key, updated > 0n ? updated : 0n);
+}
+
+/** Check if circuit breaker is open for a token */
+export function isCircuitBreakerOpen(token: string): boolean {
+  const state = circuitBreakers.get(token.toLowerCase());
+  return state?.status === "OPEN";
+}
+
+/** Get circuit breaker status for all tokens */
+export function getCircuitBreakerStatus(): Record<string, CircuitBreakerState> {
+  const result: Record<string, CircuitBreakerState> = {};
+  for (const [k, v] of circuitBreakers) {
+    result[k] = { ...v };
+  }
+  return result;
+}
+
+/** Trip the circuit breaker for a token */
+function tripCircuitBreaker(token: string, reason: string): void {
+  const normalized = token.toLowerCase();
+  const existing = circuitBreakers.get(normalized);
+  if (existing?.status === "OPEN") return; // Already open
+
+  circuitBreakers.set(normalized, {
+    status: "OPEN",
+    trippedAt: Date.now(),
+    reason,
+    lastCheckAt: Date.now(),
+    consecutiveFailures: existing?.consecutiveFailures || BREAKER_MAX_CONSECUTIVE,
+  });
+  logger.warn("PerpVault", `⚡ CIRCUIT BREAKER OPEN for ${normalized.slice(0, 10)}: ${reason}`);
+}
+
+/** Record OI flush failure for a token; trip breaker after N consecutive failures */
+function recordOIFlushFailure(token: string, errorMsg: string): void {
+  const normalized = token.toLowerCase();
+  const state = circuitBreakers.get(normalized) || {
+    status: "CLOSED" as const,
+    trippedAt: 0,
+    reason: "",
+    lastCheckAt: 0,
+    consecutiveFailures: 0,
+  };
+  state.consecutiveFailures++;
+
+  if (state.consecutiveFailures >= BREAKER_MAX_CONSECUTIVE) {
+    tripCircuitBreaker(normalized, `${BREAKER_MAX_CONSECUTIVE}x ExceedsMaxOI: ${errorMsg.slice(0, 80)}`);
+  } else {
+    circuitBreakers.set(normalized, state);
+  }
+}
+
+/** Record OI flush success for a token; reset failure counter */
+function recordOIFlushSuccess(token: string): void {
+  const normalized = token.toLowerCase();
+  const state = circuitBreakers.get(normalized);
+  if (state) {
+    state.consecutiveFailures = 0;
+    if (state.status === "OPEN") {
+      state.status = "CLOSED";
+      logger.info("PerpVault", `✅ CIRCUIT BREAKER CLOSED for ${normalized.slice(0, 10)} — OI flush succeeded`);
+    }
+  }
+}
+
+/** Periodically try to close open circuit breakers by checking if maxOI increased */
+async function tryRecoverCircuitBreakers(): Promise<void> {
+  if (!isPerpVaultEnabled() || !publicClient) return;
+
+  const now = Date.now();
+  for (const [token, state] of circuitBreakers) {
+    if (state.status !== "OPEN") continue;
+    if (now - state.lastCheckAt < BREAKER_RECHECK_INTERVAL_MS) continue;
+
+    state.lastCheckAt = now;
+
+    try {
+      const maxOI = (await publicClient.readContract({
+        address: perpVaultAddress!,
+        abi: PERP_VAULT_ABI,
+        functionName: "getMaxOI",
+      })) as bigint;
+
+      const totalChainOI = (await publicClient.readContract({
+        address: perpVaultAddress!,
+        abi: PERP_VAULT_ABI,
+        functionName: "getTotalOI",
+      })) as bigint;
+
+      // Check if there's now headroom on chain
+      const pendingDelta = getPendingOIDeltaForToken(token);
+      if (maxOI > 0n && totalChainOI + pendingDelta <= maxOI) {
+        state.status = "CLOSED";
+        state.consecutiveFailures = 0;
+        logger.info("PerpVault", `✅ CIRCUIT BREAKER AUTO-RECOVERED for ${token.slice(0, 10)} — maxOI=${maxOI}, chainOI=${totalChainOI}, pending=${pendingDelta}`);
+      } else {
+        logger.debug("PerpVault", `⚡ Breaker still open for ${token.slice(0, 10)}: maxOI=${maxOI}, chainOI=${totalChainOI}, pending=${pendingDelta}`);
+      }
+    } catch {
+      // RPC error — will retry next cycle
+    }
+  }
+}
+
+/** Sum pending OI deltas for a specific token */
+function getPendingOIDeltaForToken(token: string): bigint {
+  const normalized = token.toLowerCase();
+  let total = 0n;
+  for (const [key, delta] of pendingOIDelta) {
+    if (key.startsWith(normalized + "_") && delta > 0n) {
+      total += delta;
+    }
+  }
+  return total;
+}
+
+/**
+ * Engine-side OI pre-check: can we open a new position?
+ *
+ * Uses cached maxOI + engine-side OI mirror (no RPC call).
+ * If circuit breaker is open, rejects immediately.
+ */
+let cachedMaxOI: bigint = 0n;
+let lastMaxOIFetch = 0;
+const MAX_OI_CACHE_MS = 30_000; // Refresh maxOI every 30s
+
+export async function canOpenPosition(
+  token: string,
+  sizeETH: bigint
+): Promise<{ allowed: boolean; reason?: string }> {
+  const normalized = token.toLowerCase();
+
+  // 1. Circuit breaker check (instant, no RPC)
+  if (isCircuitBreakerOpen(normalized)) {
+    const state = circuitBreakers.get(normalized)!;
+    return {
+      allowed: false,
+      reason: `OI circuit breaker open for this token (since ${new Date(state.trippedAt).toISOString()}). Pool needs more LP liquidity.`,
+    };
+  }
+
+  // 2. Engine-side OI check against cached maxOI
+  const now = Date.now();
+  if (now - lastMaxOIFetch > MAX_OI_CACHE_MS && isPerpVaultEnabled() && publicClient) {
+    try {
+      cachedMaxOI = (await publicClient.readContract({
+        address: perpVaultAddress!,
+        abi: PERP_VAULT_ABI,
+        functionName: "getMaxOI",
+      })) as bigint;
+      lastMaxOIFetch = now;
+    } catch {
+      // Use stale cache — better than blocking
+    }
+  }
+
+  if (cachedMaxOI > 0n) {
+    const engineTotal = getEngineTotalOI();
+    if (engineTotal + sizeETH > cachedMaxOI) {
+      return {
+        allowed: false,
+        reason: `OI limit reached: current=${(Number(engineTotal) / 1e18).toFixed(2)}, new=${(Number(sizeETH) / 1e18).toFixed(4)}, max=${(Number(cachedMaxOI) / 1e18).toFixed(2)} BNB. Need more LP.`,
+      };
+    }
+  }
+
+  return { allowed: true };
+}
+
 /**
  * Update the set of graduated tokens (called from server.ts on graduation events).
  * Graduated tokens have LP pool as counterparty → must track OI.
@@ -328,7 +540,11 @@ function queueOIDelta(token: Address, isLong: boolean, delta: bigint): void {
 
 async function flushOIQueue(): Promise<void> {
   if (!isPerpVaultEnabled() || !walletClient || !publicClient || globalTxLock) return;
-  if (pendingOIDelta.size === 0) return;
+  if (pendingOIDelta.size === 0) {
+    // Even if queue is empty, try recovering circuit breakers
+    await tryRecoverCircuitBreakers();
+    return;
+  }
 
   globalTxLock = true;
   // Snapshot and clear the queue
@@ -337,6 +553,7 @@ async function flushOIQueue(): Promise<void> {
 
   let successCount = 0;
   let failCount = 0;
+  let skippedBreaker = 0;
 
   // Fetch nonce once to avoid RPC staleness between sequential calls
   let nonce: number;
@@ -351,7 +568,6 @@ async function flushOIQueue(): Promise<void> {
       const existing = pendingOIDelta.get(key) || 0n;
       pendingOIDelta.set(key, existing + delta);
     }
-    // AUDIT-FIX ME-C03: 使用正确的锁变量 globalTxLock (isFlushingOI 未定义)
     globalTxLock = false;
     return;
   }
@@ -365,6 +581,16 @@ async function flushOIQueue(): Promise<void> {
     const isIncrease = delta > 0n;
     const absDelta = isIncrease ? delta : -delta;
 
+    // Skip increase if circuit breaker is open for this token
+    // (decrease OI should always go through — closing positions reduces risk)
+    if (isIncrease && isCircuitBreakerOpen(token)) {
+      // Keep in queue but don't retry this cycle — wait for recovery
+      const existing = pendingOIDelta.get(key) || 0n;
+      pendingOIDelta.set(key, existing + delta);
+      skippedBreaker++;
+      continue;
+    }
+
     try {
       const txHash = await walletClient.writeContract({
         address: perpVaultAddress!,
@@ -377,21 +603,38 @@ async function flushOIQueue(): Promise<void> {
       oiUpdatesExecuted++;
       cachedPoolStats = null;
       successCount++;
+
+      // Record success — may close circuit breaker
+      recordOIFlushSuccess(token);
+
       logger.info("PerpVault", `OI ${isIncrease ? "increased" : "decreased"} (batch): token=${token.slice(0, 10)} ${isLong ? "LONG" : "SHORT"} ${isIncrease ? "+" : "-"}${absDelta} tx=${txHash}`);
     } catch (error: any) {
       oiUpdatesFailed++;
       failCount++;
       const errorMsg = error?.shortMessage || error?.message || String(error);
-      logger.error("PerpVault", `OI batch ${isIncrease ? "increase" : "decrease"} FAILED: ${errorMsg.slice(0, 200)} | token=${token.slice(0, 10)} delta=${delta}`);
-      // Re-queue the failed delta
-      const existing = pendingOIDelta.get(key) || 0n;
-      pendingOIDelta.set(key, existing + delta);
+      const isExceedsMaxOI = errorMsg.includes("0x8a9d1c41") || errorMsg.includes("ExceedsMaxOI");
+
+      if (isExceedsMaxOI && isIncrease) {
+        // ExceedsMaxOI on increase — record failure, may trip breaker
+        recordOIFlushFailure(token, errorMsg);
+        logger.warn("PerpVault", `OI ExceedsMaxOI: token=${token.slice(0, 10)} delta=${absDelta}. Failure #${circuitBreakers.get(token.toLowerCase())?.consecutiveFailures || 0}/${BREAKER_MAX_CONSECUTIVE}`);
+
+        // Re-queue the delta (will be skipped by breaker on next flush)
+        const existing = pendingOIDelta.get(key) || 0n;
+        pendingOIDelta.set(key, existing + delta);
+      } else {
+        // Other errors (nonce, RPC, etc.) — re-queue and break
+        logger.error("PerpVault", `OI batch ${isIncrease ? "increase" : "decrease"} FAILED: ${errorMsg.slice(0, 200)} | token=${token.slice(0, 10)} delta=${delta}`);
+        const existing = pendingOIDelta.get(key) || 0n;
+        pendingOIDelta.set(key, existing + delta);
+      }
+
       // Break on first failure — subsequent nonces would be invalid
       // Re-queue remaining items
       let foundFailed = false;
       for (const [remainKey, remainDelta] of snapshot.entries()) {
         if (remainKey === key) { foundFailed = true; continue; }
-        if (!foundFailed) continue; // skip already-processed items
+        if (!foundFailed) continue;
         if (remainDelta === 0n) continue;
         const existingRemain = pendingOIDelta.get(remainKey) || 0n;
         pendingOIDelta.set(remainKey, existingRemain + remainDelta);
@@ -400,9 +643,13 @@ async function flushOIQueue(): Promise<void> {
     }
   }
 
-  if (successCount > 0 || failCount > 0) {
-    logger.info("PerpVault", `OI batch flush: ${successCount} ok, ${failCount} failed, ${pendingOIDelta.size} re-queued`);
+  if (successCount > 0 || failCount > 0 || skippedBreaker > 0) {
+    logger.info("PerpVault", `OI batch flush: ${successCount} ok, ${failCount} failed, ${skippedBreaker} breaker-skipped, ${pendingOIDelta.size} queued`);
   }
+
+  // Try recovering circuit breakers after flush
+  await tryRecoverCircuitBreakers();
+
   globalTxLock = false;
 }
 
@@ -763,8 +1010,12 @@ export async function increaseOI(
   if (!isPerpVaultEnabled() || !walletClient) return { success: false };
   if (sizeETH === 0n) return { success: true };
 
+  // Update engine-side OI mirror (instant, no RPC)
+  updateEngineOI(token, isLong, sizeETH);
+
+  // Queue for on-chain batch flush
   queueOIDelta(token, isLong, sizeETH);
-  logger.debug("PerpVault", `OI increase queued: token=${token.slice(0, 10)} ${isLong ? "LONG" : "SHORT"} +${sizeETH} (queue: ${pendingOIDelta.size})`);
+  logger.debug("PerpVault", `OI increase queued: token=${token.slice(0, 10)} ${isLong ? "LONG" : "SHORT"} +${sizeETH} engineOI=${getEngineOI(token, isLong)} (queue: ${pendingOIDelta.size})`);
   return { success: true };
 }
 
@@ -781,8 +1032,12 @@ export async function decreaseOI(
   if (!isPerpVaultEnabled() || !walletClient) return { success: false };
   if (sizeETH === 0n) return { success: true };
 
+  // Update engine-side OI mirror (instant, no RPC)
+  updateEngineOI(token, isLong, -sizeETH);
+
+  // Queue for on-chain batch flush
   queueOIDelta(token, isLong, -sizeETH);
-  logger.debug("PerpVault", `OI decrease queued: token=${token.slice(0, 10)} ${isLong ? "LONG" : "SHORT"} -${sizeETH} (queue: ${pendingOIDelta.size})`);
+  logger.debug("PerpVault", `OI decrease queued: token=${token.slice(0, 10)} ${isLong ? "LONG" : "SHORT"} -${sizeETH} engineOI=${getEngineOI(token, isLong)} (queue: ${pendingOIDelta.size})`);
   return { success: true };
 }
 
@@ -1025,6 +1280,14 @@ export function getPerpVaultMetrics(): {
   pendingQueueETH: string;
 } {
   const pending = getPendingSettlementInfo();
+  // Circuit breaker summary
+  const breakerSummary: Record<string, string> = {};
+  for (const [token, state] of circuitBreakers) {
+    if (state.status === "OPEN") {
+      breakerSummary[token.slice(0, 10)] = `OPEN since ${new Date(state.trippedAt).toISOString()} (${state.reason.slice(0, 60)})`;
+    }
+  }
+
   return {
     initialized,
     enabled: isPerpVaultEnabled(),
@@ -1039,6 +1302,9 @@ export function getPerpVaultMetrics(): {
     batchesSkippedLowBalance,
     pendingQueueLength: pending.queueLength,
     pendingQueueETH: pending.totalPendingETH.toString(),
+    engineTotalOI: getEngineTotalOI().toString(),
+    cachedMaxOI: cachedMaxOI.toString(),
+    circuitBreakers: breakerSummary,
   };
 }
 
@@ -1054,6 +1320,11 @@ export default {
   getPoolStats,
   getTokenOI,
   canIncreaseOI,
+  canOpenPosition,
+  isCircuitBreakerOpen,
+  getCircuitBreakerStatus,
+  getEngineOI,
+  getEngineTotalOI,
   getLPInfo,
   settleTraderPnL,
   settleLiquidation,

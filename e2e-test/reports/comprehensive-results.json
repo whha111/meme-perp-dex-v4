@@ -1,0 +1,436 @@
+[
+  {
+    "phase": "P0: Environment",
+    "status": "FAIL",
+    "duration": 69892,
+    "checks": [
+      {
+        "name": "Engine healthy",
+        "pass": true,
+        "detail": "ok"
+      },
+      {
+        "name": "Go backend healthy",
+        "pass": true,
+        "detail": "OK"
+      },
+      {
+        "name": "DOGE3 perpEnabled",
+        "pass": true,
+        "detail": "OK"
+      },
+      {
+        "name": "DOGE3 isActive",
+        "pass": true,
+        "detail": "OK"
+      },
+      {
+        "name": "PriceFeed has price",
+        "pass": true,
+        "detail": "1.2233664242e-8"
+      },
+      {
+        "name": "LP pool >= 3 BNB",
+        "pass": true,
+        "detail": "102.28 BNB"
+      },
+      {
+        "name": "DOGE3 circuit breaker closed",
+        "pass": true,
+        "detail": "OK"
+      },
+      {
+        "name": "Wallet 40 balance",
+        "pass": true,
+        "detail": "28.794 BNB"
+      },
+      {
+        "name": "Wallet 10 deposit 3 BNB",
+        "pass": false,
+        "detail": "FAILED"
+      },
+      {
+        "name": "Wallet 13 balance",
+        "pass": true,
+        "detail": "13.856 BNB"
+      },
+      {
+        "name": "Wallet 50 deposit 0.5 BNB",
+        "pass": false,
+        "detail": "FAILED"
+      }
+    ]
+  },
+  {
+    "phase": "P1: Referral",
+    "status": "PASS",
+    "duration": 52,
+    "checks": [
+      {
+        "name": "Referrer D registered",
+        "pass": true,
+        "detail": "code=Z4C0D6GY"
+      },
+      {
+        "name": "Wallet A bound to referrer",
+        "pass": true,
+        "detail": "Already bound to a referrer"
+      },
+      {
+        "name": "Wallet E bound to referrer",
+        "pass": true,
+        "detail": "Already bound to a referrer"
+      },
+      {
+        "name": "Referrer D has >= 2 referees",
+        "pass": true,
+        "detail": "count=2"
+      }
+    ]
+  },
+  {
+    "phase": "P2: Spot Trading",
+    "status": "PASS",
+    "duration": 11396,
+    "checks": [
+      {
+        "name": "Spot buy executed",
+        "pass": true,
+        "detail": "tx=0x3d913465"
+      },
+      {
+        "name": "Price increased after buy",
+        "pass": true,
+        "detail": "1.2233664242e-8 → 1.2857672615e-8"
+      },
+      {
+        "name": "Engine price synced with chain",
+        "pass": true,
+        "detail": "engine=1.2857672615e-8, chain=1.2857672615e-8, ratio=1.0000"
+      }
+    ]
+  },
+  {
+    "phase": "P3: Open Positions",
+    "status": "FAIL",
+    "duration": 35782,
+    "checks": [
+      {
+        "name": "Market LONG submitted",
+        "pass": true,
+        "detail": "orderId=AA2026040515, status=FILLED"
+      },
+      {
+        "name": "Market SHORT submitted",
+        "pass": false,
+        "detail": "余额不足: 需要 0.1001 BNB，可用 0.0014 BNB (钱包: 3.6499, mode2: 18.4820, 占用: 22.1255)"
+      },
+      {
+        "name": "Wallet A has LONG position",
+        "pass": true,
+        "detail": "size=1650000000000000000"
+      },
+      {
+        "name": "Wallet B has SHORT position",
+        "pass": true,
+        "detail": "size=1000000000000000000"
+      },
+      {
+        "name": "Wallet A balance changed after orders",
+        "pass": true,
+        "detail": "28.7942 → 28.6941"
+      },
+      {
+        "name": "Limit LONG submitted",
+        "pass": true,
+        "detail": "orderId=AA2026040515, price=1.2214788984e-8"
+      },
+      {
+        "name": "Limit order accepted",
+        "pass": true,
+        "detail": "status=FILLED (LP fill may execute immediately)"
+      }
+    ]
+  },
+  {
+    "phase": "P4: TP/SL",
+    "status": "PASS",
+    "duration": 67879,
+    "checks": [
+      {
+        "name": "TP LONG order submitted",
+        "pass": true,
+        "detail": "status=FILLED"
+      },
+      {
+        "name": "TP trigger attempted",
+        "pass": true,
+        "detail": "positions after: 1"
+      },
+      {
+        "name": "SL LONG order submitted",
+        "pass": true,
+        "detail": "status=FILLED"
+      },
+      {
+        "name": "SL trigger attempted",
+        "pass": true,
+        "detail": "positions after: 1"
+      }
+    ]
+  },
+  {
+    "phase": "P5: Close Positions",
+    "status": "PASS",
+    "duration": 476132,
+    "checks": [
+      {
+        "name": "Profit close submitted",
+        "pass": true,
+        "detail": "status=PENDING"
+      },
+      {
+        "name": "Profit close executed or accepted",
+        "pass": true,
+        "detail": "28.4439 → 28.3938 (delta=-0.050050, status=PENDING)"
+      },
+      {
+        "name": "Loss close executed",
+        "pass": true,
+        "detail": "28.2937 → 28.1936"
+      },
+      {
+        "name": "Partial close: position partially remains",
+        "pass": true,
+        "detail": "remaining=2.3500 BNB"
+      }
+    ]
+  },
+  {
+    "phase": "P6: Liquidation",
+    "status": "PASS",
+    "duration": 260811,
+    "checks": [
+      {
+        "name": "High-leverage LONG opened (2.5x)",
+        "pass": true,
+        "detail": "orderId=A12026040515"
+      },
+      {
+        "name": "Wallet C LONG position liquidated",
+        "pass": true,
+        "detail": "positions: 1→1, PG LIQUIDATED: 29, price drop: 38.5%"
+      }
+    ]
+  },
+  {
+    "phase": "P7: Funding Rate",
+    "status": "PASS",
+    "duration": 540359,
+    "checks": [
+      {
+        "name": "funding_rate_history has records",
+        "pass": true,
+        "detail": "count=2173"
+      },
+      {
+        "name": "perp_bills has FUNDING_FEE records",
+        "pass": true,
+        "detail": "count=50453"
+      }
+    ]
+  },
+  {
+    "phase": "P8: Withdrawal",
+    "status": "PASS",
+    "duration": 401147,
+    "checks": [
+      {
+        "name": "Merkle proof received",
+        "pass": true,
+        "detail": "OK"
+      },
+      {
+        "name": "On-chain withdraw tx confirmed",
+        "pass": true,
+        "detail": "tx=0x8918a98326ef"
+      },
+      {
+        "name": "WBNB balance increased after withdraw",
+        "pass": true,
+        "detail": "19.703996 → 20.863753"
+      },
+      {
+        "name": "Engine balance decreased after withdraw",
+        "pass": true,
+        "detail": "26.979501 → 26.979493"
+      }
+    ]
+  },
+  {
+    "phase": "P9: Referral Verify",
+    "status": "PASS",
+    "duration": 24,
+    "checks": [
+      {
+        "name": "Referrer D has commission records",
+        "pass": true,
+        "detail": "count=9"
+      },
+      {
+        "name": "Global referral commissions > 0",
+        "pass": true,
+        "detail": "pending=0.13163176430291448, paid=0"
+      }
+    ]
+  },
+  {
+    "phase": "P10: Boundaries",
+    "status": "PASS",
+    "duration": 36299,
+    "checks": [
+      {
+        "name": "Insufficient balance rejected",
+        "pass": "Position rejected: OI limit reached: current=1.10, new=100.0000, max=51.20 BNB. Need more LP.",
+        "detail": "Position rejected: OI limit reached: current=1.10, new=100.0000, max=51.20 BNB. Need more LP."
+      },
+      {
+        "name": "Price band violation rejected",
+        "pass": "Limit price deviates more than 50% from spot price. Spot: 12233664242, Your price: 36700992726",
+        "detail": "Limit price deviates more than 50% from spot price. Spot: 12233664242, Your price: 36700992726"
+      },
+      {
+        "name": "ReduceOnly without position rejected",
+        "pass": "No open position to reduce. Reduce-only orders require an existing position in the opposite direction.",
+        "detail": "No open position to reduce. Reduce-only orders require an existing position in the opposite direction."
+      },
+      {
+        "name": "Zero size order rejected",
+        "pass": "Position too small. Minimum: 0.001 BNB",
+        "detail": "Position too small. Minimum: 0.001 BNB"
+      },
+      {
+        "name": "Expired deadline rejected",
+        "pass": "Order expired",
+        "detail": "Order expired"
+      }
+    ]
+  },
+  {
+    "phase": "P11: Data Consistency",
+    "status": "PASS",
+    "duration": 885,
+    "checks": [
+      {
+        "name": "perp_order_mirror > 0",
+        "pass": true,
+        "detail": "count=964"
+      },
+      {
+        "name": "perp_trade_mirror > 0",
+        "pass": true,
+        "detail": "count=937"
+      },
+      {
+        "name": "perp_trade_mirror has close trades",
+        "pass": true,
+        "detail": "count=713"
+      },
+      {
+        "name": "perp_trade_mirror has non-zero PnL",
+        "pass": true,
+        "detail": "count=630"
+      },
+      {
+        "name": "perp_position_mirror OPEN",
+        "pass": true,
+        "detail": "count=143"
+      },
+      {
+        "name": "perp_position_mirror has CLOSED",
+        "pass": true,
+        "detail": "count=27"
+      },
+      {
+        "name": "perp_position_mirror LIQUIDATED",
+        "pass": true,
+        "detail": "count=29 (soft check)"
+      },
+      {
+        "name": "perp_bills >= 2 types",
+        "pass": true,
+        "detail": "FUNDING_FEE:50453, INSURANCE_CONTRIBUTION:1721, SETTLE_PNL:503, OPEN_FEE:354, LIQUIDATION:210, CLOSE_FEE:119, TRADING_FEE:119, INSURANCE_PAYOUT:95, MAKER_FEE_REFUND:77, WITHDRAWAL:2"
+      },
+      {
+        "name": "FUNDING_FEE bills > 0",
+        "pass": true,
+        "detail": "count=50453"
+      },
+      {
+        "name": "SETTLE_PNL bills > 0",
+        "pass": true,
+        "detail": "count=503"
+      },
+      {
+        "name": "Fee-related bills > 0",
+        "pass": true,
+        "detail": "count=592"
+      },
+      {
+        "name": "funding_rate_history > 0",
+        "pass": true,
+        "detail": "count=2173"
+      },
+      {
+        "name": "balance_snapshots",
+        "pass": true,
+        "detail": "count=0 (soft check)"
+      },
+      {
+        "name": "Engine active positions",
+        "pass": true,
+        "detail": "count=0"
+      },
+      {
+        "name": "referral_rewards table",
+        "pass": true,
+        "detail": "count=0 (soft check)"
+      },
+      {
+        "name": "go:users",
+        "pass": true,
+        "detail": "count=0 (logged)"
+      },
+      {
+        "name": "go:orders",
+        "pass": true,
+        "detail": "count=0 (logged)"
+      },
+      {
+        "name": "go:trades",
+        "pass": true,
+        "detail": "count=0 (logged)"
+      },
+      {
+        "name": "go:positions",
+        "pass": true,
+        "detail": "count=0 (logged)"
+      },
+      {
+        "name": "go:funding_rates",
+        "pass": true,
+        "detail": "count=162 (logged)"
+      },
+      {
+        "name": "go:liquidations",
+        "pass": true,
+        "detail": "count=0 (logged)"
+      },
+      {
+        "name": "PerpVault pool value > 0",
+        "pass": true,
+        "detail": "102.3930 BNB"
+      }
+    ]
+  }
+]

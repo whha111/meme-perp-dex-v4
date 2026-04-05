@@ -18,6 +18,7 @@
 import { type Address, type Log, createPublicClient, http, parseAbiItem } from "viem";
 import { bsc, bscTestnet } from "viem/chains";
 import { getRedisClient, isRedisConnected } from "../database/redis";
+import { rpcTransport } from "../config";
 
 // ============================================================
 // Types
@@ -110,7 +111,8 @@ export async function createEventPoller(config: EventPollerConfig): Promise<Poll
   } = config;
 
   const chain = chainId === 97 ? bscTestnet : bsc;
-  const client = createPublicClient({ chain, transport: http(rpcUrl) });
+  // Use shared fallback transport for reliability; ignore rpcUrl param
+  const client = createPublicClient({ chain, transport: rpcTransport });
 
   const state: PollerState = {
     name,

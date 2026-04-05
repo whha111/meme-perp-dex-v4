@@ -12,10 +12,10 @@
  * - wallet.ts: 获取派生钱包签名密钥 (代签链上交易)
  */
 
-import { createWalletClient, http, type Address, type Hex } from "viem";
+import { createWalletClient, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { bsc, bscTestnet } from "viem/chains";
-import { RPC_URL, PERP_VAULT_ADDRESS, CHAIN_ID } from "../config";
+import { PERP_VAULT_ADDRESS, CHAIN_ID, rpcTransport } from "../config";
 import { getActiveSessionForDerived, getSigningKey } from "./wallet";
 import { isPerpVaultEnabled, txLockRef } from "./perpVault";
 import { logger } from "../utils/logger";
@@ -411,7 +411,7 @@ async function getOrCreateWalletClient(traderAddress: Address): Promise<any | nu
   const client = createWalletClient({
     account,
     chain,
-    transport: http(RPC_URL),
+    transport: rpcTransport,
   });
 
   walletClientCache.set(normalized, client);
@@ -436,7 +436,7 @@ export function registerWalletKey(traderAddress: Address, privateKey: Hex): void
   const client = createWalletClient({
     account,
     chain,
-    transport: http(RPC_URL),
+    transport: rpcTransport,
   });
   walletClientCache.set(normalized, client);
   logger.info("MarginBatch", `Registered wallet key directly for ${normalized.slice(0, 10)}`);

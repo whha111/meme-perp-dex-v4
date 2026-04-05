@@ -4,6 +4,7 @@
 
 import "dotenv/config";
 import type { Address, Hex } from "viem";
+import { http, fallback } from "viem";
 
 // ============================================================
 // 服务器配置
@@ -14,6 +15,25 @@ export const RPC_URL = process.env.RPC_URL;
 if (!RPC_URL) {
   console.error("🚨 FATAL: RPC_URL env var is required. No fallback allowed.");
   process.exit(1);
+}
+
+// RPC fallback: multiple endpoints with automatic retry (Chainlink/Infura best practice)
+// Set RPC_URL_FALLBACK_1, RPC_URL_FALLBACK_2 etc. for backup endpoints
+const rpcFallbackUrls = [
+  process.env.RPC_URL_FALLBACK_1,
+  process.env.RPC_URL_FALLBACK_2,
+  process.env.RPC_URL_FALLBACK_3,
+].filter(Boolean) as string[];
+
+export const rpcTransport = rpcFallbackUrls.length > 0
+  ? fallback(
+      [http(RPC_URL, { retryCount: 2, retryDelay: 500 }), ...rpcFallbackUrls.map(url => http(url, { retryCount: 1, retryDelay: 1000 }))],
+      { rank: true }
+    )
+  : http(RPC_URL, { retryCount: 3, retryDelay: 500 });
+
+if (rpcFallbackUrls.length > 0) {
+  console.log(`[Config] RPC fallback enabled: ${1 + rpcFallbackUrls.length} endpoints (primary + ${rpcFallbackUrls.length} fallback)`);
 }
 export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "");
 if (!process.env.CHAIN_ID || isNaN(CHAIN_ID)) {
@@ -126,6 +146,8 @@ export const TRADING = {
   MAX_TOKENS_PER_ACCOUNT: 5, // 单账户最多持仓 5 个 token
   MAX_PROFIT_RATE: 900n,     // 单笔最大盈利 = LP池值 * 9% (防止掏空LP)
   PRICE_BAND_BPS: 5000n,     // 限价单价格偏离 Spot Price 最大 ±50% (5000bp)
+  MAX_PRICE_AGE_MS: 60_000,  // 价格过时阈值 60 秒 (GMX Oracle.sol maxPriceAge 模式)
+  CIRCUIT_BREAKER_DEVIATION_BPS: 2000n, // 20% 价格偏离触发熔断 (Synthetix CircuitBreaker.sol 模式)
 } as const;
 
 // ============================================================

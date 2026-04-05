@@ -167,7 +167,15 @@ services:
       - FEE_RECEIVER_ADDRESS=${FEE_RECEIVER_ADDRESS}
       - LENDING_POOL_ADDRESS=${LENDING_POOL_ADDRESS}
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - POSTGRES_URL=postgresql://memeperp:${POSTGRES_PASSWORD}@postgres:5432/memeperp
+      - PLATFORM_SIGNER_KEY=${PLATFORM_SIGNER_KEY}
+      - SKIP_BALANCE_SYNC=${SKIP_BALANCE_SYNC:-true}
+      - SNAPSHOT_INTERVAL_MS=${SNAPSHOT_INTERVAL_MS:-300000}
+      - RPC_URL_FALLBACK_1=https://data-seed-prebsc-2-s1.binance.org:8545/
+      - RPC_URL_FALLBACK_2=https://bsc-testnet.public.blastapi.io
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:

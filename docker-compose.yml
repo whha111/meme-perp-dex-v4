@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: ${MEMEPERP_DATABASE_PASSWORD:?MEMEPERP_DATABASE_PASSWORD is required}
       POSTGRES_DB: ${MEMEPERP_DATABASE_DBNAME:-memeperp}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/migrations:/docker-entrypoint-initdb.d:ro
@@ -69,14 +69,18 @@ services:
       - SPOT_PRICE_SYNC_INTERVAL_MS=${SPOT_PRICE_SYNC_INTERVAL_MS:-3000}
       - CHAIN_ID=${MEMEPERP_BLOCKCHAIN_CHAIN_ID:?MEMEPERP_BLOCKCHAIN_CHAIN_ID is required}
       - REDIS_URL=redis://:${MEMEPERP_REDIS_PASSWORD}@redis:6379
+      - DATABASE_URL=postgresql://${MEMEPERP_DATABASE_USER:-postgres}:${MEMEPERP_DATABASE_PASSWORD}@postgres:5432/${MEMEPERP_DATABASE_DBNAME:-memeperp}
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:8081/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))\""]
       interval: 15s
       timeout: 10s
-      retries: 3
+      retries: 10
+      start_period: 120s
 
   # Backend API Server
   backend:

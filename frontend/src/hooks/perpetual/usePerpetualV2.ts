@@ -744,7 +744,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
         success: boolean;
         error?: string;
         fastWithdraw?: { amount: string; nonce: string; deadline: string; signature: string };
-        authorization?: { userEquity: string; merkleProof: string[]; deadline: string; signature: string };
+        authorization?: { userEquity: string; merkleProof: string[]; merkleRoot: string; deadline: string; signature: string };
       };
       try {
         const res = await fetch(`${MATCHING_ENGINE_URL}/api/wallet/withdraw`, {
@@ -799,7 +799,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
         // ═══════════════════════════════════════════════════════════
         // Legacy Merkle proof path (fallback for old SettlementV2)
         // ═══════════════════════════════════════════════════════════
-        const { userEquity, merkleProof, deadline, signature } = data.authorization;
+        const { userEquity, merkleProof, merkleRoot, deadline, signature } = data.authorization;
         if (!Array.isArray(merkleProof)) {
           throw new Error("Invalid merkle proof: not an array");
         }
@@ -821,6 +821,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
             BigInt(amountInWei),
             BigInt(userEquity),
             validatedProof,
+            merkleRoot as `0x${string}`,
             BigInt(deadline),
             signature as `0x${string}`,
           ],

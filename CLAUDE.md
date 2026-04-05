@@ -28,24 +28,24 @@ cat /Users/qinlinqiu/Desktop/meme-perp-dex/DEVELOPMENT_RULES.md
 - ✅ 373 contract tests pass, Go/TS compile clean
 - ✅ **V4 行业对标修复 2026-03-31** — 15/15 问题修复（详见下方 + `docs/V4_INDUSTRY_BENCHMARK.md`）
 
-## 合约地址 (BSC Testnet — 2026-03-18 部署)
+## 合约地址 (BSC Testnet — 2026-03-27 部署, SettlementV2 含 Escape Hatch 2026-04-05)
 
 **⚠️ 唯一真实来源: `deployments/97.json` — 所有配置文件必须与之一致**
 
 | 合约 | 地址 |
 |------|------|
-| TokenFactory | `0xaf727EeF35Ff8b5D8F4Da7215d8CF5CE91bE2946` |
-| SettlementV2 | `0xAAee334783de1DE25fBdaA37C2C57EF8c9EB4F1E` |
-| Settlement V1 | `0x17B74c408f7906F677f639B7c449e1ef708962Cb` |
-| PerpVault | `0xAaFafb22c16C20E138e0cF35bB98Be672E33A984` |
-| PriceFeed | `0x2b14DdF4761Eea5C36F93776E8F59F2928F9Cdeb` |
-| PositionManager | `0x620d6C0dcF4d4d9b6a9f3c650669aF4b02AB660e` |
-| Vault | `0xe813093B55a2975c5E839A766AEb00D0cf2c98f7` |
-| Liquidation | `0x14d9DA599A6e5288c9DEB95A1BE504cb79B28b0c` |
-| FundingRate | `0xcAe2860330eb9B66Ee6bc79a2CC74f93b8334326` |
-| InsuranceFund | `0xfbC7f1f449e06c73F4d1b8134C6C2D52B244a9Aa` |
-| RiskManager | `0xd3EE03cbF56C69463F2B6fef60D5284D5676CFF3` |
-| ContractRegistry | `0x197B0370Ba7d2e81F2A6046BFD5966fd8A3E4ABE` |
+| TokenFactory | `0xB40541Ff9f24883149fc6F9CD1021dB9C7BCcB83` |
+| SettlementV2 | `0xF83D5d2E437D0e27144900cb768d2B5933EF3d6b` |
+| Settlement V1 | `0x32de01f0E464521583E52d50f125492D10EfDBB3` |
+| PerpVault | `0xF0db95eD967318BC7757A671399f0D4FFC853e05` |
+| PriceFeed | `0xB480517B96558E4467cfa1d91d8E6592c66B564D` |
+| PositionManager | `0x50d3e039Efe373D9d52676D482E732FD9C411b05` |
+| Vault | `0xE70b128aA233Fa6e54C1EDCACDdC11C5465760Ac` |
+| Liquidation | `0x5587Cf6b94E52e2Da0B8412381fcdfe4D39CA562` |
+| FundingRate | `0x246d00Bfb4DC18d199Fecaf4045A2F6f2A018A9C` |
+| InsuranceFund | `0xa20488Ed2CEABD0e6441496c2F4F5fBA18F4cE83` |
+| RiskManager | `0x176a7Abf1B3917DEd911B6F6aac4adcB318cd558` |
+| ContractRegistry | `0x0C6605b820084e43d0708943d15b1c681f2bCac1` |
 | WBNB | `0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd` |
 | PancakeRouter V2 | `0xD99D1c33F9fC3444f8101754aBC46c52416550D1` |
 | Deployer | `0xAecb229194314999E396468eb091b42E44Bc3c8c` |

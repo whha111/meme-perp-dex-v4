@@ -314,6 +314,7 @@ export const SETTLEMENT_V2_ABI = [
       { name: "amount", type: "uint256" },
       { name: "userEquity", type: "uint256" },
       { name: "merkleProof", type: "bytes32[]" },
+      { name: "merkleRoot", type: "bytes32" },
       { name: "deadline", type: "uint256" },
       { name: "signature", type: "bytes" },
     ],

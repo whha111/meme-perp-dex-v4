@@ -772,4 +772,176 @@ contract SettlementV2Test is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(platformSignerKey, digest);
         return abi.encodePacked(r, s, v);
     }
+
+    // ============================================================
+    // Forced Withdrawal (Escape Hatch) Tests
+    // ============================================================
+
+    function test_forcedWithdrawal_fullFlow() public {
+        console.log("\n=== Test: Forced Withdrawal Full Flow ===");
+
+        // 1. User deposits
+        vm.prank(user1);
+        settlement.deposit(5 * WETH_UNIT);
+
+        // 2. Build Merkle tree with equity
+        uint256 user1Equity = 5 * WETH_UNIT;
+        uint256 user2Equity = 0;
+        bytes32 leaf1 = keccak256(abi.encodePacked(user1, user1Equity));
+        bytes32 leaf2 = keccak256(abi.encodePacked(user2, user2Equity));
+        bytes32 merkleRoot = _hashPair(leaf1, leaf2);
+
+        vm.prank(updater);
+        settlement.updateStateRoot(merkleRoot);
+
+        // 3. User requests forced withdrawal
+        uint256 withdrawAmount = 3 * WETH_UNIT;
+        vm.prank(user1);
+        settlement.requestForcedWithdrawal(withdrawAmount);
+
+        // Verify request is active
+        (uint256 amount, uint256 requestTime, bool active, bool canExecute) =
+            settlement.getForcedWithdrawalStatus(user1);
+        assertEq(amount, withdrawAmount);
+        assertTrue(active);
+        assertFalse(canExecute); // Not yet past delay
+        console.log("  [PASS] Forced withdrawal requested");
+
+        // 4. Cannot execute before delay
+        bytes32[] memory proof1 = new bytes32[](1);
+        proof1[0] = leaf2;
+
+        vm.prank(user1);
+        vm.expectRevert(SettlementV2.ForcedWithdrawalTooEarly.selector);
+        settlement.executeForcedWithdrawal(user1Equity, proof1, merkleRoot);
+        console.log("  [PASS] Revert before delay period");
+
+        // 5. Warp past 7 days
+        vm.warp(block.timestamp + 7 days + 1);
+
+        // Verify canExecute is now true
+        (,,, bool canExecuteNow) = settlement.getForcedWithdrawalStatus(user1);
+        assertTrue(canExecuteNow);
+
+        // 6. Execute forced withdrawal — NO platform signature needed!
+        uint256 balBefore = weth.balanceOf(user1);
+        vm.prank(user1);
+        settlement.executeForcedWithdrawal(user1Equity, proof1, merkleRoot);
+        uint256 balAfter = weth.balanceOf(user1);
+
+        assertEq(balAfter - balBefore, withdrawAmount);
+        assertEq(settlement.getUserTotalWithdrawn(user1), withdrawAmount);
+        console.log("  [PASS] Forced withdrawal executed after 7 days");
+
+        // 7. Forced withdrawal request is cleared
+        (,, bool stillActive,) = settlement.getForcedWithdrawalStatus(user1);
+        assertFalse(stillActive);
+        console.log("  [PASS] Request cleared after execution");
+    }
+
+    function test_forcedWithdrawal_cancelByUser() public {
+        console.log("\n=== Test: Forced Withdrawal Cancel ===");
+
+        vm.prank(user1);
+        settlement.deposit(5 * WETH_UNIT);
+
+        vm.prank(user1);
+        settlement.requestForcedWithdrawal(3 * WETH_UNIT);
+
+        // User cancels
+        vm.prank(user1);
+        settlement.cancelForcedWithdrawal(user1);
+
+        (,, bool active,) = settlement.getForcedWithdrawalStatus(user1);
+        assertFalse(active);
+        console.log("  [PASS] User cancelled forced withdrawal");
+    }
+
+    function test_forcedWithdrawal_cancelByOwner() public {
+        console.log("\n=== Test: Forced Withdrawal Cancel by Owner ===");
+
+        vm.prank(user1);
+        settlement.deposit(5 * WETH_UNIT);
+
+        vm.prank(user1);
+        settlement.requestForcedWithdrawal(3 * WETH_UNIT);
+
+        // Owner cancels (e.g. after processing withdrawal off-band)
+        vm.prank(owner);
+        settlement.cancelForcedWithdrawal(user1);
+
+        (,, bool active,) = settlement.getForcedWithdrawalStatus(user1);
+        assertFalse(active);
+        console.log("  [PASS] Owner cancelled forced withdrawal");
+    }
+
+    function test_forcedWithdrawal_revertDuplicate() public {
+        console.log("\n=== Test: Forced Withdrawal Duplicate Revert ===");
+
+        vm.prank(user1);
+        settlement.deposit(5 * WETH_UNIT);
+
+        vm.prank(user1);
+        settlement.requestForcedWithdrawal(3 * WETH_UNIT);
+
+        // Cannot request again while one is active
+        vm.prank(user1);
+        vm.expectRevert(SettlementV2.ForcedWithdrawalAlreadyActive.selector);
+        settlement.requestForcedWithdrawal(2 * WETH_UNIT);
+        console.log("  [PASS] Duplicate request reverted");
+    }
+
+    function test_forcedWithdrawal_revertExceedsEquity() public {
+        console.log("\n=== Test: Forced Withdrawal Exceeds Equity ===");
+
+        vm.prank(user1);
+        settlement.deposit(5 * WETH_UNIT);
+
+        // Merkle tree: user1 equity = 5 ETH
+        uint256 user1Equity = 5 * WETH_UNIT;
+        bytes32 leaf1 = keccak256(abi.encodePacked(user1, user1Equity));
+        bytes32 leaf2 = keccak256(abi.encodePacked(user2, uint256(0)));
+        bytes32 merkleRoot = _hashPair(leaf1, leaf2);
+
+        vm.prank(updater);
+        settlement.updateStateRoot(merkleRoot);
+
+        // Request 10 ETH (more than equity)
+        vm.prank(user1);
+        settlement.requestForcedWithdrawal(10 * WETH_UNIT);
+
+        vm.warp(block.timestamp + 7 days + 1);
+
+        bytes32[] memory proof1 = new bytes32[](1);
+        proof1[0] = leaf2;
+
+        vm.prank(user1);
+        vm.expectRevert(SettlementV2.ForcedWithdrawalInsufficientEquity.selector);
+        settlement.executeForcedWithdrawal(user1Equity, proof1, merkleRoot);
+        console.log("  [PASS] Revert when amount exceeds equity");
+    }
+
+    function test_forcedWithdrawal_setDelay() public {
+        console.log("\n=== Test: Set Forced Withdrawal Delay ===");
+
+        // Default is 7 days
+        assertEq(settlement.forcedWithdrawalDelay(), 7 days);
+
+        // Owner can change to 3 days
+        vm.prank(owner);
+        settlement.setForcedWithdrawalDelay(3 days);
+        assertEq(settlement.forcedWithdrawalDelay(), 3 days);
+
+        // Cannot set below 1 day
+        vm.prank(owner);
+        vm.expectRevert("Delay out of range");
+        settlement.setForcedWithdrawalDelay(12 hours);
+
+        // Cannot set above 30 days
+        vm.prank(owner);
+        vm.expectRevert("Delay out of range");
+        settlement.setForcedWithdrawalDelay(31 days);
+
+        console.log("  [PASS] Delay configuration works correctly");
+    }
 }

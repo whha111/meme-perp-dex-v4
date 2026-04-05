@@ -16,20 +16,20 @@
  * ⚠️ Mode 2: 链上 Settlement.locked 已废弃，仓位在 Redis 中管理
  */
 
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, type Address } from "viem";
 import { bsc } from "viem/chains";
-import { RPC_URL, SETTLEMENT_ADDRESS, WETH_ADDRESS as WETH_ADDR_FROM_CONFIG } from "../config";
+import { SETTLEMENT_ADDRESS, WETH_ADDRESS as WETH_ADDR_FROM_CONFIG, rpcTransport } from "../config";
 import { BalanceRepo } from "../database/redis";
 import { logger } from "../utils/logger";
 import type { UserBalance } from "../types";
 
 // ============================================================
-// Viem Client
+// Viem Client (uses shared fallback transport from config)
 // ============================================================
 
 const publicClient = createPublicClient({
   chain: bsc,
-  transport: http(RPC_URL),
+  transport: rpcTransport,
 });
 
 // ERC20 ABI for reading WETH balance

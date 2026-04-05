@@ -828,12 +828,12 @@ export const TradeMirrorRepo = {
       await sql`
         INSERT INTO perp_trade_mirror (
           id, order_id, pair_id, token, trader, is_long, is_maker,
-          size, price, fee, realized_pnl, timestamp, type
+          size, price, fee, realized_pnl, timestamp, type, created_at
         ) VALUES (
           ${trade.id}, ${trade.order_id}, ${trade.pair_id}, ${trade.token},
           ${trade.trader}, ${trade.is_long}, ${trade.is_maker},
           ${trade.size}, ${trade.price}, ${trade.fee}, ${trade.realized_pnl},
-          ${trade.timestamp}, ${trade.type}
+          ${trade.timestamp}, ${trade.type}, ${Date.now()}
         )
         ON CONFLICT (id) DO NOTHING
       `;
@@ -867,14 +867,16 @@ export const TradeMirrorRepo = {
 export interface PgBill {
   id: string;
   trader: string;
-  type: string; // DEPOSIT, WITHDRAW, TRADE_PNL, FEE, FUNDING, LIQUIDATION, ADL
+  type: string; // DEPOSIT, WITHDRAW, SETTLE_PNL, TRADING_FEE, CLOSE_FEE, OPEN_FEE, FUNDING_FEE, LIQUIDATION, ADL
   amount: string;
+  balance_before?: string;
   balance_after: string;
+  on_chain_status?: string;
+  proof_data?: string;
   position_id?: string;
   order_id?: string;
-  token?: string;
-  reason?: string;
   timestamp: number;
+  created_at?: number;
 }
 
 export const BillMirrorRepo = {
@@ -884,12 +886,15 @@ export const BillMirrorRepo = {
     try {
       await sql`
         INSERT INTO perp_bills (
-          id, trader, type, amount, balance_after,
-          position_id, order_id, token, reason, timestamp
+          id, trader, type, amount, balance_before, balance_after,
+          on_chain_status, proof_data, position_id, order_id,
+          timestamp, created_at
         ) VALUES (
           ${bill.id}, ${bill.trader}, ${bill.type}, ${bill.amount},
-          ${bill.balance_after}, ${bill.position_id || null}, ${bill.order_id || null},
-          ${bill.token || null}, ${bill.reason || null}, ${bill.timestamp}
+          ${bill.balance_before || "0"}, ${bill.balance_after},
+          ${bill.on_chain_status || "ENGINE_SETTLED"}, ${bill.proof_data || "{}"},
+          ${bill.position_id || null}, ${bill.order_id || null},
+          ${bill.timestamp}, ${bill.created_at || Date.now()}
         )
         ON CONFLICT (id) DO NOTHING
       `;
