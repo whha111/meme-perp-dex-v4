@@ -15369,6 +15369,7 @@ async function startServer(): Promise<void> {
 
   let syncTradeCounter = 0;
   let lastSyncTradeBlock = 0n;
+  let tradeBackfillDone = false;
 
   const syncSpotPrices = async () => {
     const { updateKlineWithCurrentPrice } = await import("../spot/spotHistory");
@@ -15553,19 +15554,35 @@ async function startServer(): Promise<void> {
       syncTradeCounter = 0;
       try {
         const { parseAbiItem } = await import("viem");
+        const TRADE_ABI = parseAbiItem(
+          "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 ethAmount, uint256 tokenAmount, uint256 virtualEth, uint256 virtualToken, uint256 timestamp)"
+        );
         const latestBlock = await publicClient.getBlockNumber();
+
+        // 首次运行: 回填最近 2000 个区块 (~100 分钟) 的历史交易
+        if (!tradeBackfillDone) {
+          tradeBackfillDone = true;
+          const BACKFILL_BLOCKS = 2000n;
+          const backfillFrom = latestBlock > BACKFILL_BLOCKS ? latestBlock - BACKFILL_BLOCKS : 0n;
+          console.log(`[TradeBackfill] Scanning blocks ${backfillFrom} → ${latestBlock} for historical trades...`);
+          try {
+            await pollTradeEvents(publicClient, TRADE_ABI, backfillFrom, latestBlock);
+            console.log(`[TradeBackfill] Historical trade backfill complete`);
+          } catch (backfillErr: any) {
+            console.warn(`[TradeBackfill] Backfill failed (will retry incrementally):`, backfillErr?.message?.slice(0, 100));
+          }
+          lastSyncTradeBlock = latestBlock;
+          return; // 回填完成后跳过本轮增量扫描
+        }
+
+        // 增量扫描: 扫描上次到现在的新区块
         if (latestBlock > lastSyncTradeBlock && lastSyncTradeBlock > 0n) {
-          const TRADE_ABI = parseAbiItem(
-            "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 ethAmount, uint256 tokenAmount, uint256 virtualEth, uint256 virtualToken, uint256 timestamp)"
-          );
           await pollTradeEvents(publicClient, TRADE_ABI, lastSyncTradeBlock + 1n, latestBlock);
         }
         lastSyncTradeBlock = latestBlock;
       } catch (e: any) {
-        // 非关键 — 不影响价格同步
-        if (!e?.message?.includes("limit")) {
-          console.warn(`[syncSpotPrices] Trade event scan failed:`, e?.message?.slice(0, 80));
-        }
+        // 非关键 — 不影响价格同步，但记录错误便于排查
+        console.warn(`[syncSpotPrices] Trade event scan error:`, e?.message?.slice(0, 120));
       }
     }
   };
