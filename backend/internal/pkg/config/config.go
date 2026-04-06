@@ -261,8 +261,10 @@ func validateConfig(cfg *Config) error {
 			errors = append(errors, "database.password must be set securely in production (set MEMEPERP_DATABASE_PASSWORD)")
 		}
 
-		if cfg.Database.SSLMode == "disable" {
-			errors = append(errors, "database.sslmode should be 'require' or 'verify-full' in production")
+		// Allow sslmode=disable for Docker-internal PostgreSQL (network-isolated)
+		// Only warn if connecting to an external database without SSL
+		if cfg.Database.SSLMode == "disable" && cfg.Database.Host != "postgres" && cfg.Database.Host != "localhost" && cfg.Database.Host != "127.0.0.1" {
+			errors = append(errors, "database.sslmode should be 'require' or 'verify-full' for external databases in production")
 		}
 
 		if cfg.Blockchain.PrivateKey == "" {

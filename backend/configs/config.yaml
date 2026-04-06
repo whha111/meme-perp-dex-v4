@@ -25,7 +25,7 @@ redis:
 blockchain:
   # All values MUST come from env — no hardcoded addresses or chain config
   rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL}"
-  chain_id: ${MEMEPERP_BLOCKCHAIN_CHAIN_ID}
+  chain_id: "${MEMEPERP_BLOCKCHAIN_CHAIN_ID}"
 
   # Contract Addresses — all from env vars
   router_address: "${MEMEPERP_ROUTER_ADDRESS}"

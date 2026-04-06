@@ -1,5 +1,5 @@
-# Production Configuration Template
-# Copy this file and set values via environment variables for security
+# Production Configuration — BSC Testnet Docker Deployment
+# Loaded when APP_ENV=production (merges on top of config.yaml)
 #
 # Required environment variables:
 # - MEMEPERP_DATABASE_PASSWORD
@@ -10,7 +10,7 @@
 
 server:
   addr: ":8080"
-  mode: "release"  # Use release mode in production
+  mode: "release"
   read_timeout: 30s
   write_timeout: 30s
 
@@ -18,63 +18,67 @@ database:
   host: "${MEMEPERP_DATABASE_HOST:-postgres}"
   port: 5432
   user: "${MEMEPERP_DATABASE_USER:-memeperp}"
-  password: "${MEMEPERP_DATABASE_PASSWORD}"  # REQUIRED - set via env
-  dbname: "${MEMEPERP_DATABASE_NAME:-memeperp}"
-  sslmode: "require"  # Enable SSL in production
+  password: "${MEMEPERP_DATABASE_PASSWORD}"
+  dbname: "${MEMEPERP_DATABASE_DBNAME:-memeperp}"
+  sslmode: "disable"  # Docker-internal PostgreSQL, no SSL needed
   max_idle_conns: 20
   max_open_conns: 100
   max_lifetime: 1h
 
 redis:
   addr: "${MEMEPERP_REDIS_ADDR:-redis:6379}"
-  password: "${MEMEPERP_REDIS_PASSWORD}"  # Set via env
+  password: "${MEMEPERP_REDIS_PASSWORD}"
   db: 0
   pool_size: 20
 
 blockchain:
-  # Base Mainnet
-  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL}"  # REQUIRED - use Alchemy/Infura
-  chain_id: 8453  # Base Mainnet
+  rpc_url: "${MEMEPERP_BLOCKCHAIN_RPC_URL}"
+  chain_id: "${MEMEPERP_BLOCKCHAIN_CHAIN_ID:-97}"
 
-  # Contract Addresses (Base Mainnet - TO BE DEPLOYED)
   router_address: "${MEMEPERP_ROUTER_ADDRESS}"
-  vault_address: "${MEMEPERP_VAULT_ADDRESS}"
+  vault_address: "${MEMEPERP_BLOCKCHAIN_VAULT_ADDRESS}"
   amm_address: "${MEMEPERP_AMM_ADDRESS}"
-  position_address: "${MEMEPERP_POSITION_ADDRESS}"
+  position_address: "${MEMEPERP_BLOCKCHAIN_POSITION_ADDRESS}"
   liquidation_address: "${MEMEPERP_LIQUIDATION_ADDRESS}"
   funding_rate_address: "${MEMEPERP_FUNDING_RATE_ADDRESS}"
   lending_pool_address: "${MEMEPERP_LENDING_POOL_ADDRESS}"
-  price_feed_address: "${MEMEPERP_PRICE_FEED_ADDRESS}"
+  price_feed_address: "${MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS}"
   risk_manager_address: "${MEMEPERP_RISK_MANAGER_ADDRESS}"
 
-  # Keeper private key - NEVER commit this value
-  # In production, use a secure key management service (AWS KMS, HashiCorp Vault)
+  settlement_address: "${MEMEPERP_SETTLEMENT_ADDRESS}"
+  settlement_v2_address: "${MEMEPERP_SETTLEMENT_V2_ADDRESS}"
+  insurance_fund_address: "${MEMEPERP_INSURANCE_FUND_ADDRESS}"
+  contract_registry_address: "${MEMEPERP_CONTRACT_REGISTRY_ADDRESS}"
+  perp_vault_address: "${MEMEPERP_PERP_VAULT_ADDRESS}"
+
   private_key: "${MEMEPERP_BLOCKCHAIN_PRIVATE_KEY}"
 
-  # Indexer settings
   start_block: 0
-  confirm_blocks: 6  # More confirmations for production
-  poll_interval: 5s
+  confirm_blocks: 3
+  poll_interval: 3s
+
+matching_engine:
+  url: "${MEMEPERP_MATCHING_ENGINE_URL:-http://matching-engine:8081}"
 
 jwt:
-  secret: "${MEMEPERP_JWT_SECRET}"  # REQUIRED - set via env
+  secret: "${MEMEPERP_JWT_SECRET}"
   expiration: 24h
 
 rate_limit:
-  public_limit: 600    # More conservative in production
-  private_limit: 300
-  order_limit: 100
+  public_limit: 1200
+  private_limit: 600
+  order_limit: 300
 
 security:
-  # IMPORTANT: Set your production domain here
   allowed_origins:
-    - "https://yourdomain.com"
-    - "https://www.yourdomain.com"
+    - "http://23.27.201.207"
+    - "http://23.27.201.207:80"
+    - "http://23.27.201.207:3000"
   trusted_proxies:
-    - "10.0.0.0/8"  # Internal network
-    - "172.16.0.0/12"  # Docker network
+    - "127.0.0.1"
+    - "172.16.0.0/12"
 
 log:
-  level: "info"    # Less verbose in production
-  format: "json"   # JSON for log aggregation
+  level: "info"
+  format: "json"
   output: "stdout"
