@@ -30,9 +30,11 @@ function formatPrice(weiStr: string): string {
   return `${formatTokenPrice(eth)} BNB`;
 }
 
-function formatVolume(weiStr: string): string {
-  const eth = Number(weiStr) / 1e18;
-  if (eth === 0) return "0 BNB";
+function formatVolume(valueStr: string): string {
+  // realETHReserve is already in ETH format (not wei) from the matching engine
+  const eth = Number(valueStr);
+  if (!eth || eth === 0) return "0 BNB";
+  if (eth < 0.01) return `${eth.toFixed(4)} BNB`;
   if (eth < 1) return `${eth.toFixed(2)} BNB`;
   if (eth < 1000) return `${eth.toFixed(1)} BNB`;
   return `${(eth / 1000).toFixed(1)}K BNB`;
