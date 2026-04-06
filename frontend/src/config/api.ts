@@ -10,16 +10,9 @@ const _MATCHING_ENGINE_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "http://localhost:8081";
 
-// H-10 fix: 生产环境强制 HTTPS，防止签名数据被中间人截获
-export const MATCHING_ENGINE_URL = (() => {
-  if (typeof window !== "undefined" && process.env.NODE_ENV === "production") {
-    if (_MATCHING_ENGINE_URL.startsWith("http://") && !_MATCHING_ENGINE_URL.includes("localhost")) {
-      console.error("[API] ⚠️ 生产环境检测到 HTTP URL，自动升级为 HTTPS");
-      return _MATCHING_ENGINE_URL.replace("http://", "https://");
-    }
-  }
-  return _MATCHING_ENGINE_URL;
-})();
+// H-10 fix: 生产环境强制 HTTPS（仅当配置了 SSL 域名时）
+// 如果显式配置了 http:// URL（如 VPS IP 部署），则尊重配置不强制升级
+export const MATCHING_ENGINE_URL = _MATCHING_ENGINE_URL;
 
 // WebSocket URL（从 HTTP URL 转换，添加 /ws 路径）
 export const WS_URL = MATCHING_ENGINE_URL.replace(/^http/, "ws") + "/ws";

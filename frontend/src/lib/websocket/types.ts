@@ -217,12 +217,8 @@ function getSecureWebSocketUrl(): string {
   // 优先使用独立 WS env，否则从 config/api.ts 的 MATCHING_ENGINE_URL 派生
   const explicitWsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL;
   if (explicitWsUrl) {
-    const isProduction = process.env.NODE_ENV === 'production';
-    const isLocalhost = explicitWsUrl.includes('localhost') || explicitWsUrl.includes('127.0.0.1');
-    if (isProduction && explicitWsUrl.startsWith('ws://') && !isLocalhost) {
-      console.error('[WebSocket Security] 生产环境不允许使用非加密 WebSocket (ws://)。');
-      return explicitWsUrl.replace('ws://', 'wss://');
-    }
+    // 尊重显式配置的 WS URL（VPS IP 部署时使用 ws://）
+    // 仅当未来配置了域名 + SSL 后才需要 wss://
     return explicitWsUrl;
   }
 
