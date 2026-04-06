@@ -6295,8 +6295,11 @@ async function startEventWatching(): Promise<void> {
   // 替代 WebSocket watchContractEvent — WebSocket 会静默断开导致充值事件丢失
   // 参考: dYdX v4 Ender 按区块处理 + GMX Keeper 直查链上
   // ============================================================
+  // Helper: stagger poller startups to avoid RPC burst at boot
+  const staggerDelay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
   if (SETTLEMENT_V2_ADDRESS) {
-    console.log("[Events] Starting SettlementV2 HTTP event pollers:", SETTLEMENT_V2_ADDRESS);
+    console.log("[Events] Starting SettlementV2 HTTP event pollers (staggered):", SETTLEMENT_V2_ADDRESS);
 
     // 所有 SettlementV2 事件用同一个轮询器（同一合约，一次 getLogs 拿所有事件）
     // Deposited: event Deposited(address indexed user, uint256 amount, uint256 totalDeposits)
@@ -6334,6 +6337,8 @@ async function startEventWatching(): Promise<void> {
       },
     });
 
+    await staggerDelay(3000); // Stagger to avoid RPC burst
+
     // DepositedBNB: event DepositedBNB(address indexed user, uint256 amount, uint256 totalDeposits)
     const v2DepositedBNBAbi = {
       type: "event" as const,
@@ -6369,6 +6374,8 @@ async function startEventWatching(): Promise<void> {
       },
     });
 
+    await staggerDelay(3000);
+
     // DepositedFor: event DepositedFor(address indexed user, address indexed relayer, uint256 amount)
     const v2DepositedForAbi = {
       type: "event" as const,
@@ -6403,6 +6410,8 @@ async function startEventWatching(): Promise<void> {
         }
       },
     });
+
+    await staggerDelay(3000);
 
     // Withdrawn: event Withdrawn(address indexed user, uint256 amount, uint256 nonce)
     const v2WithdrawnAbi = {
@@ -6487,6 +6496,8 @@ async function startEventWatching(): Promise<void> {
     console.log("[Events] SettlementV2 HTTP pollers active: Deposited, DepositedBNB, DepositedFor, Withdrawn (3s interval)");
   }
 
+  await staggerDelay(5000); // Longer delay before TokenFactory pollers
+
   // TokenFactory LiquidityMigrated: HTTP 轮询 (代币毕业到 Uniswap V2)
   console.log("[Events] Starting TokenFactory LiquidityMigrated HTTP poller:", TOKEN_FACTORY_ADDRESS);
   const liquidityMigratedAbi = {
@@ -6521,6 +6532,8 @@ async function startEventWatching(): Promise<void> {
       }
     },
   });
+
+  await staggerDelay(3000);
 
   // TokenFactory TokenCreated: HTTP 轮询 (新代币创建)
   console.log("[Events] Starting TokenFactory TokenCreated HTTP poller:", TOKEN_FACTORY_ADDRESS);
@@ -6693,11 +6706,13 @@ async function startEventWatching(): Promise<void> {
 
   // ========================================
   // 启动 HTTP 轮询式 Trade 事件监听 (WebSocket 的可靠备份)
-  // WebSocket watchContractEvent 可能会静默断开，轮询作为兜底
+  // 延迟 10 秒启动，确保其他 EventPoller 已稳定
   // ========================================
-  startTradeEventPoller().catch((e) => {
-    console.error("[TradePoller] Failed to start:", e);
-  });
+  setTimeout(() => {
+    startTradeEventPoller().catch((e) => {
+      console.error("[TradePoller] Failed to start:", e);
+    });
+  }, 10000);
 }
 
 /**
@@ -6731,10 +6746,10 @@ async function startTradeEventPoller(): Promise<void> {
   lastScannedBlock = currentBlock;
   console.log(`[TradePoller] Started at block ${currentBlock}, polling every ${TRADE_POLL_INTERVAL_MS / 1000}s`);
 
-  // 启动前先回填：扫描最近 200 个区块以捕获启动期间遗漏的事件
-  // BSC Testnet 公共 RPC 限制区块范围，200 足够覆盖 ~10 分钟
+  // 启动前先回填：扫描最近 20 个区块（~1 分钟）
+  // 减少回填范围以避免与其他 EventPoller 启动竞争 RPC 配额
   try {
-    const backfillFrom = currentBlock > 200n ? currentBlock - 200n : 0n;
+    const backfillFrom = currentBlock > 20n ? currentBlock - 20n : 0n;
     console.log(`[TradePoller] Backfilling from block ${backfillFrom} to ${currentBlock}...`);
     await pollTradeEvents(pollClient, TRADE_EVENT_ABI, backfillFrom, currentBlock);
   } catch (e: any) {
