@@ -14234,12 +14234,16 @@ async function handleWSMessage(ws: WebSocket, message: string): Promise<void> {
 
       // 订阅所有 topics
       for (const topic of msg.data.topics) {
-        // 提取 token 地址: "tickers:0x123" -> "0x123"
+        // 提取 token 地址: "tickers:0x123" -> "0x123", 或纯地址 "0x123" -> "0x123"
         const parts = topic.split(':');
         if (parts.length >= 2) {
           const token = parts[1].toLowerCase() as Address;
           tokens.add(token);
           console.log(`[WS] Client subscribed to topic: ${topic}`);
+        } else if (topic.startsWith("0x")) {
+          // 前端直接发纯 token 地址 (useOnChainTrades 的格式)
+          tokens.add(topic.toLowerCase() as Address);
+          console.log(`[WS] Client subscribed to token address: ${topic}`);
         }
       }
 
@@ -14303,6 +14307,9 @@ async function handleWSMessage(ws: WebSocket, message: string): Promise<void> {
             const token = parts[1].toLowerCase() as Address;
             tokens.delete(token);
             console.log(`[WS] Client unsubscribed from topic: ${topic}`);
+          } else if (topic.startsWith("0x")) {
+            tokens.delete(topic.toLowerCase() as Address);
+            console.log(`[WS] Client unsubscribed from token address: ${topic}`);
           }
         }
       }
