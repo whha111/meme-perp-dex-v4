@@ -72,6 +72,24 @@ function dedupSetKey(name: string, prefix?: string): string {
 }
 
 // ============================================================
+// Shared Block Number Cache (reduces 7 getBlockNumber calls to 1)
+// ============================================================
+
+let cachedBlockNumber = 0n;
+let cachedBlockTimestamp = 0;
+const BLOCK_CACHE_TTL_MS = 5000; // 5 second cache
+
+async function getCachedBlockNumber(client: any): Promise<bigint> {
+  const now = Date.now();
+  if (now - cachedBlockTimestamp < BLOCK_CACHE_TTL_MS && cachedBlockNumber > 0n) {
+    return cachedBlockNumber;
+  }
+  cachedBlockNumber = await client.getBlockNumber();
+  cachedBlockTimestamp = now;
+  return cachedBlockNumber;
+}
+
+// ============================================================
 // Poller Registry (for health checks)
 // ============================================================
 
@@ -141,7 +159,7 @@ export async function createEventPoller(config: EventPollerConfig): Promise<Poll
   // 2. 如果 Redis 没有记录，从当前区块 - backfillBlocks 开始
   if (state.lastScannedBlock === 0n) {
     try {
-      const currentBlock = await client.getBlockNumber();
+      const currentBlock = await getCachedBlockNumber(client);
       state.lastScannedBlock = currentBlock > backfillBlocks ? currentBlock - backfillBlocks : 0n;
       console.log(`[EventPoller:${name}] No saved block, starting from ${state.lastScannedBlock} (current: ${currentBlock}, backfill: ${backfillBlocks})`);
     } catch (e: any) {
@@ -152,7 +170,7 @@ export async function createEventPoller(config: EventPollerConfig): Promise<Poll
 
   // 3. 回填：扫描从 lastScannedBlock 到当前区块的所有事件
   try {
-    const currentBlock = await client.getBlockNumber();
+    const currentBlock = await getCachedBlockNumber(client);
     if (currentBlock > state.lastScannedBlock) {
       console.log(`[EventPoller:${name}] Backfilling from block ${state.lastScannedBlock} to ${currentBlock}...`);
       await pollEvents(client, config, state, state.lastScannedBlock + 1n, currentBlock);
@@ -171,7 +189,7 @@ export async function createEventPoller(config: EventPollerConfig): Promise<Poll
     state.isRunning = true;
 
     try {
-      const latestBlock = await client.getBlockNumber();
+      const latestBlock = await getCachedBlockNumber(client);
       if (latestBlock <= state.lastScannedBlock) {
         state.isRunning = false;
         return;
