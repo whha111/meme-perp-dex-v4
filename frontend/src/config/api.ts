@@ -5,9 +5,10 @@
  */
 
 // 撮合引擎 URL（主要 API）
+// 当通过 nginx 反向代理时，设置 NEXT_PUBLIC_MATCHING_ENGINE_URL="" 即使用相对路径
 const _MATCHING_ENGINE_URL =
-  process.env.NEXT_PUBLIC_MATCHING_ENGINE_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_MATCHING_ENGINE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
   "http://localhost:8081";
 
 // H-10 fix: 生产环境强制 HTTPS（仅当配置了 SSL 域名时）
@@ -15,7 +16,12 @@ const _MATCHING_ENGINE_URL =
 export const MATCHING_ENGINE_URL = _MATCHING_ENGINE_URL;
 
 // WebSocket URL（从 HTTP URL 转换，添加 /ws 路径）
-export const WS_URL = MATCHING_ENGINE_URL.replace(/^http/, "ws") + "/ws";
+// 当使用相对路径（空字符串）时，从当前页面 location 推导 ws:// URL
+export const WS_URL = _MATCHING_ENGINE_URL
+  ? MATCHING_ENGINE_URL.replace(/^http/, "ws") + "/ws"
+  : typeof window !== "undefined"
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`
+    : "ws://localhost:8081/ws";
 
 // API 基础 URL（向后兼容）
 export const API_BASE_URL = MATCHING_ENGINE_URL;

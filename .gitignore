@@ -24,9 +24,11 @@ backend/dist/
 .env
 .env.*
 !.env.example
+!.env.development
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.development
 contracts/.env
 
 # IDE
@@ -57,6 +59,13 @@ coverage/
 trading-wallets.json
 *.secret
 credentials/
+
+# Claude Code worktrees
+.claude/
+
+# Application documents (not code)
+YZi_Labs_Application_Answers.md
+*.docx
 
 # Misc
 *.pem

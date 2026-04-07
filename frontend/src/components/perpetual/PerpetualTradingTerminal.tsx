@@ -1065,20 +1065,21 @@ export function PerpetualTradingTerminal({
                   ) : (
                     <>
                     {/* ═══════════════════════════════════════════════════════════════
-                        Desktop Position Table (OKX/Bybit-grade professional layout)
+                        Desktop Position Table (Binance Futures-grade layout)
                         ═══════════════════════════════════════════════════════════════ */}
                     <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-[11px] min-w-[960px]">
+                    <table className="w-full text-xs min-w-[1100px]">
                       <thead>
-                        <tr className="text-okx-text-tertiary text-[10px] uppercase tracking-wider">
-                          <th className="text-left py-1.5 px-3 font-normal">{t("pair")}</th>
-                          <th className="text-right py-1.5 px-2 font-normal">{t("size")}</th>
-                          <th className="text-right py-1.5 px-2 font-normal">{t("entryAvg")}</th>
-                          <th className="text-right py-1.5 px-2 font-normal">{t("markPrice")}</th>
-                          <th className="text-right py-1.5 px-2 font-normal">{t("liqPrice")}</th>
-                          <th className="text-right py-1.5 px-2 font-normal">{t("margin")}</th>
-                          <th className="text-right py-1.5 px-2 font-normal">{t("unrealizedPnl")}</th>
-                          <th className="text-right py-1.5 px-3 font-normal">{t("action")}</th>
+                        <tr className="text-okx-text-tertiary text-[11px]">
+                          <th className="text-left py-2 px-4 font-normal">{t("pair") || "Symbol"}</th>
+                          <th className="text-left py-2 px-3 font-normal">{t("size") || "Size"}</th>
+                          <th className="text-left py-2 px-3 font-normal">{t("entryAvg") || "Entry Price"}</th>
+                          <th className="text-left py-2 px-3 font-normal">{t("markPrice") || "Mark Price"}</th>
+                          <th className="text-left py-2 px-3 font-normal">{t("liqPrice") || "Liq. Price"}</th>
+                          <th className="text-left py-2 px-3 font-normal">{t("margin") || "Margin"}</th>
+                          <th className="text-left py-2 px-3 font-normal">{t("marginRatio") || "Margin Ratio"}</th>
+                          <th className="text-left py-2 px-3 font-normal">{t("unrealizedPnl") || "PnL (ROE%)"}</th>
+                          <th className="text-left py-2 px-4 font-normal">{t("action") || "Close Position"}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1104,97 +1105,102 @@ export function PerpetualTradingTerminal({
                           const riskBarWidth = Math.min(marginRatio, 100);
 
                           return (
-                            <tr key={pos.pairId} className="border-b border-okx-border-primary/50 hover:bg-white/[0.02] transition-colors">
-                              {/* ── 交易对 + 方向 + 杠杆 (合并列) ── */}
-                              <td className="py-2.5 px-3">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                    pos.isLong
-                                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
-                                      : "bg-rose-500/15 text-rose-400 border border-rose-500/20"
-                                  }`}>
-                                    {pos.isLong ? "▲" : "▼"} {pos.isLong ? t("long") : t("short")}
-                                  </span>
-                                  <span className="text-okx-text-primary font-medium text-xs">{instId}</span>
-                                  <span className="text-[10px] text-amber-400/80 font-medium">{leverage}x</span>
+                            <tr key={pos.pairId} className="border-b border-[#1E2329] hover:bg-white/[0.02] transition-colors h-16">
+                              {/* ── Symbol: 币对名 + 方向/模式/杠杆 标签组 ── */}
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col gap-1.5">
+                                  <span className="text-[#EAECEF] font-semibold text-[13px]">{instId} Perpetual</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-bold ${
+                                      pos.isLong
+                                        ? "bg-[#0ECB81]/[0.13] text-[#0ECB81]"
+                                        : "bg-[#F6465D]/[0.13] text-[#F6465D]"
+                                    }`}>
+                                      {pos.isLong ? t("long") || "Long" : t("short") || "Short"}
+                                    </span>
+                                    <span className="text-[10px] text-[#888888] px-1.5 py-0.5 rounded-sm border border-[#474D57]">
+                                      Isolated
+                                    </span>
+                                    <span className="text-[10px] text-[#F0B90B] px-1.5 py-0.5 rounded-sm border border-[#474D57]">
+                                      {leverage}x
+                                    </span>
+                                  </div>
                                 </div>
                               </td>
 
-                              {/* ── 数量 (BNB 名义值 + 代币数量) ── */}
-                              <td className="py-2.5 px-2 text-right">
-                                <div className="text-okx-text-primary font-medium">
-                                  {sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)}
+                              {/* ── Size: BNB 名义值 + USD 等价 ── */}
+                              <td className="py-3 px-3">
+                                <div className="text-[#EAECEF] text-[13px]">
+                                  {sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)} BNB
                                 </div>
-                                <div className="text-[10px] text-okx-text-tertiary">
-                                  {tokenAmount >= 1e9 ? `${(tokenAmount/1e9).toFixed(1)}B` :
-                                   tokenAmount >= 1e6 ? `${(tokenAmount/1e6).toFixed(1)}M` :
-                                   tokenAmount >= 1e3 ? `${(tokenAmount/1e3).toFixed(1)}K` :
-                                   tokenAmount.toFixed(0)} tokens
+                                <div className="text-[11px] text-[#555555] mt-0.5">
+                                  ≈ ${(sizeETH * 250).toFixed(2)}
                                 </div>
                               </td>
 
-                              {/* ── 开仓均价 ── */}
-                              <td className="py-2.5 px-2 text-right font-mono text-okx-text-primary text-[11px]">
+                              {/* ── Entry Price ── */}
+                              <td className="py-3 px-3 font-mono text-[#EAECEF] text-[13px]">
                                 {formatSmallPrice(entryPrice)}
                               </td>
 
-                              {/* ── 标记价格 ── */}
-                              <td className="py-2.5 px-2 text-right font-mono text-okx-text-secondary text-[11px]">
+                              {/* ── Mark Price ── */}
+                              <td className="py-3 px-3 font-mono text-[#888888] text-[13px]">
                                 {formatSmallPrice(markPrice)}
                               </td>
 
-                              {/* ── 强平价格 ── */}
-                              <td className="py-2.5 px-2 text-right font-mono text-[11px]">
-                                <span className={pos.isLong ? "text-rose-400/80" : "text-emerald-400/80"}>
-                                  {formatSmallPrice(liqPrice)}
-                                </span>
+                              {/* ── Liq. Price (警告黄色) ── */}
+                              <td className="py-3 px-3 font-mono text-[#F0B90B] text-[13px]">
+                                {formatSmallPrice(liqPrice)}
                               </td>
 
-                              {/* ── 保证金 + 铅笔图标 (行业标准入口) ── */}
-                              <td className="py-2.5 px-2 text-right">
-                                <div className="flex items-center justify-end gap-1">
-                                  <div>
-                                    <div className="text-okx-text-primary text-[11px]">
-                                      {marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(5)} BNB
-                                    </div>
-                                    <div className="flex items-center gap-1.5 justify-end mt-0.5">
-                                      <div className="w-12 h-1 bg-okx-bg-tertiary rounded-full overflow-hidden">
-                                        <div className={`h-full rounded-full transition-all ${riskBarColor}`} style={{ width: `${riskBarWidth}%` }} />
-                                      </div>
-                                      <span className={`text-[9px] font-medium ${riskLevel >= 2 ? "text-orange-400" : "text-okx-text-tertiary"}`}>
-                                        {marginRatio.toFixed(1)}%
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {/* ✏️ 铅笔图标 — 点击打开保证金调整弹窗 (OKX/Bybit/Binance 统一交互) */}
+                              {/* ── Margin + 编辑按钮 ── */}
+                              <td className="py-3 px-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[#EAECEF] text-[13px]">
+                                    {marginETH >= 1 ? marginETH.toFixed(4) : marginETH.toFixed(5)} BNB
+                                  </span>
                                   <button
                                     onClick={() => setMarginModal({
                                       pairId: pos.pairId, action: "add", collateral: marginETH,
                                       size: sizeETH, entryPrice, isLong: pos.isLong, leverage, mmr,
                                     })}
-                                    className="p-1 rounded hover:bg-white/[0.06] transition-colors group"
+                                    className="w-[22px] h-[22px] flex items-center justify-center rounded border border-[#363C45] hover:border-[#474D57] hover:bg-white/[0.04] transition-colors group"
                                     title={t("adjustMargin") || "Adjust Margin"}
                                   >
-                                    <svg className="w-3 h-3 text-okx-text-tertiary group-hover:text-okx-brand-primary transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <svg className="w-3 h-3 text-[#555555] group-hover:text-[#EAECEF] transition-colors" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                       <path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z" />
                                     </svg>
                                   </button>
                                 </div>
                               </td>
 
-                              {/* ── 未实现盈亏 + ROE% (重点突出) ── */}
-                              <td className="py-2.5 px-2 text-right">
-                                <div className={`text-xs font-semibold ${unrealizedPnlETH >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                                  {unrealizedPnlETH >= 0 ? "+" : ""}{Math.abs(unrealizedPnlETH) >= 1 ? Math.abs(unrealizedPnlETH).toFixed(4) : Math.abs(unrealizedPnlETH).toFixed(6)} BNB
+                              {/* ── Margin Ratio + 进度条 ── */}
+                              <td className="py-3 px-3">
+                                <div className="flex flex-col gap-1.5">
+                                  <span className={`text-[13px] font-semibold ${
+                                    riskLevel >= 3 ? "text-[#F6465D]" : riskLevel >= 2 ? "text-orange-400" : "text-[#0ECB81]"
+                                  }`}>
+                                    {marginRatio.toFixed(1)}%
+                                  </span>
+                                  <div className="w-[70px] h-[5px] bg-[#1E2329] rounded-sm overflow-hidden">
+                                    <div className={`h-full rounded-sm transition-all ${riskBarColor}`} style={{ width: `${riskBarWidth}%` }} />
+                                  </div>
                                 </div>
-                                <div className={`text-[10px] font-medium ${roe >= 0 ? "text-emerald-400/70" : "text-rose-400/70"}`}>
+                              </td>
+
+                              {/* ── PnL (ROE%) ── */}
+                              <td className="py-3 px-3">
+                                <div className={`text-[14px] font-bold ${unrealizedPnlETH >= 0 ? "text-[#0ECB81]" : "text-[#F6465D]"}`}>
+                                  {unrealizedPnlETH >= 0 ? "+" : ""}{Math.abs(unrealizedPnlETH) >= 1 ? unrealizedPnlETH.toFixed(4) : unrealizedPnlETH.toFixed(6)} BNB
+                                </div>
+                                <div className={`text-[11px] mt-0.5 ${roe >= 0 ? "text-[#0ECB81]/70" : "text-[#F6465D]/70"}`}>
                                   {roe >= 0 ? "+" : ""}{roe.toFixed(2)}%
                                 </div>
                               </td>
 
-                              {/* ── 操作按钮 ── */}
-                              <td className="py-2.5 px-3 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
+                              {/* ── Close Position: Market + Limit 按钮 ── */}
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2.5">
                                   <button
                                     onClick={async () => {
                                       showToast(t("closingPosition") || "Closing position...", "info");
@@ -1208,18 +1214,17 @@ export function PerpetualTradingTerminal({
                                         showToast(result.error || "Failed to close", "error");
                                       }
                                     }}
-                                    className="px-2.5 py-1 text-[10px] font-medium text-rose-400 border border-rose-500/25 hover:bg-rose-500/10 rounded transition-colors"
+                                    className="h-8 px-4 text-[12px] font-semibold text-[#EAECEF] bg-[#2B3139] border border-[#474D57] hover:bg-[#363C45] rounded transition-colors"
                                   >
-                                    {t("closePosition")}
+                                    Market
                                   </button>
                                   <button
                                     onClick={() => setTpslModal({
                                       pairId: pos.pairId, isLong: pos.isLong, entryPrice, liqPrice,
                                     })}
-                                    className="px-2 py-1 text-[10px] text-okx-text-tertiary border border-white/[0.06] hover:text-amber-400 hover:border-amber-500/30 rounded transition-colors"
-                                    title={t("setTpSl")}
+                                    className="h-8 px-4 text-[12px] text-[#888888] border border-[#363C45] hover:border-[#474D57] hover:text-[#EAECEF] rounded transition-colors"
                                   >
-                                    TP/SL
+                                    Limit
                                   </button>
                                 </div>
                               </td>
