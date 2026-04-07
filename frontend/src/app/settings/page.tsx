@@ -605,10 +605,10 @@ export default function SettingsPage() {
                   <p className="text-sm text-okx-text-tertiary">{t("apiDocsDesc")}</p>
                   <div className="flex gap-3">
                     <div className="flex-1 meme-input px-4 py-3 text-xs font-mono text-okx-text-tertiary">
-                      REST API: https://api.memeperp.com/v1
+                      REST API: https://api.dexi.fun/v1
                     </div>
                     <div className="flex-1 meme-input px-4 py-3 text-xs font-mono text-okx-text-tertiary">
-                      WebSocket: wss://ws.memeperp.com/v1
+                      WebSocket: wss://ws.dexi.fun/v1
                     </div>
                   </div>
                 </div>

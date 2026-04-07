@@ -193,7 +193,7 @@ export const useTradeStore = create<TradeState>()(
       },
     }),
     {
-      name: 'memeperp-trade-store', // localStorage 中的 key
+      name: 'dexi-trade-store', // localStorage 中的 key
       storage: createJSONStorage(() => localStorage),
       // 只持久化必要的字段，排除临时状态
       partialize: (state) => ({

@@ -281,7 +281,7 @@ function LoadingSkeleton() {
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2 text-okx-text-primary font-bold text-xl tracking-tight">
               <span className="text-meme-lime">✦</span>
-              MEMEPERP
+              DEXI
             </div>
           </div>
           <div

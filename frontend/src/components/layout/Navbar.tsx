@@ -93,7 +93,7 @@ export function Navbar() {
 
           <Link href="/" className="flex items-center gap-2 text-okx-text-primary font-bold text-xl">
             <span className="text-meme-lime text-lg">✦</span>
-            <span className="tracking-tight">MEMEPERP</span>
+            <span className="tracking-tight">DEXI</span>
           </Link>
           <div className="flex items-center gap-6 text-sm font-mono">
             {NAV_ITEMS.map(({ href, key }) => {

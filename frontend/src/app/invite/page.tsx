@@ -42,7 +42,7 @@ export default function InvitePage() {
 
   // C-2: 邀请链接指向 /invite/[code] (Next.js 路由真实存在)
   const inviteLink = info?.code
-    ? `${typeof window !== "undefined" ? window.location.origin : "https://memeperp.io"}/invite/${info.code}`
+    ? `${typeof window !== "undefined" ? window.location.origin : "https://dexi.fun"}/invite/${info.code}`
     : "";
 
   const fetchReferrerInfo = useCallback(async (addr: string) => {
@@ -193,7 +193,7 @@ export default function InvitePage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center px-5 py-3.5 bg-okx-bg-card border border-okx-border-secondary rounded-lg w-[520px]">
                 <span className="text-sm font-mono text-meme-lime truncate">
-                  {inviteLink || "https://memeperp.io/invite/..."}
+                  {inviteLink || "https://dexi.fun/invite/..."}
                 </span>
               </div>
               <button

@@ -60,7 +60,7 @@ export function getWalletSigningMessage(chainId: number): string {
 }
 
 // LocalStorage 键名
-const TRADING_WALLET_STORAGE_KEY = "memeperp_trading_wallet";
+const TRADING_WALLET_STORAGE_KEY = "dexi_trading_wallet";
 
 interface StoredWalletData {
   mainWallet: Address;

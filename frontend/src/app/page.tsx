@@ -152,7 +152,7 @@ export default function Home() {
         <div className="max-w-[1200px] mx-auto flex items-center justify-between text-sm text-okx-text-tertiary">
           <div className="flex items-center gap-2">
             <span className="text-meme-lime font-bold">*</span>
-            <span>MEMEPERP</span>
+            <span>DEXI</span>
           </div>
           <div className="flex items-center gap-6">
             <Link href="/settings" className="hover:text-okx-text-primary transition-colors">{t("footer.settings")}</Link>
