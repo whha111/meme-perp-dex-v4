@@ -5,7 +5,7 @@ import { createConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
 
 // =====================================================
-// 🔐 MemePerpDEX Configuration (BSC)
+// 🔐 DEXI Configuration (BSC)
 // =====================================================
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -40,7 +40,7 @@ try {
   if (isValidProjectId) {
     // 有效的 WalletConnect Project ID - 使用完整配置
     config = getDefaultConfig({
-      appName: "MemePerpDEX",
+      appName: "DEXI",
       projectId: projectId,
       chains: [bsc, bscTestnet],
       transports: {

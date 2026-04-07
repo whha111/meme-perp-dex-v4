@@ -720,7 +720,7 @@
     "sellTrade": "卖出",
     "claimedToWallet": "返佣已领取到钱包",
     "viewOnExplorer": "查看交易",
-    "welcomeTitle": "欢迎加入 MemePerpDEX",
+    "welcomeTitle": "欢迎加入 DEXI",
     "welcomeSubtitle": "您已收到好友的邀请",
     "yourBenefits": "您将获得",
     "benefit1": "首次交易享受优惠费率",
@@ -892,7 +892,7 @@
     },
     "features": {
       "title": "为什么选择 Namespace 钱包？",
-      "subtitle": "为 Web3 支付的未来而生。安全、直观，由 MemePerpDEX 驱动。",
+      "subtitle": "为 Web3 支付的未来而生。安全、直观，由 DEXI 驱动。",
       "domainAddress": {
         "title": "域名即地址",
         "desc": "向任何已验证的域名发送加密货币。不再需要复制粘贴复杂的地址，只需输入 spotify.com 即可发送。"
@@ -954,7 +954,7 @@
       "registerDomain": "注册您的域名"
     },
     "footer": {
-      "copyright": "2025 MemePerpDEX. 保留所有权利。"
+      "copyright": "2025 DEXI. 保留所有权利。"
     }
   },
   "orderBook": {

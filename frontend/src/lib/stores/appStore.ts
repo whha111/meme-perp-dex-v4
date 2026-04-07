@@ -178,7 +178,7 @@ export const useAppStore = create<AppState>()(
         set({ mobileMenuOpen: false }),
     }),
     {
-      name: 'meme-perp-dex-storage', // localStorage 键名
+      name: 'dexi-storage', // localStorage 键名
       partialize: (state) => ({
         preferences: state.preferences,
         recentInstruments: state.recentInstruments,

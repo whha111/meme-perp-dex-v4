@@ -71,8 +71,9 @@ rate_limit:
 
 security:
   allowed_origins:
+    - "http://dexi.fun"
+    - "https://dexi.fun"
     - "http://23.27.201.207"
-    - "http://23.27.201.207:80"
     - "http://23.27.201.207:3000"
   trusted_proxies:
     - "127.0.0.1"

@@ -19,7 +19,7 @@ const ipfsI18n: Record<string, { invalidFormat: string; tooLarge: string; upload
 
 function getLocale(): string {
   if (typeof window === 'undefined') return 'zh';
-  try { return localStorage.getItem('meme-perp-locale') || 'zh'; } catch { return 'zh'; }
+  try { return localStorage.getItem('dexi-locale') || 'zh'; } catch { return 'zh'; }
 }
 
 export interface UploadResult {

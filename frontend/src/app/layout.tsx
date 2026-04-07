@@ -7,8 +7,8 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "MemePerpDEX",
-  description: "Meme coin spot and perpetual trading platform on Base Chain",
+  title: "DEXI",
+  description: "Meme coin perpetual trading platform — dexi.fun",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

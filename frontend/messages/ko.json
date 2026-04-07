@@ -702,7 +702,7 @@
     "sellTrade": "판매",
     "claimedToWallet": "보상이 지갑으로 청구됨",
     "viewOnExplorer": "트랜잭션 보기",
-    "welcomeTitle": "MemePerpDEX에 오신 것을 환영합니다",
+    "welcomeTitle": "DEXI에 오신 것을 환영합니다",
     "welcomeSubtitle": "친구로부터 초대받았습니다",
     "yourBenefits": "혜택",
     "benefit1": "첫 거래 할인 수수료",
@@ -830,7 +830,7 @@
     },
     "features": {
       "title": "왜 Namespace 지갑인가요?",
-      "subtitle": "Web3 결제의 미래를 위해 구축. 안전하고 직관적이며 MemePerpDEX로 구동됩니다.",
+      "subtitle": "Web3 결제의 미래를 위해 구축. 안전하고 직관적이며 DEXI로 구동됩니다.",
       "domainAddress": {
         "title": "도메인이 곧 주소",
         "desc": "인증된 모든 도메인으로 암호화폐를 전송하세요. 복잡한 주소를 복사 붙여넣기할 필요 없이 spotify.com만 입력하면 됩니다."
@@ -892,7 +892,7 @@
       "registerDomain": "도메인 등록"
     },
     "footer": {
-      "copyright": "2025 MemePerpDEX. All rights reserved."
+      "copyright": "2025 DEXI. All rights reserved."
     }
   },
   "walletManagement": {

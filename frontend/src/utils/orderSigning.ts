@@ -39,7 +39,7 @@ export interface SignedOrder extends OrderParams {
 // ============================================================
 
 const getEIP712Domain = (settlementAddress: Address, chainId: number) => ({
-  name: "MemePerp",
+  name: "MemePerp",  // Must match Settlement.sol EIP-712 domain
   version: "1",
   chainId,
   verifyingContract: settlementAddress,

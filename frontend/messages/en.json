@@ -720,7 +720,7 @@
     "sellTrade": "Sell",
     "claimedToWallet": "Rewards claimed to wallet",
     "viewOnExplorer": "View Transaction",
-    "welcomeTitle": "Welcome to MemePerpDEX",
+    "welcomeTitle": "Welcome to DEXI",
     "welcomeSubtitle": "You've been invited by a friend",
     "yourBenefits": "Your Benefits",
     "benefit1": "Discounted trading fees on first trade",
@@ -892,7 +892,7 @@
     },
     "features": {
       "title": "Why Namespace Wallet?",
-      "subtitle": "Built for the future of Web3 payments. Secure, intuitive, and powered by MemePerpDEX.",
+      "subtitle": "Built for the future of Web3 payments. Secure, intuitive, and powered by DEXI.",
       "domainAddress": {
         "title": "Domain as Address",
         "desc": "Send crypto to any verified domain. No more copying and pasting complex addresses. Just type spotify.com and send."
@@ -954,7 +954,7 @@
       "registerDomain": "Register Your Domain"
     },
     "footer": {
-      "copyright": "2025 MemePerpDEX. All rights reserved."
+      "copyright": "2025 DEXI. All rights reserved."
     }
   },
   "orderBook": {

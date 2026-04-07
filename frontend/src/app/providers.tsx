@@ -118,7 +118,7 @@ function ErrorFallbackUI({ error, onRetry }: { error?: Error; onRetry: () => voi
   const getLocale = () => {
     if (typeof window === 'undefined') return 'zh';
     try {
-      return localStorage.getItem('meme-perp-locale') || 'zh';
+      return localStorage.getItem('dexi-locale') || 'zh';
     } catch {
       return 'zh';
     }
@@ -264,7 +264,7 @@ function LoadingSkeleton() {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('meme-perp-locale');
+      const stored = localStorage.getItem('dexi-locale');
       if (stored && ['zh', 'en', 'ja', 'ko'].includes(stored)) {
         setLocale(stored);
       }

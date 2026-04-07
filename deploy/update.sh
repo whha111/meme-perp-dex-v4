@@ -8,7 +8,7 @@ DEPLOY_DIR="/opt/meme-perp-dex"
 cd "$DEPLOY_DIR"
 
 echo "============================================"
-echo "  更新 Meme Perp DEX"
+echo "  更新 DEXI"
 echo "============================================"
 
 # 1. 拉取最新代码

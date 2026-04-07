@@ -20,7 +20,7 @@ const getStoredLocale = (): Locale => {
   if (typeof window === 'undefined') return defaultLocale;
 
   try {
-    const stored = localStorage.getItem('meme-perp-locale');
+    const stored = localStorage.getItem('dexi-locale');
     if (stored && ['zh', 'en', 'ja', 'ko'].includes(stored)) {
       return stored as Locale;
     }
@@ -36,7 +36,7 @@ export const setStoredLocale = (locale: Locale) => {
   if (typeof window === 'undefined') return;
 
   try {
-    localStorage.setItem('meme-perp-locale', locale);
+    localStorage.setItem('dexi-locale', locale);
     // 触发自定义事件通知语言变化
     window.dispatchEvent(new CustomEvent('locale-change', { detail: locale }));
   } catch {

@@ -1,7 +1,7 @@
 {
-  "name": "meme-perp-matching-engine",
+  "name": "dexi-matching-engine",
   "version": "1.0.0",
-  "description": "Off-chain matching engine for MemePerp DEX",
+  "description": "Off-chain matching engine for DEXI",
   "type": "module",
   "scripts": {
     "start": "bun run matching/server.ts",

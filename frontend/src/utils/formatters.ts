@@ -13,7 +13,7 @@ const timeAgoI18n: Record<string, { justNow: string; s: string; m: string; h: st
 function getLocale(): string {
   if (typeof window === 'undefined') return 'zh';
   try {
-    return localStorage.getItem('meme-perp-locale') || 'zh';
+    return localStorage.getItem('dexi-locale') || 'zh';
   } catch {
     return 'zh';
   }

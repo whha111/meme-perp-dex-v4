@@ -1,4 +1,4 @@
-# MemePerpDEX
+# DEXI
 
 > AI-Built Perpetual DEX for Meme Tokens on BNB Chain
 
@@ -11,9 +11,9 @@
 
 ---
 
-## What is MemePerpDEX?
+## What is DEXI?
 
-MemePerpDEX is the first perpetual contract DEX purpose-built for meme tokens. While platforms like dYdX, GMX, and Hyperliquid focus on BTC/ETH, thousands of meme tokens with high volatility have zero derivatives infrastructure. We fill that gap.
+DEXI is the first perpetual contract DEX purpose-built for meme tokens. While platforms like dYdX, GMX, and Hyperliquid focus on BTC/ETH, thousands of meme tokens with high volatility have zero derivatives infrastructure. We fill that gap.
 
 **Built entirely by a solo non-developer founder using AI** — 15 smart contracts, a 12,000+ line matching engine, Go backend, and Next.js frontend — all created with AI-assisted development and validated through 4 independent security audits with all 194 issues resolved.
 

@@ -21,7 +21,7 @@ const SIGNING_MESSAGE_VERSION = "v1";
 
 // 用于派生交易钱包的签名消息
 const getSigningMessage = (chainId: number): string => {
-  return `MemePerp Trading Wallet ${SIGNING_MESSAGE_VERSION}\n\nChain ID: ${chainId}\n\nThis signature will be used to generate your trading wallet. You can always recover this wallet by signing the same message with your main wallet.\n\nThis request will not trigger a blockchain transaction or cost any gas fees.`;
+  return `DEXI Trading Wallet ${SIGNING_MESSAGE_VERSION}\n\nChain ID: ${chainId}\n\nThis signature will be used to generate your trading wallet. You can always recover this wallet by signing the same message with your main wallet.\n\nThis request will not trigger a blockchain transaction or cost any gas fees.`;
 };
 
 /**

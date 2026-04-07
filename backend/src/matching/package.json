@@ -1,7 +1,7 @@
 {
   "name": "memeperp-matching-engine",
   "version": "2.0.0",
-  "description": "MemePerp DEX Matching Engine - V2 Modular Architecture",
+  "description": "DEXI Matching Engine - V2 Modular Architecture",
   "main": "server.ts",
   "type": "module",
   "scripts": {

@@ -1,5 +1,5 @@
 {
-  "name": "meme-perp-e2e-test",
+  "name": "dexi-e2e-test",
   "version": "1.0.0",
   "description": "End-to-end production rehearsal using real GMX trading data",
   "scripts": {

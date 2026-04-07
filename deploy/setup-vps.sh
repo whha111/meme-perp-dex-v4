@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Meme Perp DEX — Contabo VPS 一键部署脚本
+# DEXI — Contabo VPS 一键部署脚本
 # 使用方法:
 #   1. SSH 到 VPS: ssh root@your-vps-ip
 #   2. 运行: curl -sSL https://raw.githubusercontent.com/whha111/meme-perp-dex/main/deploy/setup-vps.sh | bash
@@ -10,7 +10,7 @@
 set -e
 
 echo "============================================"
-echo "  Meme Perp DEX — VPS 部署"
+echo "  DEXI — VPS 部署"
 echo "============================================"
 
 # 1. 系统更新 + 安装依赖

@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: memeperp-postgres
+    container_name: dexi-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${MEMEPERP_DATABASE_USER:-postgres}
@@ -22,7 +22,7 @@ services:
   # Redis Cache — AUDIT-FIX DP-C03: require password authentication
   redis:
     image: redis:7-alpine
-    container_name: memeperp-redis
+    container_name: dexi-redis
     restart: unless-stopped
     command: redis-server --requirepass ${MEMEPERP_REDIS_PASSWORD:?MEMEPERP_REDIS_PASSWORD is required} --appendonly yes
     ports:
@@ -40,7 +40,7 @@ services:
     build:
       context: ./backend/src
       dockerfile: matching/Dockerfile
-    container_name: memeperp-matching-engine
+    container_name: dexi-matching-engine
     restart: unless-stopped
     ports:
       - "8081:8081"
@@ -64,7 +64,7 @@ services:
       - LIQUIDATION_ADDRESS=${MEMEPERP_LIQUIDATION_ADDRESS:?MEMEPERP_LIQUIDATION_ADDRESS is required}
       - LENDING_POOL_ADDRESS=${MEMEPERP_LENDING_POOL_ADDRESS:?MEMEPERP_LENDING_POOL_ADDRESS is required}
       - FEE_RECEIVER_ADDRESS=${FEE_RECEIVER_ADDRESS:?FEE_RECEIVER_ADDRESS is required}
-      - INTERNAL_API_KEY=${MEMEPERP_INTERNAL_API_KEY:-memeperp-internal-2026}
+      - INTERNAL_API_KEY=${MEMEPERP_INTERNAL_API_KEY:-dexi-internal-2026}
       - BATCH_INTERVAL_MS=${MEMEPERP_BATCH_INTERVAL_MS:-30000}
       - SKIP_SIGNATURE_VERIFY=${SKIP_SIGNATURE_VERIFY:-false}
       - ALLOW_FAKE_DEPOSIT=${ALLOW_FAKE_DEPOSIT:-false}
@@ -90,7 +90,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: memeperp-backend
+    container_name: dexi-backend
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -147,7 +147,7 @@ services:
         - NEXT_PUBLIC_RISK_MANAGER_ADDRESS=${MEMEPERP_RISK_MANAGER_ADDRESS:-}
         - NEXT_PUBLIC_CONTRACT_REGISTRY_ADDRESS=${MEMEPERP_CONTRACT_REGISTRY_ADDRESS:-}
         - NEXT_PUBLIC_ROUTER_ADDRESS=${MEMEPERP_ROUTER_ADDRESS:-}
-    container_name: memeperp-frontend
+    container_name: dexi-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -169,7 +169,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.keeper
-    container_name: memeperp-keeper
+    container_name: dexi-keeper
     restart: unless-stopped
     environment:
       - MEMEPERP_DATABASE_HOST=postgres
@@ -187,7 +187,7 @@ services:
       - MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS=${MEMEPERP_BLOCKCHAIN_PRICE_FEED_ADDRESS:-}
       - MEMEPERP_MATCHING_ENGINE_URL=${MEMEPERP_MATCHING_ENGINE_URL:-http://matching-engine:8081}
       - MEMEPERP_SERVER_MODE=debug
-      - MEMEPERP_INTERNAL_API_KEY=${MEMEPERP_INTERNAL_API_KEY:-memeperp-internal-2026}
+      - MEMEPERP_INTERNAL_API_KEY=${MEMEPERP_INTERNAL_API_KEY:-dexi-internal-2026}
       - HEALTH_PORT=8082
     depends_on:
       postgres:
@@ -205,7 +205,7 @@ services:
   # Nginx Reverse Proxy (ngrok 穿透入口)
   nginx:
     image: nginx:alpine
-    container_name: memeperp-nginx
+    container_name: dexi-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -222,4 +222,4 @@ volumes:
 
 networks:
   default:
-    name: memeperp-network
+    name: dexi-network

@@ -702,7 +702,7 @@
     "sellTrade": "売却",
     "claimedToWallet": "報酬をウォレットに請求しました",
     "viewOnExplorer": "トランザクションを表示",
-    "welcomeTitle": "MemePerpDEXへようこそ",
+    "welcomeTitle": "DEXIへようこそ",
     "welcomeSubtitle": "友達から招待されました",
     "yourBenefits": "あなたの特典",
     "benefit1": "初回取引で割引手数料",
@@ -830,7 +830,7 @@
     },
     "features": {
       "title": "なぜNamespaceウォレット？",
-      "subtitle": "Web3決済の未来のために構築。安全、直感的、MemePerpDEXによって動作。",
+      "subtitle": "Web3決済の未来のために構築。安全、直感的、DEXIによって動作。",
       "domainAddress": {
         "title": "ドメインがアドレスに",
         "desc": "確認済みのどのドメインにも暗号通貨を送金できます。複雑なアドレスをコピー＆ペーストする必要はありません。spotify.comと入力するだけで送金。"
@@ -892,7 +892,7 @@
       "registerDomain": "ドメインを登録"
     },
     "footer": {
-      "copyright": "2025 MemePerpDEX. All rights reserved."
+      "copyright": "2025 DEXI. All rights reserved."
     }
   },
   "walletManagement": {
