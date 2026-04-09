@@ -34,7 +34,7 @@ const CONTRACTS = {
   TokenFactory: "0xB40541Ff9f24883149fc6F9CD1021dB9C7BCcB83" as Address,
   SettlementV2: "0xF83D5d2E437D0e27144900cb768d2B5933EF3d6b" as Address,
   PerpVault: "0xF0db95eD967318BC7757A671399f0D4FFC853e05" as Address,
-  Liquidation: "0x5587Cf6b94E52e2Da0B8412381fcdfe4D39CA562" as Address,
+  Liquidation: "0x5B829938d245896CAb443e30f1502aBF54312265" as Address,
   InsuranceFund: "0xa20488Ed2CEABD0e6441496c2F4F5fBA18F4cE83" as Address,
   WBNB: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" as Address,
 };
