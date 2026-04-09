@@ -132,11 +132,11 @@ meme-perp-dex/
 | PerpVault | `0xF0db95eD967318BC7757A671399f0D4FFC853e05` |
 | PriceFeed | `0xB480517B96558E4467cfa1d91d8E6592c66B564D` |
 | PositionManager | `0x50d3e039Efe373D9d52676D482E732FD9C411b05` |
-| Vault | `0xE70b128aA233Fa6e54C1EDCACDdC11C5465760Ac` |
-| Liquidation | `0x5587Cf6b94E52e2Da0B8412381fcdfe4D39CA562` |
-| FundingRate | `0x246d00Bfb4DC18d199Fecaf4045A2F6f2A018A9C` |
+| Vault | `0x7a88347Be6A9f290a55dcAd8592163E545F05e2a` |
+| Liquidation | `0x5B829938d245896CAb443e30f1502aBF54312265` |
+| FundingRate | `0x3A136b4Fbc8E4145F31D9586Ae9abDe9f47c7B83` |
 | InsuranceFund | `0xa20488Ed2CEABD0e6441496c2F4F5fBA18F4cE83` |
-| RiskManager | `0x176a7Abf1B3917DEd911B6F6aac4adcB318cd558` |
+| RiskManager | `0x19C763600D8cD61CCF85Ff8d00D4D5e06914F12c` |
 | ContractRegistry | `0x0C6605b820084e43d0708943d15b1c681f2bCac1` |
 | WBNB | `0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd` |
 | PancakeRouter V2 | `0xD99D1c33F9fC3444f8101754aBC46c52416550D1` |
@@ -159,8 +159,8 @@ meme-perp-dex/
 
 ```bash
 # Clone
-git clone https://github.com/whha111/meme-perp-dex.git
-cd meme-perp-dex
+git clone https://github.com/whha111/meme-perp-dex-v4.git
+cd meme-perp-dex-v4
 
 # Start infrastructure
 docker-compose up -d  # PostgreSQL + Redis
@@ -258,6 +258,21 @@ MATCHER_PRIVATE_KEY=0x...
 This entire platform was built by a solo non-developer founder using AI as the primary development tool. No traditional coding experience — just deep domain knowledge of derivatives trading and persistent iteration with AI assistants over months of development.
 
 The result: a production-grade perpetual DEX with 15 smart contracts, 12,000+ line matching engine, and 4 passed security audits — proving that AI-native development can produce institutional-quality DeFi infrastructure.
+
+---
+
+## Repository History
+
+This is the latest active repository. The project went through multiple iterations during development, with each version representing a major architectural milestone:
+
+| Version | Repository | Description |
+|---------|-----------|-------------|
+| V1 | [meme-perp-dex](https://github.com/whha111/meme-perp-dex) | Initial architecture — smart contracts + basic matching engine |
+| V2 | [meme-perp-dex-v2](https://github.com/whha111/meme-perp-dex-v2) | SettlementV2 + Merkle proof withdrawal + PerpVault LP pool |
+| V3 | [meme-perp-dex-v3](https://github.com/whha111/meme-perp-dex-v3) | Full-stack audit fixes (56/56 resolved) + stress testing |
+| **V4 (Current)** | [meme-perp-dex-v4](https://github.com/whha111/meme-perp-dex-v4) | Industry benchmark fixes + production deployment + DEXI rebrand |
+
+**Why migrate?** Each version involved significant architectural changes (contract redesigns, new settlement system, security hardening) that warranted a clean repository to maintain clear git history and avoid confusion during audits. All historical code and commit history is preserved in the previous repositories for reference.
 
 ---
 
