@@ -29,21 +29,156 @@ DEXI is the first perpetual contract DEX purpose-built for meme tokens. While pl
 
 ## Architecture: Simplified dYdX v3
 
-```
-User places order -> Signs EIP-712 typed data (gasless)
-                          |
-              Off-chain Matching Engine (TypeScript/Bun)
-                          |
-              Positions managed in Redis + PnL settlement
-                          |
-              PerpVault (LP pool + OI tracking + insurance fund)
-                          |
-              Merkle snapshot -> SettlementV2.updateStateRoot()
-                          |
-              User withdrawal -> Merkle proof + EIP-712 sig -> SettlementV2.withdraw()
+> Inspired by dYdX v3's hybrid architecture and GMX's PnL calculation model.
+
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        FE["Next.js 14 Frontend<br/>(Wagmi v2 + Viem)"]
+        APP["Mobile App<br/>(Capacitor)"]
+    end
+
+    subgraph "Off-chain Layer"
+        ME["Matching Engine<br/>(TypeScript/Bun, 12K+ lines)"]
+        GO["Go Backend<br/>(Gin + GORM)"]
+        KP["Keeper Service<br/>(Liquidation + Funding)"]
+        RD[(Redis<br/>Primary Data)]
+        PG[(PostgreSQL<br/>Mirror + History)]
+    end
+
+    subgraph "On-chain Layer (BSC)"
+        SV2["SettlementV2<br/>(WBNB Custody + Merkle Withdrawal)"]
+        PV["PerpVault<br/>(LP Pool + Insurance Fund)"]
+        TF["TokenFactory<br/>(Bonding Curve + Graduation)"]
+        PM["PositionManager"]
+        LQ["Liquidation + ADL"]
+        FR["FundingRate"]
+        PF["PriceFeed"]
+        RM["RiskManager"]
+    end
+
+    FE -- "EIP-712 Signed Orders<br/>(Gasless)" --> ME
+    FE -- "HTTP/WS" --> GO
+    FE -- "RPC (Deposit/Withdraw)" --> SV2
+    FE -- "RPC (Buy/Sell)" --> TF
+    APP -- "Same API" --> ME
+
+    ME -- "Primary State" --> RD
+    ME -- "Async Mirror" --> PG
+    ME -- "Batch Settlement<br/>(every 30s)" --> PV
+    ME -- "Merkle Root Update" --> SV2
+    ME -- "Price Sync<br/>(every 1s)" --> PF
+
+    GO -- "Proxy Orderbook" --> ME
+    KP -- "Positions Query" --> ME
+    KP -- "Liquidation Calls" --> LQ
+    KP -- "Funding Settlement" --> FR
+
+    SV2 -- "Deposit Events" --> ME
+    PV -- "LP Liquidity" --> PM
+    PM -- "Position State" --> LQ
+    PM -- "Position State" --> FR
+    LQ -- "Insurance Coverage" --> PV
+    TF -- "Price Updates" --> PF
 ```
 
-> Inspired by dYdX v3's hybrid architecture and GMX's PnL calculation model.
+### Data Flow: Order Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as Wallet (MetaMask)
+    participant F as Frontend
+    participant M as Matching Engine
+    participant R as Redis
+    participant S as SettlementV2
+    participant P as PerpVault
+
+    Note over U,P: Opening a Perpetual Position (Gasless)
+    U->>F: Click "Long 10x DOGE"
+    F->>W: Request EIP-712 Signature
+    W->>U: Show typed data for confirmation
+    U->>W: Approve & Sign
+    W->>F: Return signature
+    F->>M: POST /api/order/submit (signed order)
+    M->>M: Validate signature + balance + price band (±50%)
+    M->>M: Match against orderbook
+    M->>R: Update position + balance
+    M->>F: WebSocket: order filled + position update
+    M-->>P: Batch: updateOpenInterest (every 10s)
+    M-->>S: Batch: updateStateRoot (Merkle snapshot)
+
+    Note over U,P: Withdrawing Funds (On-chain)
+    U->>F: Request withdrawal
+    F->>M: GET /api/withdraw/proof
+    M->>F: Return Merkle proof + EIP-712 signature
+    F->>S: withdraw(amount, proof, signature)
+    S->>S: Verify Merkle proof + signature
+    S->>U: Transfer WBNB
+```
+
+### Smart Contract Call Graph
+
+```mermaid
+graph LR
+    subgraph "User Entry Points"
+        DEP["deposit()"]
+        WIT["withdraw()"]
+        BUY["buy() / sell()"]
+        ESC["requestForcedWithdrawal()<br/>(Escape Hatch)"]
+    end
+
+    subgraph "Operator Entry Points"
+        UPD["updateStateRoot()"]
+        SET["settleTraderProfit()<br/>settleTraderLoss()"]
+        LIQ["liquidateToken()"]
+        FND["settleFunding()"]
+    end
+
+    subgraph "SettlementV2"
+        SV2_D["deposit → WBNB.transferFrom"]
+        SV2_W["withdraw → MerkleProof.verify<br/>→ ECDSA.recover → WBNB.transfer"]
+        SV2_E["forcedWithdraw → 48h timelock<br/>→ WBNB.transfer"]
+    end
+
+    subgraph "TokenFactory"
+        TF_B["buy → bondingCurve.getPrice<br/>→ mint tokens"]
+        TF_S["sell → burn tokens<br/>→ refund BNB"]
+        TF_G["graduate → addLiquidity<br/>→ PancakeRouter"]
+    end
+
+    subgraph "PerpVault"
+        PV_S["settleProfit → transfer from LP pool"]
+        PV_L["settleLoss → receive into LP pool"]
+        PV_OI["updateOpenInterest"]
+    end
+
+    subgraph "Liquidation"
+        LQ_L["liquidateToken → check margin<br/>→ PerpVault.settleLiquidation"]
+        LQ_A["executeADL → auto-deleverage<br/>→ PerpVault.settleClose"]
+    end
+
+    DEP --> SV2_D
+    WIT --> SV2_W
+    ESC --> SV2_E
+    BUY --> TF_B
+    BUY --> TF_S
+    UPD --> SV2_W
+    SET --> PV_S
+    SET --> PV_L
+    LIQ --> LQ_L
+    FND --> PV_S
+
+    TF_G -- "Price Update" --> PF2["PriceFeed.updateTokenPriceFromFactory()"]
+
+    style DEP fill:#4CAF50,color:#fff
+    style WIT fill:#4CAF50,color:#fff
+    style BUY fill:#4CAF50,color:#fff
+    style ESC fill:#FF9800,color:#fff
+    style LIQ fill:#f44336,color:#fff
+```
 
 ---
 
@@ -193,9 +328,75 @@ cd contracts && forge test -vvv
 
 ---
 
-## Security & Audits
+## Security Measures
 
-Four rounds of independent audits completed. **All 194 issues identified and resolved.**
+### OpenZeppelin Standard Library
+
+All contracts are built on [OpenZeppelin Contracts](https://www.openzeppelin.com/contracts), the industry-standard audited library:
+
+| Guard | Contracts Using It | Purpose |
+|-------|-------------------|---------|
+| `ReentrancyGuard` (`nonReentrant`) | SettlementV2, PerpVault, TokenFactory, Vault, Liquidation, FundingRate, InsuranceFund, PositionManager, LendingPool, MemeTokenV2 | Prevent reentrancy attacks on all state-changing functions |
+| `Ownable` / `Ownable2Step` | All 15 contracts. SettlementV2 uses `Ownable2Step` (two-step ownership transfer) | Access control for admin functions |
+| `Pausable` (`whenNotPaused`) | SettlementV2, PerpVault, TokenFactory, Vault, Settlement, LendingPool | Emergency circuit breaker — pause all user operations |
+| `AccessControl` (RBAC) | MemeTokenV2 | Role-based minting permission (MINTER_ROLE) |
+| `EIP712` + `ECDSA` | SettlementV2, Settlement | Typed structured data signing for gasless order submission and withdrawal authorization |
+| `MerkleProof` | SettlementV2 | On-chain Merkle tree verification for trustless withdrawals |
+| `ERC20` + Extensions | MemeTokenV2 | `ERC20Burnable`, `ERC20Permit`, `ERC20Capped` — standard token with burn, gasless approve, and supply cap |
+
+### Reentrancy Protection
+
+Every function that transfers ETH/WBNB or modifies balances is protected with `nonReentrant`:
+
+```solidity
+// Example: PerpVault.sol — ALL settlement functions are nonReentrant
+function settleTraderProfit(address trader, uint256 profitETH)
+    external onlyAuthorized nonReentrant { ... }
+
+function settleTraderLoss(address trader, uint256 lossETH)
+    external payable onlyAuthorized nonReentrant { ... }
+
+// Example: TokenFactory.sol — buy/sell protected against reentrancy
+function buy(address tokenAddress, uint256 minTokensOut)
+    external payable nonReentrant whenNotPaused { ... }
+
+function sell(address tokenAddress, uint256 tokenAmount, uint256 minETHOut)
+    external nonReentrant whenNotPaused { ... }
+```
+
+Additionally, all contracts follow the **CEI (Checks-Effects-Interactions) pattern** — state updates happen before any external calls, providing defense-in-depth even beyond the `nonReentrant` modifier.
+
+### Fund Safety: Escape Hatch
+
+Users can always recover their funds even if the off-chain system goes completely offline:
+
+```mermaid
+graph LR
+    A["User calls<br/>requestForcedWithdrawal()"] --> B["48-hour<br/>timelock starts"]
+    B --> C{"Operator responds<br/>within 48h?"}
+    C -- "Yes" --> D["Normal withdrawal<br/>processed"]
+    C -- "No" --> E["User calls<br/>executeForcedWithdrawal()"]
+    E --> F["Funds returned<br/>directly to user"]
+
+    style E fill:#FF9800,color:#fff
+    style F fill:#4CAF50,color:#fff
+```
+
+### Additional Security Measures
+
+| Measure | Implementation |
+|---------|---------------|
+| **Slippage Protection** | Mandatory `minAmountOut` / `minTokensOut` on all swap and trade functions |
+| **Price Band** | Limit orders rejected if >±50% deviation from spot price (`PRICE_BAND_BPS`) |
+| **LP Profit Cap** | Single-trade profit capped at 9% of LP pool value — prevents pool drainage |
+| **Authorized Contracts Only** | PerpVault and Vault use `onlyAuthorized` modifier — only whitelisted contracts can call settlement functions |
+| **Two-Step Ownership** | SettlementV2 uses `Ownable2Step` — ownership transfer requires explicit acceptance by new owner |
+| **Funding Rate Safeguard** | Liquidation check uses actual collateral vs maintenance margin, not fixed initial margin rate |
+| **FOK Pre-check** | Fill-or-Kill orders verify available size before matching — prevents partial fills then rollback |
+
+### Audits
+
+Four rounds of audits completed. **194 issues found → 194/194 resolved (0 remaining).**
 
 | Audit | Date | Scope | Findings | Status | Report |
 |-------|------|-------|----------|--------|--------|
@@ -204,16 +405,7 @@ Four rounds of independent audits completed. **All 194 issues identified and res
 | V3 Full Audit | 2026-03-04 | Full-stack audit + fix verification | 56 | All Fixed | [Report](docs/AUDIT_V3_FULL.md) |
 | V4 Industry Benchmark | 2026-03-31 | Benchmark vs. mature exchanges + bugs | 15 | All Fixed | [Report](docs/V4_INDUSTRY_BENCHMARK.md) |
 
-**Total: 194 issues found across 4 audits → 194/194 resolved (0 remaining)**
-
-Key security features:
-- CEI (Checks-Effects-Interactions) pattern enforced across all contracts
-- Merkle proof withdrawal system
-- Escape hatch mechanism for user fund safety
-- Insurance fund for socialized loss coverage
-- 373 contract tests passing
-
-See [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) for development standards and complete fix history.
+373 contract tests passing. See [DEVELOPMENT_RULES.md](DEVELOPMENT_RULES.md) for complete fix history.
 
 ---
 
