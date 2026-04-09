@@ -261,72 +261,74 @@ The result: a production-grade perpetual DEX with 15 smart contracts, 12,000+ li
 
 ---
 
-## What's Next: AgentX — AI Agent Platform on DEXI
+## Roadmap
+
+### Phase 1: DEXI Core Infrastructure ✅ Complete
+
+> Meme token perpetual DEX — the foundation layer for everything that follows.
+
+| Milestone | Status |
+|-----------|--------|
+| 15 smart contracts deployed on BSC Testnet | ✅ All verified on BscScan (12/12) |
+| 4 independent security audits | ✅ 194 issues found → 194/194 resolved |
+| Matching engine (12,000+ lines TypeScript) | ✅ GMX replay tested (8,869 real trades) |
+| SettlementV2 + Merkle proof withdrawal + escape hatch | ✅ Live |
+| PerpVault LP pool + liquidation + funding rate + insurance fund | ✅ Full risk infrastructure |
+| Next.js 14 trading frontend (spot + perpetual, 4 languages) | ✅ Deployed |
+| 373 contract tests passing | ✅ Go/TS compile clean |
+| Docker production deployment + SSL | ✅ VPS running |
+| Referral system (2-tier, 30% fee sharing) | ✅ Implemented |
+
+### Phase 2: BSC Mainnet Launch (4 weeks)
+
+> Migrate to mainnet and acquire first real users.
+
+- BSC Mainnet deployment — contracts already audited 4x, direct migration
+- opBNB integration — high-frequency trades on L2, reduce gas cost by 95%
+- AA Wallet + Paymaster — zero-friction onboarding, gas sponsored for new users
+- KOL onboarding — invite 10+ Meme KOLs to launch tokens, bring fan traffic
+- Marketing campaign — Twitter/Telegram community, testnet airdrop for early users
+
+**KPIs**: 1,000+ registered users | $50K+ daily volume | 50+ tokens launched | Apply to BNB Chain MVB Accelerator
+
+### Phase 3: AgentX — AI Agent Platform (8 weeks)
 
 > **Every AI agent is a Token. Every chat is a transaction.**
 
-AgentX is the next evolution of DEXI — an AI agent platform where users interact through natural language chat (like ChatGPT), while all financial actions are powered by DEXI's battle-tested trading infrastructure under the hood.
+AgentX transforms DEXI from a trading platform into an AI-native financial platform. Users interact through natural language chat (like ChatGPT), while all financial actions are powered by DEXI's infrastructure under the hood.
 
-**Core Idea**: Users create AI agents → each agent becomes a tradeable token (via TokenFactory) → users chat to buy/sell/long/short → all trades settle through DEXI's matching engine and smart contracts.
+- Fork LobeChat + integrate DeepSeek V3 — conversational trading interface
+- Intent parsing via Function Calling — "buy 100U of DOGE", "long 10x PEPE"
+- Create AI agent → auto-mint token via TokenFactory — every agent is tradeable
+- Agent graduation system — reach threshold users before token launch (anti-spam)
+- Agent marketplace & leaderboard — discover and rank by volume/holders
+- Copy trading — follow top agent creators' strategies
+- Push notifications — price alerts, liquidation warnings, trade confirmations
+- Capacitor packaging — iOS/Android native app
 
-### What's Already Built (DEXI Infrastructure)
+**KPIs**: 5,000+ users, 500+ DAU | 200+ agents created, 5+ graduated to DEX | $5K+ monthly fee revenue | Seed round $500K
 
-| Component | Status | Details |
-|-----------|--------|---------|
-| Smart Contracts | ✅ Deployed | 15 contracts on BSC Testnet, 12/12 verified on BscScan |
-| Security Audits | ✅ 4 Rounds Passed | 194 issues found → 194/194 resolved |
-| Matching Engine | ✅ Running | 12,000+ lines TypeScript, GMX replay tested |
-| Settlement | ✅ Live | SettlementV2 + Merkle proof withdrawal + escape hatch |
-| Risk Infrastructure | ✅ Complete | PerpVault LP, liquidation, funding rate, insurance fund |
-| Frontend | ✅ Deployed | Next.js 14, spot + perpetual trading, 4 languages |
-| Contract Tests | ✅ 373 Passing | Full coverage across all contracts |
+### Phase 4: Ecosystem Expansion (12 weeks)
 
-### Roadmap
+> Scale the platform and deepen BNB Chain integration.
 
-**Phase 1: Hackathon Demo (2 weeks, Apr 10 – Apr 24)**
+- Agent API — third-party DApps can embed AgentX agents
+- BNB Greenfield — decentralized storage for agent training data
+- Multi-language agent support — agents that chat in EN/ZH/JA/KO
+- Compliance framework — KYC, audit logs, large transaction monitoring
+- Institutional LP onboarding — deeper liquidity for perpetual markets
 
-Goal: Working end-to-end demo — chat to create agent → buy/sell tokens → open perpetual positions
-
-- Fork LobeChat + integrate DeepSeek V3 — AI chat interface (3 days)
-- Intent parsing layer — Function Calling to parse "buy 100U", "long 10x" (3 days)
-- Create agent → TokenFactory mint — connect to existing contracts (2 days)
-- Agent marketplace + trade confirmation cards (3 days)
-- Capacitor iOS/Android packaging + demo video (3 days)
-
-**Deliverables**: Live demo on BSC Testnet | 3-min demo video | Technical whitepaper
-
-**Phase 2: Testnet Launch (4 weeks, Apr 25 – May 22)**
-
-Goal: Public testnet with real users, validate product-market fit
-
-- AA Wallet + Paymaster (zero-friction onboarding, gas sponsored)
-- Agent graduation system (100 active users required before token launch)
-- Referral commission system (already built: 2-tier, 30% fee sharing)
-- Push notifications (price alerts, liquidation warnings)
-- KOL onboarding program (invite 10 Meme KOLs to create agents)
-
-**KPIs**: 500+ registered users | 50+ agents created | 1,000+ daily trades | Day-7 retention > 20% | Apply to BNB Chain MVB
-
-**Phase 3: Mainnet + Growth (8 weeks, May 23 – Jul 17)**
-
-Goal: BSC Mainnet launch, revenue generation, ecosystem integration
-
-- BSC Mainnet deployment (contracts already audited 4x, direct migration)
-- opBNB integration (high-frequency trades on L2, 95% gas reduction)
-- Copy trading (follow top agent creators' strategies)
-- Agent API (third-party DApps can embed AgentX agents)
-- BNB Greenfield integration (decentralized storage for agent training data)
-
-**KPIs**: 5,000+ users, 500+ DAU | $50K+ daily volume, $5K+ monthly fee revenue | 200+ agents, 5+ graduated to DEX | Seed round $500K
+**KPIs**: 20,000+ users, 2,000+ DAU | $500K+ daily volume | 1,000+ agents | Series A preparation
 
 ### Why This Roadmap is Feasible
 
-- **Not starting from zero** — DEXI already has 15 contracts, 12,000+ line matching engine, 4 security audits, 373 tests. Phase 1 only needs the AI chat layer.
-- **Gate-kept phases** — Must hit KPIs before advancing. Demo before Phase 2; 500+ users before Phase 3.
-- **BNB Chain native** — Deep integration with BSC + opBNB + Greenfield, not just multi-chain spray-and-pray.
-- **Clear revenue model** — Mainnet launch = immediate fee revenue (Taker 0.05% / Maker 0.03%), no dependency on token issuance or fundraising.
+- **Phase 1 is already done** — 15 contracts, 12,000+ line engine, 4 audits, 373 tests. Not a whitepaper project.
+- **Each phase has clear gates** — must hit KPIs before advancing to the next phase.
+- **BNB Chain native** — deep integration with BSC + opBNB + Greenfield, leveraging the full BNB ecosystem.
+- **Revenue from Day 1 on mainnet** — trading fees (Taker 0.05% / Maker 0.03%) start immediately, no dependency on token issuance.
+- **AI-native development** — entire platform built by solo founder with AI, proving fast iteration velocity for future phases.
 
-> Full development plan: [docs/AgentX_Development_Plan.docx](docs/AgentX_Development_Plan.docx)
+> Full AgentX development plan: [docs/AgentX_Development_Plan.docx](docs/AgentX_Development_Plan.docx)
 
 ---
 
