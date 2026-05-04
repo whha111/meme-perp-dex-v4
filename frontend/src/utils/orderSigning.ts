@@ -34,6 +34,13 @@ export interface SignedOrder extends OrderParams {
   signature: Hex;
 }
 
+export interface SubmitOrderOptions {
+  takeProfit?: string;
+  stopLoss?: string;
+  marketId?: string;
+  collateralToken?: "BNB" | "WBNB" | "USDT";
+}
+
 // ============================================================
 // EIP-712 Domain & Types
 // ============================================================
@@ -175,7 +182,7 @@ const getApiUrl = (): string => MATCHING_ENGINE_URL;
  */
 export async function submitOrder(
   signedOrder: SignedOrder,
-  options?: { takeProfit?: string; stopLoss?: string }
+  options?: SubmitOrderOptions
 ): Promise<{
   success: boolean;
   orderId?: string;
@@ -204,6 +211,8 @@ export async function submitOrder(
     // P2-2: 止盈止损参数
     if (options?.takeProfit) body.takeProfit = options.takeProfit;
     if (options?.stopLoss) body.stopLoss = options.stopLoss;
+    if (options?.marketId) body.marketId = options.marketId;
+    if (options?.collateralToken) body.collateralToken = options.collateralToken;
 
     const response = await fetch(`${getApiUrl()}/api/order/submit`, {
       method: "POST",

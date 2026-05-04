@@ -23,23 +23,23 @@ import { useAccount } from "wagmi";
 import type { Address, Hex } from "viem";
 import { createWalletClient, createPublicClient, http, keccak256, parseEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { bsc, bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { MATCHING_ENGINE_URL, SETTLEMENT_ADDRESS, SETTLEMENT_V2_ADDRESS } from "@/config/api";
 import { CONTRACTS, SETTLEMENT_V2_ABI, ERC20_ABI, NETWORK_CONFIG } from "@/lib/contracts";
 import { useTradingDataStore } from "@/lib/stores/tradingDataStore";
+import { memePerpClient } from "@/lib/memePerpClient";
 import { getWebSocketManager } from "@/hooks/common/useUnifiedWebSocket";
 import {
   signOrder,
-  submitOrder,
   createMarketOrderParams,
   createLimitOrderParams,
   getUserNonce,
   getUserPositions,
   getUserOrders,
-  cancelOrder as apiCancelOrder,
   requestClosePair,
   getClosePairMessage,
   type OrderDetails,
+  type SubmitOrderOptions,
 } from "@/utils/orderSigning";
 
 // ============================================================
@@ -163,8 +163,8 @@ export interface UsePerpetualV2Return {
   orderBook: { longs: OrderBookLevel[]; shorts: OrderBookLevel[]; lastPrice: string } | null;
   /** @deprecated Always empty. Trade data flows through WebSocket → tradingDataStore. */
   recentTrades: readonly { id: string; price: string; size: string; side: "buy" | "sell"; timestamp: number }[];
-  submitMarketOrder: (token: Address, isLong: boolean, size: string, leverage: number, options?: { takeProfit?: string; stopLoss?: string }) => Promise<{ success: boolean; orderId?: string; error?: string }>;
-  submitLimitOrder: (token: Address, isLong: boolean, size: string, leverage: number, price: string, options?: { takeProfit?: string; stopLoss?: string }) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  submitMarketOrder: (token: Address, isLong: boolean, size: string, leverage: number, options?: SubmitOrderOptions) => Promise<{ success: boolean; orderId?: string; error?: string }>;
+  submitLimitOrder: (token: Address, isLong: boolean, size: string, leverage: number, price: string, options?: SubmitOrderOptions) => Promise<{ success: boolean; orderId?: string; error?: string }>;
   cancelPendingOrder: (orderId: string) => Promise<{ success: boolean; error?: string }>;
   closePair: (pairId: string) => Promise<{ success: boolean; error?: string }>;
   approveToken: (token: Address, amount: string) => Promise<void>;
@@ -309,7 +309,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     try {
       const privateKey = keccak256(tradingWalletSignature);
       const account = privateKeyToAccount(privateKey);
-      const targetChain = NETWORK_CONFIG.CHAIN_ID === 56 ? bsc : bscTestnet;
+      const targetChain = bsc;
       return createWalletClient({
         account,
         chain: targetChain,
@@ -322,7 +322,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
   }, [tradingWalletSignature]);
 
   // Public client for reading chain state and waiting for tx receipts
-  const targetChain = NETWORK_CONFIG.CHAIN_ID === 56 ? bsc : bscTestnet;
+  const targetChain = bsc;
   const publicClient = useMemo(() => createPublicClient({
     chain: targetChain,
     transport: http(NETWORK_CONFIG.RPC_URL),
@@ -349,7 +349,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     manager.authenticate(
       tradingWalletAddress,
       async (msg: string) => {
-        const wsChain = NETWORK_CONFIG.CHAIN_ID === 56 ? bsc : bscTestnet;
+        const wsChain = bsc;
         const walletClient = createWalletClient({
           account,
           chain: wsChain,
@@ -360,7 +360,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     );
   }, [wsConnected, tradingWalletAddress, tradingWalletSignature]);
 
-  // ── Balance: WS primary (via subscribe_trader), HTTP for initial load ──
+  // ── Balance: WS primary after auth, HTTP for initial load ──
   // 余额查询用派生钱包地址（引擎余额绑定在派生钱包上）
   // 如果没有派生钱包，fallback 到主钱包地址
   const balanceQueryAddress = tradingWalletAddress || mainWalletAddress;
@@ -392,7 +392,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
       }
     : httpBalance ?? null;
 
-  // ── Positions: WS primary (via subscribe_trader), HTTP for initial load ──
+  // ── Positions: WS primary after auth, HTTP for initial load ──
   const { data: httpPositions } = useQuery({
     queryKey: ["perpetual-positions", tradingWalletAddress],
     queryFn: () => getUserPositions(tradingWalletAddress!),
@@ -435,7 +435,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
     }));
   }, [storePositions, httpPositions]);
 
-  // ── Orders: WS primary (via subscribe_trader), HTTP for initial load ──
+  // ── Orders: WS primary after auth, HTTP for initial load ──
   const { data: httpOrders } = useQuery({
     queryKey: ["perpetual-orders", tradingWalletAddress],
     queryFn: async () => {
@@ -493,7 +493,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
 
   // ── Submit Market Order ────────────────────────────────────
   const submitMarketOrder = useCallback(
-    async (token: Address, isLong: boolean, size: string, leverage: number, options?: { takeProfit?: string; stopLoss?: string }) => {
+    async (token: Address, isLong: boolean, size: string, leverage: number, options?: SubmitOrderOptions) => {
       if (!tradingWalletClient || !tradingWalletAddress) {
         return { success: false, error: "交易钱包未连接" };
       }
@@ -521,7 +521,13 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
 
         // 4. Submit to matching engine (P2-2: pass TP/SL)
         setIsSubmittingOrder(true);
-        const result = await submitOrder(signedOrder, options);
+        const result = await memePerpClient.private.createOrder({
+          signedOrder,
+          market: options?.marketId,
+          side: isLong ? "BUY" : "SELL",
+          type: "MARKET",
+          options,
+        });
         setIsSubmittingOrder(false);
 
         if (result.success) {
@@ -548,7 +554,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
 
   // ── Submit Limit Order ─────────────────────────────────────
   const submitLimitOrder = useCallback(
-    async (token: Address, isLong: boolean, size: string, leverage: number, price: string, options?: { takeProfit?: string; stopLoss?: string }) => {
+    async (token: Address, isLong: boolean, size: string, leverage: number, price: string, options?: SubmitOrderOptions) => {
       if (!tradingWalletClient || !tradingWalletAddress) {
         return { success: false, error: "交易钱包未连接" };
       }
@@ -576,7 +582,13 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
         setIsSigningOrder(false);
 
         setIsSubmittingOrder(true);
-        const result = await submitOrder(signedOrder, options);
+        const result = await memePerpClient.private.createOrder({
+          signedOrder,
+          market: options?.marketId,
+          side: isLong ? "BUY" : "SELL",
+          type: "LIMIT",
+          options,
+        });
         setIsSubmittingOrder(false);
 
         if (result.success) {
@@ -619,7 +631,7 @@ export function usePerpetualV2(props?: UsePerpetualV2Props): UsePerpetualV2Retur
           message,
         });
 
-        const result = await apiCancelOrder(orderId, signerAddress, signature);
+        const result = await memePerpClient.private.cancelOrder(orderId, signerAddress, signature);
 
         if (result.success) {
           refreshOrders();

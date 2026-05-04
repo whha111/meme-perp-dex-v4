@@ -13,7 +13,6 @@ import { useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useAccount, useReadContract, useBalance } from "wagmi";
 import { formatUnits, type Address } from "viem";
-import { Navbar } from "@/components/layout/Navbar";
 import { usePerpetualV2 } from "@/hooks/perpetual/usePerpetualV2";
 import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
 import { useToast } from "@/components/shared/Toast";
@@ -165,8 +164,6 @@ export default function WalletPage() {
 
   return (
     <div className="min-h-screen bg-okx-bg-primary">
-      <Navbar />
-
       <div className="max-w-[800px] mx-auto px-4 py-8">
         {/* Page Title */}
         <div className="mb-8">

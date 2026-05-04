@@ -3,14 +3,13 @@
  */
 
 // 支持的链 ID
-export const CHAIN_ID_BSC_TESTNET = 97;
 export const CHAIN_ID_BSC_MAINNET = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56");
 
 /**
  * 验证链 ID 是否在白名单中
  */
 export function isValidChainId(chainId: number): boolean {
-  return chainId === CHAIN_ID_BSC_TESTNET || chainId === CHAIN_ID_BSC_MAINNET;
+  return chainId === CHAIN_ID_BSC_MAINNET;
 }
 
 /**
@@ -18,8 +17,6 @@ export function isValidChainId(chainId: number): boolean {
  */
 export function getChainName(chainId: number): string {
   switch (chainId) {
-    case CHAIN_ID_BSC_TESTNET:
-      return "BSC Testnet";
     case CHAIN_ID_BSC_MAINNET:
       return "BSC Mainnet";
     default:

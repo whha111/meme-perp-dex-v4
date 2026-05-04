@@ -110,7 +110,7 @@ describe('验证工具测试', () => {
 
   describe('validateChainId', () => {
     test('验证有效的链 ID', () => {
-      expect(validateChainId(97)).toBe(true); // BSC Testnet
+      expect(validateChainId(97)).toBe(false); // Testnet not allowed by default
       expect(validateChainId(56)).toBe(true); // BSC Mainnet
       expect(validateChainId(1, [1, 137, 56])).toBe(true); // 自定义允许的链
     });

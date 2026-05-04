@@ -86,9 +86,9 @@ export class TradingErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    const module = this.props.module || "Unknown";
+    const boundaryModule = this.props.module || "Unknown";
     console.error(
-      `[TradingErrorBoundary:${module}] Caught error:`,
+      `[TradingErrorBoundary:${boundaryModule}] Caught error:`,
       error.message
     );
     if (process.env.NODE_ENV === "development") {

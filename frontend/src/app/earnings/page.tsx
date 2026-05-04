@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useTranslations } from "next-intl";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Navbar } from "@/components/layout/Navbar";
 import { useEarnings, LeaderboardEntry } from "@/hooks/perpetual/useEarnings";
 import { usePerpReferral } from "@/hooks/perpetual/usePerpReferral";
 
@@ -197,8 +196,6 @@ export default function EarningsPage() {
 
   return (
     <div className="min-h-screen bg-okx-bg-primary text-okx-text-primary">
-      <Navbar />
-
       {/* Referral bind success toast */}
       {showRefBindSuccess && (
         <div className="fixed top-20 right-4 bg-okx-up text-black px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in">
@@ -390,10 +387,10 @@ export default function EarningsPage() {
                           <div className="text-3xl mb-2">🪙</div>
                           <p className="text-sm">{t("noTokensCreated")}</p>
                           <a
-                            href="/create"
+                            href="/perp"
                             className="inline-block mt-3 px-4 py-2 bg-okx-accent text-black rounded-lg text-sm font-medium hover:opacity-90"
                           >
-                            {t("createTokenNow")}
+                            View markets
                           </a>
                         </div>
                       )}

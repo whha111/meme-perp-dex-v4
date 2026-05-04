@@ -32,9 +32,13 @@ export function LanguageSelector() {
   };
 
   if (!mounted) {
-    // 占位符防止布局抖动
     return (
-      <button className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-okx-bg-hover w-16 h-9" />
+      <button className="flex h-8 items-center gap-1.5 rounded-[4px] bg-okx-bg-hover px-2 text-sm font-semibold text-okx-text-secondary">
+        CN
+        <svg className="h-3 w-3 text-okx-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
     );
   }
 
@@ -42,7 +46,7 @@ export function LanguageSelector() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-okx-bg-hover hover:bg-okx-border-secondary transition-colors"
+        className="flex h-8 items-center gap-1.5 rounded-[4px] bg-okx-bg-hover px-2 transition-colors hover:bg-okx-border-secondary"
         aria-label="Select language"
       >
         <span className="text-base">{localeFlags[currentLocale]}</span>
@@ -60,7 +64,7 @@ export function LanguageSelector() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-36 py-1 bg-okx-bg-card border border-okx-border-primary rounded-lg shadow-lg z-50">
+        <div className="absolute right-0 z-50 mt-2 w-36 overflow-hidden rounded-[4px] border border-okx-border-primary bg-okx-bg-card py-1 shadow-lg">
           {locales.map((locale) => (
             <button
               key={locale}

@@ -28,7 +28,7 @@ let cache: PriceCache | null = null;
 const CACHE_TTL_MS = 30_000; // 30 秒
 
 const FALLBACK_PRICE = 600;
-const FETCH_TIMEOUT_MS = 5_000;
+const FETCH_TIMEOUT_MS = 1_200;
 
 // ─── 数据源 fetchers ────────────────────────────
 
@@ -114,10 +114,8 @@ export async function GET() {
     (await fetchOKX()) ??
     { price: FALLBACK_PRICE, change24h: 0, source: "fallback", timestamp: Date.now() };
 
-  // 3. 写入缓存（仅缓存真实数据）
-  if (result.source !== "fallback") {
-    cache = result;
-  }
+  // 3. 写入缓存。fallback 也短时缓存，避免网络受限时每次切页都等外部接口超时。
+  cache = result;
 
   return NextResponse.json(
     {

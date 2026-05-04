@@ -172,6 +172,10 @@ export async function withLock<T>(
   retries = 3,
   retryDelayMs = 100
 ): Promise<T> {
+  if (process.env.DEXI_LOCAL_SMOKE === "true" && !isRedisConnected()) {
+    return fn();
+  }
+
   const client = getRedisClient();
   const fullKey = `lock:${lockKey}`;
   const lockValue = `${Date.now()}_${Math.random().toString(36).slice(2)}`;

@@ -50,6 +50,7 @@ stress-test-logs/
 # Test artifacts
 stress-test/reports/
 frontend/test-results/
+frontend/playwright-report/
 contracts/slither-report.json
 
 # Test coverage
@@ -74,6 +75,13 @@ YZi_Labs_Application_Answers.md
 # Debug/test scripts (one-off)
 check-all-bal.ts
 contracts/debug-*.ts
+
+# Local UI review artifacts
+frontend/.codex-preview/
+frontend/npm-cache/
+frontend/design/*.pen
+frontend-*.png
+ui-*.png
 
 # Redis dumps
 dump.rdb

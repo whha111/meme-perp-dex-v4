@@ -8,6 +8,7 @@ declare global {
 }
 
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
@@ -16,6 +17,7 @@ import { config, configError } from "@/lib/wagmi";
 import { useUnifiedWebSocket } from "@/hooks/common/useUnifiedWebSocket";
 import { WebSocketStatusIndicator } from "@/components/debug/WebSocketStatusIndicator";
 import { NavigationProgress } from "@/components/shared/NavigationProgress";
+import { Navbar } from "@/components/layout/Navbar";
 import { I18nProvider, useLocale } from "@/i18n";
 import { useAppStore } from "@/lib/stores/appStore";
 import { WalletBalanceProvider } from "@/contexts/WalletBalanceContext";
@@ -308,7 +310,13 @@ function LoadingSkeleton() {
 // WebSocket Auto-Connect Component
 // =====================================================
 function WebSocketAutoConnect({ children }: { children: ReactNode }) {
-  useUnifiedWebSocket({ enabled: true });
+  const pathname = usePathname();
+  const realtimeEnabled =
+    pathname === "/" ||
+    pathname.startsWith("/perp") ||
+    pathname.startsWith("/trade");
+
+  useUnifiedWebSocket({ enabled: realtimeEnabled });
   return <>{children}</>;
 }
 
@@ -412,11 +420,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Show skeleton UI during SSR to prevent hydration mismatch while keeping nav visible
-  if (!mounted) {
-    return <LoadingSkeleton />;
-  }
-
   return (
     <ErrorBoundary>
       <I18nProvider>
@@ -431,6 +434,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                   <WalletBalanceProvider>
                     <WebSocketAutoConnect>
                       <NavigationProgress />
+                      <Navbar />
                       {children}
                       {/* WebSocket 状态指示器 (仅开发环境) */}
                       <WebSocketStatusIndicator />

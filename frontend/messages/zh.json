@@ -47,19 +47,19 @@
     "vault": "金库"
   },
   "home": {
-    "badge": "✦ BSC Testnet 已上线",
-    "heroTitle": "发现下一个",
-    "heroSubtitle": "一站式 Meme 代币创建、交易和永续合约平台。公平发射、链上透明、最高 10x 杠杆。",
-    "createToken": "创建代币 →",
-    "startTrading": "开始交易",
+    "badge": "精选 Meme 合约市场",
+    "heroTitle": "Meme 现货与合约交易终端",
+    "heroSubtitle": "创建代币、交易现货、管理永续仓位，都放在一个更克制的自托管界面里，重点呈现价格、风险和账户状态。",
+    "createToken": "发行代币",
+    "startTrading": "打开终端",
     "stats": {
       "volume24h": "24h 交易量",
       "marketCap": "总市值",
       "activeTokens": "活跃代币",
       "totalTraders": "累计交易者"
     },
-    "whyTitle": "为什么选择 MEMEPERP?",
-    "whySubtitle": "去中心化、透明、无需许可的 Meme 代币交易基础设施",
+    "whyTitle": "先像交易产品，再像 Meme 产品",
+    "whySubtitle": "界面优先服务行情扫描、风险判断、结算信任和重复交易，不靠夸张视觉制造安全感。",
     "features": {
       "fairLaunch": {
         "title": "公平发射",
@@ -88,7 +88,7 @@
     },
     "ctaTitle": "准备好了吗？",
     "ctaSubtitle": "连接钱包，开始你的 Meme 交易之旅",
-    "ctaButton": "进入市场 →",
+    "ctaButton": "进入市场",
     "footer": {
       "settings": "设置",
       "invite": "邀请"
@@ -96,7 +96,7 @@
   },
   "wallet": {
     "connect": "连接钱包",
-    "switchNetwork": "切换到 BSC Testnet"
+    "switchNetwork": "切换到 BSC Mainnet"
   },
   "market": {
     "new": "新代币",
@@ -287,7 +287,7 @@
   },
   "trading": {
     "back": "返回",
-    "baseSepolia": "BSC Testnet",
+    "baseSepolia": "BSC Mainnet",
     "connecting": "正在连接...",
     "loadingKline": "加载K线数据...",
     "noTradeData": "暂无交易数据",

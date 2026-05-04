@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useAppStore, type AppTheme } from "@/lib/stores/appStore";
-import { Navbar } from "@/components/layout/Navbar";
 import { useTranslations } from "next-intl";
 import { useToast } from "@/components/shared/Toast";
 import { useAccount, useDisconnect } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { locales, localeNames, localeFlags, type Locale, changeLocale, useLocale } from "@/i18n";
 
 type NavKey = "security" | "profile" | "api" | "notifications" | "fees" | "appearance";
@@ -103,6 +103,7 @@ export default function SettingsPage() {
   const { showToast } = useToast();
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
+  const { openConnectModal } = useConnectModal();
   const preferences = useAppStore((state) => state.preferences);
   const setSlippageTolerance = useAppStore((state) => state.setSlippageTolerance);
   const setTransactionDeadline = useAppStore((state) => state.setTransactionDeadline);
@@ -152,8 +153,8 @@ export default function SettingsPage() {
   };
 
   const mockSessions = useMemo(() => [
-    { device: "Chrome · macOS", location: "Shanghai, CN", timeKey: "current", isCurrent: true },
-    { device: "Safari · iOS iPhone", location: "Beijing, CN", timeKey: "2daysAgo", isCurrent: false },
+    { device: "Chrome / macOS", location: "Shanghai, CN", timeKey: "current", isCurrent: true },
+    { device: "Safari / iOS iPhone", location: "Beijing, CN", timeKey: "2daysAgo", isCurrent: false },
   ], []);
 
   const [activeNav, setActiveNav] = useState<NavKey>("security");
@@ -222,7 +223,7 @@ export default function SettingsPage() {
     <button
       onClick={() => onChange(!enabled)}
       className={`w-11 h-6 rounded-full relative transition-colors ${
-        enabled ? "bg-meme-lime" : "bg-okx-bg-hover border border-okx-border-primary"
+        enabled ? "bg-dexi-accent" : "bg-okx-bg-hover border border-okx-border-primary"
       }`}
     >
       <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${enabled ? "left-[22px]" : "left-0.5"}`} />
@@ -241,19 +242,25 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-okx-bg-primary text-okx-text-primary">
-      <Navbar />
+      <div className="dexi-terminal-shell">
+        <section className="dexi-terminal-bar">
+          <span className="text-sm font-semibold text-okx-text-primary">Settings</span>
+          <span className="dexi-chip">Security</span>
+          <span className="dexi-chip">API</span>
+          <span className="dexi-chip">Preferences</span>
+          <span className="ml-auto hidden text-xs text-okx-text-tertiary md:inline">Account and terminal configuration</span>
+        </section>
 
-      <div className="max-w-[1440px] mx-auto px-4 md:px-8 lg:px-16 py-6 md:py-8">
-        <div className="flex flex-col md:flex-row gap-6 md:gap-8">
+        <div className="dexi-terminal-grid min-h-[calc(100vh-91px)] grid-cols-1 md:grid-cols-[248px_minmax(0,1fr)]">
           {/* Left Sidebar Navigation */}
-          <div className="w-full md:w-[220px] md:shrink-0 flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0">
+          <div className="dexi-terminal-panel flex w-full gap-1 overflow-x-auto p-2 md:shrink-0 md:flex-col md:overflow-x-visible">
             {navItems.map((item) => (
               <button
                 key={item.key}
                 onClick={() => setActiveNav(item.key)}
-                className={`whitespace-nowrap md:w-full flex items-center gap-3 px-4 py-2.5 md:py-3 rounded-lg text-sm transition-all ${
+                className={`flex items-center gap-3 whitespace-nowrap rounded-[4px] px-3 py-2.5 text-sm transition-all md:w-full ${
                   activeNav === item.key
-                    ? "bg-meme-lime/10 text-meme-lime font-bold border border-meme-lime/20"
+                    ? "bg-dexi-accent-soft text-dexi-accent font-semibold"
                     : "text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-hover"
                 }`}
               >
@@ -264,23 +271,25 @@ export default function SettingsPage() {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 min-w-0 space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold">
+          <div className="dexi-terminal-panel min-w-0 space-y-4 p-4">
+            <div className="dexi-terminal-titlebar">
+              <div>
+              <h1 className="text-2xl font-semibold">
                 {navItems.find((n) => n.key === activeNav)?.label}
               </h1>
               <p className="text-sm text-okx-text-tertiary mt-1">
                 {subtitles[activeNav]}
               </p>
+              </div>
             </div>
 
             {/* SECURITY TAB */}
             {activeNav === "security" && (
               <>
                 {/* Wallet Connection Card */}
-                <div className="meme-card p-6 space-y-5">
+                <div className="dexi-card p-5 space-y-5">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold">{t("walletConnection")}</h3>
+                    <h3 className="font-semibold">{t("walletConnection")}</h3>
                     <span className={`meme-badge ${isConnected ? "meme-badge-success" : "meme-badge-danger"}`}>
                       {isConnected ? t("connected") : t("notConnected")}
                     </span>
@@ -293,29 +302,40 @@ export default function SettingsPage() {
                       <div>
                         <div className="text-sm font-medium">MetaMask</div>
                         <div className="text-xs text-okx-text-tertiary font-mono">
-                          {isConnected && address ? formatAddress(address) : t("notConnected")} · BSC Testnet
+                          {isConnected && address ? formatAddress(address) : t("notConnected")} / BSC Mainnet
                         </div>
                       </div>
                     </div>
                     <button
-                      onClick={() => { disconnect(); showToast(t("walletDisconnected"), "success"); }}
-                      className="px-4 py-2 rounded-lg text-sm border border-okx-border-secondary text-okx-text-secondary hover:text-okx-down hover:border-okx-down/50 transition-colors"
+                      onClick={() => {
+                        if (isConnected) {
+                          disconnect();
+                          showToast(t("walletDisconnected"), "success");
+                        } else {
+                          openConnectModal?.();
+                        }
+                      }}
+                      className={
+                        isConnected
+                          ? "rounded-[6px] border border-okx-border-secondary px-4 py-2 text-sm text-okx-text-secondary transition-colors hover:border-okx-down/50 hover:text-okx-down"
+                          : "rounded-[4px] bg-dexi-accent px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-dexi-accent-strong"
+                      }
                     >
-                      {t("disconnect")}
+                      {isConnected ? t("disconnect") : tCommon("connectWallet")}
                     </button>
                   </div>
                 </div>
 
                 {/* Security Verification Card */}
-                <div className="meme-card overflow-hidden">
+                <div className="dexi-card overflow-hidden">
                   <div className="px-6 py-4 border-b border-okx-border-primary">
-                    <h3 className="font-bold">{t("securityVerification")}</h3>
+                    <h3 className="font-semibold">{t("securityVerification")}</h3>
                     <p className="text-xs text-okx-text-tertiary mt-1">{t("securityVerificationDesc")}</p>
                   </div>
 
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-[6px] bg-okx-bg-hover flex items-center justify-center">
                         <IconLock className="w-4 h-4 text-okx-text-secondary" />
                       </div>
                       <div>
@@ -327,7 +347,7 @@ export default function SettingsPage() {
                       <span className="meme-badge meme-badge-warning">{t("notSet")}</span>
                       <button
                         onClick={() => showToast(t("featureComingSoon"), "info")}
-                        className="px-3 py-1.5 rounded-lg text-xs bg-okx-bg-hover border border-okx-border-primary text-okx-text-secondary hover:text-okx-text-primary transition-colors"
+                        className="px-3 py-1.5 rounded-[6px] text-xs bg-okx-bg-hover border border-okx-border-primary text-okx-text-secondary hover:text-okx-text-primary transition-colors"
                       >
                         {t("setup")}
                       </button>
@@ -336,7 +356,7 @@ export default function SettingsPage() {
 
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-[6px] bg-okx-bg-hover flex items-center justify-center">
                         <IconPen className="w-4 h-4 text-okx-text-secondary" />
                       </div>
                       <div>
@@ -348,7 +368,7 @@ export default function SettingsPage() {
                       <span className="meme-badge meme-badge-success">{t("enabled")}</span>
                       <button
                         onClick={() => showToast(t("featureComingSoon"), "info")}
-                        className="px-3 py-1.5 rounded-lg text-xs bg-okx-bg-hover border border-okx-border-primary text-okx-text-secondary hover:text-okx-text-primary transition-colors"
+                        className="px-3 py-1.5 rounded-[6px] text-xs bg-okx-bg-hover border border-okx-border-primary text-okx-text-secondary hover:text-okx-text-primary transition-colors"
                       >
                         {t("configure")}
                       </button>
@@ -357,7 +377,7 @@ export default function SettingsPage() {
 
                   <div className="flex items-center justify-between px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-[6px] bg-okx-bg-hover flex items-center justify-center">
                         <IconClipboard className="w-4 h-4 text-okx-text-secondary" />
                       </div>
                       <div>
@@ -375,15 +395,15 @@ export default function SettingsPage() {
                 </div>
 
                 {/* API Key Management */}
-                <div className="meme-card overflow-hidden">
+                <div className="dexi-card overflow-hidden">
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
                     <div>
-                      <h3 className="font-bold">{t("apiKeyManagement")}</h3>
+                      <h3 className="font-semibold">{t("apiKeyManagement")}</h3>
                       <p className="text-xs text-okx-text-tertiary mt-1">{t("apiKeyManagementDesc")}</p>
                     </div>
                     <button
                       onClick={generateApiKey}
-                      className="px-4 py-2 rounded-lg text-xs font-bold bg-meme-lime text-black hover:opacity-90 transition-opacity"
+                      className="px-4 py-2 rounded-[6px] text-xs font-semibold bg-dexi-accent text-black hover:opacity-90 transition-opacity"
                     >
                       + {t("createApiKey")}
                     </button>
@@ -396,7 +416,7 @@ export default function SettingsPage() {
                       <p className="text-xs mt-1 mb-4">{t("noApiKeysDesc")}</p>
                       <button
                         onClick={generateApiKey}
-                        className="px-5 py-2 rounded-lg text-xs font-bold bg-meme-lime text-black hover:opacity-90 transition-opacity"
+                        className="px-5 py-2 rounded-[6px] text-xs font-semibold bg-dexi-accent text-black hover:opacity-90 transition-opacity"
                       >
                         + {t("createApiKey")}
                       </button>
@@ -420,15 +440,15 @@ export default function SettingsPage() {
                 </div>
 
                 {/* Login Activity */}
-                <div className="meme-card overflow-hidden">
+                <div className="dexi-card overflow-hidden">
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
                     <div>
-                      <h3 className="font-bold">{t("loginActivity")}</h3>
+                      <h3 className="font-semibold">{t("loginActivity")}</h3>
                       <p className="text-xs text-okx-text-tertiary mt-1">{t("loginActivityDesc")}</p>
                     </div>
                     <button
                       onClick={() => showToast(t("featureComingSoon"), "info")}
-                      className="px-4 py-2 rounded-lg text-xs border border-okx-down/30 text-okx-down hover:bg-okx-down/10 transition-colors"
+                      className="px-4 py-2 rounded-[6px] text-xs border border-okx-down/30 text-okx-down hover:bg-okx-down/10 transition-colors"
                     >
                       {t("logoutOthers")}
                     </button>
@@ -437,12 +457,12 @@ export default function SettingsPage() {
                   {mockSessions.map((session, idx) => (
                     <div key={idx} className={`flex items-center justify-between px-6 py-3.5 ${idx < mockSessions.length - 1 ? "border-b border-okx-border-primary" : ""}`}>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-okx-bg-hover flex items-center justify-center">
+                        <div className="w-8 h-8 rounded-[6px] bg-okx-bg-hover flex items-center justify-center">
                           {idx === 0 ? <IconDesktop className="w-4 h-4 text-okx-text-secondary" /> : <IconPhone className="w-4 h-4 text-okx-text-secondary" />}
                         </div>
                         <div>
                           <div className="text-sm font-medium">{session.device}</div>
-                          <div className="text-xs text-okx-text-tertiary">{session.location} · {t(session.timeKey)}</div>
+                          <div className="text-xs text-okx-text-tertiary">{session.location} / {t(session.timeKey)}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -460,12 +480,12 @@ export default function SettingsPage() {
             {/* PROFILE TAB */}
             {activeNav === "profile" && (
               <>
-                <div className="meme-card p-6 space-y-6">
-                  <h3 className="font-bold">{t("basicInfo")}</h3>
+                <div className="dexi-card p-5 space-y-6">
+                  <h3 className="font-semibold">{t("basicInfo")}</h3>
 
                   {/* Avatar */}
                   <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-meme-lime/30 to-meme-lime/10 flex items-center justify-center text-2xl border-2 border-meme-lime/20">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#44E3C7]/20 to-[#44E3C7]/5 flex items-center justify-center text-2xl border-2 border-dexi-accent/20">
                       {isConnected && address ? address.slice(2, 4).toUpperCase() : "?"}
                     </div>
                     <div>
@@ -508,7 +528,7 @@ export default function SettingsPage() {
                       {isConnected && address && (
                         <button
                           onClick={() => { navigator.clipboard.writeText(address); showToast(t("copied"), "success"); }}
-                          className="px-4 py-2.5 bg-okx-bg-hover border border-okx-border-primary rounded-xl text-sm hover:border-okx-border-hover transition-colors"
+                          className="px-4 py-2.5 bg-okx-bg-hover border border-okx-border-primary rounded-[6px] text-sm hover:border-okx-border-hover transition-colors"
                         >
                           {tCommon("copyAddress")}
                         </button>
@@ -521,14 +541,14 @@ export default function SettingsPage() {
                     <label className="block text-sm font-medium mb-2">{t("currentChain")}</label>
                     <div className="meme-input px-4 py-2.5 text-sm flex items-center gap-2">
                       <IconLink className="w-4 h-4 text-yellow-500" />
-                      BSC Testnet (Chain 97)
+                      BSC Mainnet (Chain 56)
                     </div>
                   </div>
                 </div>
 
                 {/* Referral */}
-                <div className="meme-card p-6 space-y-4">
-                  <h3 className="font-bold">{t("referralInfo")}</h3>
+                <div className="dexi-card p-5 space-y-4">
+                  <h3 className="font-semibold">{t("referralInfo")}</h3>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 meme-input px-4 py-2.5 text-sm font-mono text-okx-text-tertiary">
                       {isConnected && address ? `REF-${address.slice(2, 8).toUpperCase()}` : "\u2014"}
@@ -540,7 +560,7 @@ export default function SettingsPage() {
                           showToast(t("copied"), "success");
                         }
                       }}
-                      className="px-4 py-2.5 bg-okx-bg-hover border border-okx-border-primary rounded-xl text-sm hover:border-okx-border-hover transition-colors"
+                      className="px-4 py-2.5 bg-okx-bg-hover border border-okx-border-primary rounded-[6px] text-sm hover:border-okx-border-hover transition-colors"
                     >
                       {t("copyLink")}
                     </button>
@@ -553,15 +573,15 @@ export default function SettingsPage() {
             {/* API TAB */}
             {activeNav === "api" && (
               <>
-                <div className="meme-card overflow-hidden">
+                <div className="dexi-card overflow-hidden">
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
                     <div>
-                      <h3 className="font-bold">{t("apiKeyManagement")}</h3>
+                      <h3 className="font-semibold">{t("apiKeyManagement")}</h3>
                       <p className="text-xs text-okx-text-tertiary mt-1">{t("apiKeyManagementDesc")}</p>
                     </div>
                     <button
                       onClick={generateApiKey}
-                      className="px-4 py-2 rounded-lg text-xs font-bold bg-meme-lime text-black hover:opacity-90 transition-opacity"
+                      className="px-4 py-2 rounded-[6px] text-xs font-semibold bg-dexi-accent text-black hover:opacity-90 transition-opacity"
                     >
                       + {t("createApiKey")}
                     </button>
@@ -574,7 +594,7 @@ export default function SettingsPage() {
                       <p className="text-xs mt-1 mb-4">{t("noApiKeysDesc")}</p>
                       <button
                         onClick={generateApiKey}
-                        className="px-5 py-2 rounded-lg text-xs font-bold bg-meme-lime text-black hover:opacity-90 transition-opacity"
+                        className="px-5 py-2 rounded-[6px] text-xs font-semibold bg-dexi-accent text-black hover:opacity-90 transition-opacity"
                       >
                         + {t("createApiKey")}
                       </button>
@@ -600,8 +620,8 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-                <div className="meme-card p-6 space-y-4">
-                  <h3 className="font-bold">{t("apiDocs")}</h3>
+                <div className="dexi-card p-5 space-y-4">
+                  <h3 className="font-semibold">{t("apiDocs")}</h3>
                   <p className="text-sm text-okx-text-tertiary">{t("apiDocsDesc")}</p>
                   <div className="flex gap-3">
                     <div className="flex-1 meme-input px-4 py-3 text-xs font-mono text-okx-text-tertiary">
@@ -618,9 +638,9 @@ export default function SettingsPage() {
             {/* NOTIFICATIONS TAB */}
             {activeNav === "notifications" && (
               <>
-                <div className="meme-card overflow-hidden">
+                <div className="dexi-card overflow-hidden">
                   <div className="px-6 py-4 border-b border-okx-border-primary">
-                    <h3 className="font-bold">{t("tradeNotifications")}</h3>
+                    <h3 className="font-semibold">{t("tradeNotifications")}</h3>
                     <p className="text-xs text-okx-text-tertiary mt-1">{t("tradeNotificationsDesc")}</p>
                   </div>
 
@@ -649,9 +669,9 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="meme-card overflow-hidden">
+                <div className="dexi-card overflow-hidden">
                   <div className="px-6 py-4 border-b border-okx-border-primary">
-                    <h3 className="font-bold">{t("otherNotifications")}</h3>
+                    <h3 className="font-semibold">{t("otherNotifications")}</h3>
                   </div>
 
                   <div className="flex items-center justify-between px-6 py-4 border-b border-okx-border-primary">
@@ -675,8 +695,8 @@ export default function SettingsPage() {
 
             {/* FEES TAB */}
             {activeNav === "fees" && (
-              <div className="meme-card p-6 space-y-6">
-                <h3 className="font-bold">{t("tradeSettings")}</h3>
+              <div className="dexi-card p-5 space-y-6">
+                <h3 className="font-semibold">{t("tradeSettings")}</h3>
 
                 <div>
                   <label className="block text-sm font-medium mb-2">{t("slippageTolerance")} (%)</label>
@@ -689,7 +709,7 @@ export default function SettingsPage() {
                       step="0.1" min="0" max="50"
                     />
                     {["0.5", "1", "2"].map((v) => (
-                      <button key={v} onClick={() => setLocalSlippage(v)} className="px-4 py-2 bg-okx-bg-hover border border-okx-border-primary rounded-xl text-sm hover:border-okx-border-hover transition-colors">
+                      <button key={v} onClick={() => setLocalSlippage(v)} className="px-4 py-2 bg-okx-bg-hover border border-okx-border-primary rounded-[6px] text-sm hover:border-okx-border-hover transition-colors">
                         {v}%
                       </button>
                     ))}
@@ -712,7 +732,7 @@ export default function SettingsPage() {
                       { label: `20 ${t("minutes")}`, val: "1200" },
                       { label: `30 ${t("minutes")}`, val: "1800" },
                     ].map((d) => (
-                      <button key={d.val} onClick={() => setLocalDeadline(d.val)} className="px-4 py-2 bg-okx-bg-hover border border-okx-border-primary rounded-xl text-sm hover:border-okx-border-hover transition-colors">
+                      <button key={d.val} onClick={() => setLocalDeadline(d.val)} className="px-4 py-2 bg-okx-bg-hover border border-okx-border-primary rounded-[6px] text-sm hover:border-okx-border-hover transition-colors">
                         {d.label}
                       </button>
                     ))}
@@ -723,7 +743,7 @@ export default function SettingsPage() {
                   <button onClick={handleSave} className="meme-btn-primary px-6 py-2.5">{t("save")}</button>
                   <button
                     onClick={() => { setLocalSlippage("1"); setLocalDeadline("1200"); setSlippageTolerance(1); setTransactionDeadline(1200); }}
-                    className="px-6 py-2.5 bg-okx-bg-hover border border-okx-border-primary rounded-xl text-sm hover:border-okx-border-hover transition-colors"
+                    className="px-6 py-2.5 bg-okx-bg-hover border border-okx-border-primary rounded-[6px] text-sm hover:border-okx-border-hover transition-colors"
                   >
                     {t("reset")}
                   </button>
@@ -734,16 +754,16 @@ export default function SettingsPage() {
             {/* APPEARANCE TAB */}
             {activeNav === "appearance" && mounted && (
               <>
-                <div className="meme-card p-6 space-y-6">
-                  <h3 className="font-bold">{t("themeSettings")}</h3>
+                <div className="dexi-card p-5 space-y-6">
+                  <h3 className="font-semibold">{t("themeSettings")}</h3>
                   <div className="grid grid-cols-3 gap-4">
                     {(["dark", "light", "system"] as AppTheme[]).map((themeOpt) => (
                       <button
                         key={themeOpt}
                         onClick={() => setTheme(themeOpt)}
-                        className={`p-4 rounded-xl border-2 transition-all text-center ${
+                        className={`p-4 rounded-[6px] border-2 transition-all text-center ${
                           preferences.theme === themeOpt
-                            ? "border-meme-lime bg-meme-lime/5"
+                            ? "border-dexi-accent bg-dexi-accent-soft"
                             : "border-okx-border-primary hover:border-okx-border-hover"
                         }`}
                       >
@@ -756,16 +776,16 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="meme-card p-6 space-y-6">
-                  <h3 className="font-bold">{t("languageSettings")}</h3>
+                <div className="dexi-card p-5 space-y-6">
+                  <h3 className="font-semibold">{t("languageSettings")}</h3>
                   <div className="grid grid-cols-2 gap-3">
                     {locales.map((locale) => (
                       <button
                         key={locale}
                         onClick={() => changeLocale(locale as Locale)}
-                        className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
+                        className={`flex items-center gap-3 p-4 rounded-[6px] border-2 transition-all ${
                           currentLocale === locale
-                            ? "border-meme-lime bg-meme-lime/5"
+                            ? "border-dexi-accent bg-dexi-accent-soft"
                             : "border-okx-border-primary hover:border-okx-border-hover"
                         }`}
                       >
@@ -775,7 +795,7 @@ export default function SettingsPage() {
                           <div className="text-xs text-okx-text-tertiary">{locale.toUpperCase()}</div>
                         </div>
                         {currentLocale === locale && (
-                          <svg className="w-5 h-5 ml-auto text-meme-lime" fill="currentColor" viewBox="0 0 20 20">
+                          <svg className="w-5 h-5 ml-auto text-dexi-accent" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                           </svg>
                         )}
@@ -791,3 +811,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

@@ -1,5 +1,5 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
-import { bsc, bscTestnet } from "wagmi/chains";
+import { bsc } from "wagmi/chains";
 import { http } from "viem";
 import { createConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
@@ -14,9 +14,8 @@ const isDev = process.env.NODE_ENV === 'development';
 const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56", 10);
 const isMainnet = chainId === 56;
 
-// Get RPC URLs for both chains
-const mainnetRpcUrl = process.env.NEXT_PUBLIC_BSC_MAINNET_RPC_URL || "https://bsc-dataseed.binance.org/";
-const testnetRpcUrl = process.env.NEXT_PUBLIC_BSC_TESTNET_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
+// Get RPC URL for BSC mainnet
+const mainnetRpcUrl = process.env.NEXT_PUBLIC_BSC_MAINNET_RPC_URL || "https://bsc-dataseed.bnbchain.org/";
 
 // Get WalletConnect Project ID from environment
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "";
@@ -42,23 +41,21 @@ try {
     config = getDefaultConfig({
       appName: "DEXI",
       projectId: projectId,
-      chains: [bsc, bscTestnet],
+      chains: [bsc],
       transports: {
         [bsc.id]: http(mainnetRpcUrl),
-        [bscTestnet.id]: http(testnetRpcUrl),
       },
       ssr: true,
     });
   } else {
     // 无效的 Project ID - 只使用注入钱包，跳过 WalletConnect 以避免网络请求延迟
     config = createConfig({
-      chains: [bsc, bscTestnet],
+      chains: [bsc],
       connectors: [
         injected({ shimDisconnect: true }),
       ],
       transports: {
         [bsc.id]: http(mainnetRpcUrl),
-        [bscTestnet.id]: http(testnetRpcUrl),
       },
       ssr: true,
     }) as ReturnType<typeof getDefaultConfig>;
@@ -68,19 +65,18 @@ try {
 
   // Fallback config - 只使用注入钱包
   config = createConfig({
-    chains: [bsc, bscTestnet],
+    chains: [bsc],
     connectors: [
       injected({ shimDisconnect: true }),
     ],
     transports: {
       [bsc.id]: http(mainnetRpcUrl),
-      [bscTestnet.id]: http(testnetRpcUrl),
     },
     ssr: true,
   }) as ReturnType<typeof getDefaultConfig>;
 }
 
-// Export the default chain based on environment (but both are available)
-const targetChain = isMainnet ? bsc : bscTestnet;
+// Export the default BSC mainnet chain.
+const targetChain = bsc;
 
-export { config, configError, isValidProjectId, targetChain, isMainnet, bsc, bscTestnet };
+export { config, configError, isValidProjectId, targetChain, isMainnet, bsc };

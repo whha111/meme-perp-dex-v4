@@ -40,10 +40,15 @@ const config: Config = {
         },
         // MEMEPERP 品牌直接颜色
         meme: {
-          lime: "#BFFF00",
+          lime: "var(--dexi-accent)",
           dark: "#111111",
           darker: "#0a0a0a",
           black: "#000000",
+        },
+        dexi: {
+          accent: "var(--dexi-accent)",
+          "accent-strong": "var(--dexi-accent-strong)",
+          "accent-soft": "var(--dexi-accent-soft)",
         },
         // 合约交易 Binance 配色
         perp: {

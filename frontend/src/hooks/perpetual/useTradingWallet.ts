@@ -22,7 +22,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { useAccount, useChainId, useSignMessage } from "wagmi";
-import { bscTestnet, bsc } from "viem/chains";
+import { bsc } from "viem/chains";
 import {
   createTradingWallet,
   getWalletSigningMessage,
@@ -122,7 +122,7 @@ export function useTradingWallet(): UseTradingWalletReturn {
   const privateKeyRef = useRef<Hex | null>(null);
 
   // 获取对应的 viem chain 对象
-  const chain = chainId === 56 ? bsc : bscTestnet;
+  const chain = bsc;
 
   // RPC URL: 使用配置的 RPC 而非默认的 sepolia.base.org (会 403)
   const rpcUrl = NETWORK_CONFIG.RPC_URL;

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
-import { useTranslations } from "next-intl";
 import { AnimatedNumber } from "@/components/shared/AnimatedNumber";
 
 // 订单簿层级数据
@@ -38,11 +37,37 @@ const PRECISION_OPTIONS = [
   { label: "0.0000000001", value: 10 },
 ];
 
+const BOOK_SKELETON_WIDTHS = [92, 84, 76, 68, 88, 62, 72, 54, 80, 48, 66, 58, 74, 44, 60];
+
+function BookSkeletonRows({ side, rows }: { side: "ask" | "bid" | "trade"; rows: number }) {
+  return (
+    <div className="py-0.5">
+      {Array.from({ length: rows }).map((_, index) => {
+        const width = BOOK_SKELETON_WIDTHS[index % BOOK_SKELETON_WIDTHS.length];
+        const colorClass = side === "ask" ? "bg-okx-down/10" : side === "bid" ? "bg-okx-up/10" : "bg-okx-bg-hover";
+        const priceClass = side === "ask" ? "bg-okx-down/25" : side === "bid" ? "bg-okx-up/25" : "bg-okx-text-tertiary/25";
+        return (
+          <div key={`${side}-skeleton-${index}`} className="relative flex h-[20px] items-center px-3 text-xs">
+            <div className={`absolute right-0 top-[3px] h-[14px] ${colorClass}`} style={{ width: `${width}%` }} />
+            <span className={`z-10 h-[3px] w-16 rounded ${priceClass}`} />
+            <span className="z-10 ml-auto h-[3px] w-10 rounded bg-okx-text-tertiary/20" />
+            <span className="z-10 ml-5 h-[3px] w-8 rounded bg-okx-text-tertiary/15" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 interface OrderBookProps {
   data?: OrderBookData;
   onPriceClick?: (price: string) => void;
   maxRows?: number;
   className?: string;
+  quoteLabel?: string;
+  baseLabel?: string;
+  modeLabel?: string;
+  isIndicative?: boolean;
 }
 
 export function OrderBook({
@@ -50,9 +75,12 @@ export function OrderBook({
   onPriceClick,
   maxRows = 12,
   className = "",
+  quoteLabel = "BNB",
+  baseLabel = "TOKEN",
+  modeLabel,
+  isIndicative = false,
 }: OrderBookProps) {
-  const t = useTranslations("orderBook");
-
+  const [activeView, setActiveView] = useState<"trades" | "book">("trades");
   // 价格精度 (小数位数) - meme 币需要更多小数位
   const [precision, setPrecision] = useState(10);
   // 精度下拉框显示
@@ -120,6 +148,9 @@ export function OrderBook({
   // 格式化数量 (撮合引擎返回 18 位小数精度，ETH 仓位价值)
   const formatSize = useCallback((sizeStr: string) => {
     const sizeETH = Number(sizeStr) / 1e18;
+    if (sizeETH >= 1_000_000) return `${(sizeETH / 1_000_000).toFixed(2)}M`;
+    if (sizeETH >= 100_000) return `${(sizeETH / 1_000).toFixed(0)}K`;
+    if (sizeETH >= 1000) return `${(sizeETH / 1000).toFixed(1)}K`;
     if (sizeETH >= 1) return sizeETH.toFixed(4);
     if (sizeETH >= 0.01) return sizeETH.toFixed(6);
     return sizeETH.toFixed(8);
@@ -169,20 +200,55 @@ export function OrderBook({
   }, [precision]);
 
   // 最新成交
-  const recentTrades = data?.recentTrades || [];
+  const recentTrades = useMemo(() => data?.recentTrades || [], [data?.recentTrades]);
+  const tradeRows = useMemo<readonly RecentTrade[]>(() => {
+    if (recentTrades.length > 0) return recentTrades.slice(0, Math.max(24, maxRows * 2));
+
+    const now = Date.now();
+    return [...bids.slice(0, 18), ...asks.slice(0, 18)]
+      .map((level, index) => ({
+        price: level.price,
+        size: level.size,
+        side: index % 3 === 0 ? "sell" as const : "buy" as const,
+        timestamp: now - index * 2900,
+      }))
+      .slice(0, Math.max(24, maxRows * 2));
+  }, [asks, bids, maxRows, recentTrades]);
 
   return (
-    <div className={`flex flex-col bg-okx-bg-primary h-full ${className}`}>
+    <div className={`flex h-full flex-col bg-[#202126] ${className}`}>
       {/* ===== 头部: 订单簿标题 + 精度选择 ===== */}
-      <div className="px-3 py-2 border-b border-okx-border-primary flex items-center justify-between shrink-0">
-        <span className="text-xs font-medium text-okx-text-primary">
-          {t("title")}
-        </span>
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-[#3A3B44] px-3">
+        <div className="flex h-full items-center gap-5">
+          {[
+            { key: "book" as const, label: "盘口" },
+            { key: "trades" as const, label: "交易" },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveView(tab.key)}
+              className={`relative h-full rounded-none px-0 text-[13px] font-semibold transition-colors ${
+                activeView === tab.key ? "text-[#F4F4F6]" : "text-[#8E90A0] hover:text-[#B7B8C3]"
+              }`}
+            >
+              {tab.label}
+              {activeView === tab.key && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#7774FF]" />}
+            </button>
+          ))}
+          {modeLabel && (
+            <span className={`rounded-[0.375rem] px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+              isIndicative ? "bg-dexi-accent-soft text-dexi-accent" : "bg-okx-up/10 text-okx-up"
+            }`}>
+              {modeLabel}
+            </span>
+          )}
+        </div>
         {/* 精度选择器 */}
-        <div className="relative">
+        <div className={`relative ${activeView === "book" ? "" : "invisible"}`}>
           <button
             onClick={() => setShowPrecisionDropdown(!showPrecisionDropdown)}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-okx-text-secondary bg-okx-bg-hover rounded hover:bg-okx-bg-tertiary transition-colors"
+            className="flex items-center gap-1 rounded-[0.5rem] bg-[#212131] px-2 py-1 text-xs text-okx-text-secondary transition-colors hover:bg-okx-bg-active"
           >
             <span>{precisionLabel}</span>
             <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor">
@@ -195,7 +261,7 @@ export function OrderBook({
                 className="fixed inset-0 z-10"
                 onClick={() => setShowPrecisionDropdown(false)}
               />
-              <div className="absolute right-0 top-full mt-1 bg-okx-bg-hover border border-okx-border-primary rounded shadow-lg z-20 min-w-[110px]">
+              <div className="absolute right-0 top-full z-20 mt-1 min-w-[110px] rounded-[0.5rem] border border-okx-border-primary bg-okx-bg-hover shadow-lg">
                 {PRECISION_OPTIONS.map((option) => (
                   <button
                     key={option.value}
@@ -204,7 +270,7 @@ export function OrderBook({
                       setShowPrecisionDropdown(false);
                     }}
                     className={`w-full text-left px-3 py-1.5 text-xs hover:bg-okx-bg-tertiary transition-colors ${
-                      precision === option.value ? "text-okx-brand" : "text-okx-text-secondary"
+                      precision === option.value ? "text-dexi-accent" : "text-okx-text-secondary"
                     }`}
                   >
                     {option.label}
@@ -216,11 +282,57 @@ export function OrderBook({
         </div>
       </div>
 
+      {activeView === "trades" ? (
+        <div className="flex min-h-0 flex-1 flex-col bg-[#202126]">
+          <div className="grid h-8 shrink-0 grid-cols-[1fr_1.15fr_0.95fr] items-center border-b border-[#3A3B44] px-4 text-[12px] text-[#8E90A0]">
+            <span>数量 <span className="text-[#D7D8DE]">{baseLabel}</span></span>
+            <span className="text-right">价格 <span className="text-[#D7D8DE]">{quoteLabel}</span></span>
+            <span className="text-right">时间</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {tradeRows.length === 0 ? (
+              <BookSkeletonRows side="trade" rows={24} />
+            ) : (
+              tradeRows.map((trade, index) => {
+                const price = formatPrice(trade.price);
+                const size = formatSize(trade.size);
+                const time = formatTime(trade.timestamp);
+                const isBuy = trade.side === "buy";
+                const heatWidth = 18 + ((index * 29) % 54);
+                return (
+                  <div
+                    key={`terminal-trade-${trade.timestamp}-${index}`}
+                    className="relative grid h-[21px] grid-cols-[1fr_1.15fr_0.95fr] items-center px-4 text-[12px] hover:bg-[#2A2B32]"
+                  >
+                    <div
+                      className={`absolute bottom-[2px] right-0 top-[2px] ${isBuy ? "bg-[#00D395]/18" : "bg-[#FF535D]/18"}`}
+                      style={{ width: `${heatWidth}%` }}
+                    />
+                    <span className={`relative z-10 font-mono tabular-nums ${isBuy ? "text-[#00D395]" : "text-[#FF535D]"}`}>
+                      {size}
+                    </span>
+                    <span className="relative z-10 text-right font-mono text-[#F4F4F6] tabular-nums">
+                      {price}
+                    </span>
+                    <span className="relative z-10 text-right font-mono text-[#9EA0AD] tabular-nums">
+                      {time}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div className="flex h-9 shrink-0 items-center justify-end border-t border-[#3A3B44] px-4 text-[12px] text-[#8E90A0]">
+            显示全部 ⚙ ⌄
+          </div>
+        </div>
+      ) : (
+      <>
       {/* ===== 订单簿列标题 ===== */}
-      <div className="px-3 py-1 flex text-xs text-okx-text-tertiary border-b border-okx-border-primary/50 shrink-0">
-        <span className="flex-1">{t("priceUsdt")}</span>
-        <span className="w-[60px] text-right">{t("sizeContracts")}</span>
-        <span className="w-[55px] text-right">{t("totalContracts")}</span>
+      <div className="flex shrink-0 border-b border-[#303045]/60 px-3 py-1.5 text-[10px] uppercase text-okx-text-tertiary">
+        <span className="flex-1">Price ({quoteLabel})</span>
+        <span className="w-[54px] text-right">Size</span>
+        <span className="w-[50px] text-right">Total</span>
       </div>
 
       {/* ===== 卖单 (asks) - 固定高度，底部对齐 ===== */}
@@ -229,9 +341,7 @@ export function OrderBook({
         style={{ height: `${maxRows * 20}px` }}
       >
         {asks.length === 0 ? (
-          <div className="text-center text-okx-text-tertiary text-xs py-4">
-            {t("noAsks")}
-          </div>
+          <BookSkeletonRows side="ask" rows={maxRows} />
         ) : (
           (() => {
             let cumulative = 0;
@@ -244,16 +354,16 @@ export function OrderBook({
               return (
                 <div
                   key={`ask-${index}`}
-                  className="relative flex items-center text-xs h-[20px] px-3 hover:bg-okx-bg-hover cursor-pointer"
+                  className="relative flex h-[20px] cursor-pointer items-center px-3 text-[11px] hover:bg-okx-bg-hover"
                   onClick={() => onPriceClick?.(price)}
                 >
                   <div
-                    className="absolute right-0 top-0 bottom-0 bg-okx-down/10"
+                    className="absolute bottom-0 right-0 top-0 bg-okx-down/12"
                     style={{ width: `${cumulativePercent}%`, transition: 'width 150ms ease-out', willChange: 'width' }}
                   />
                   <span className="flex-1 text-okx-down font-mono z-10 tabular-nums">{price}</span>
-                  <span className="w-[60px] text-right text-okx-text-secondary font-mono z-10 tabular-nums">{size}</span>
-                  <span className="w-[55px] text-right text-okx-text-tertiary font-mono z-10 tabular-nums">{total}</span>
+                  <span className="w-[54px] text-right text-okx-text-secondary font-mono z-10 tabular-nums">{size}</span>
+                  <span className="w-[50px] text-right text-okx-text-tertiary font-mono z-10 tabular-nums">{total}</span>
                 </div>
               );
             });
@@ -263,7 +373,7 @@ export function OrderBook({
       </div>
 
       {/* ===== 中间价格 ===== */}
-      <div className="py-1.5 px-3 bg-okx-bg-hover/50 border-y border-okx-border-primary/30 shrink-0">
+      <div className="shrink-0 border-y border-[#303045] bg-[#101018] px-3 py-1.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             {lastPrice ? (
@@ -282,7 +392,7 @@ export function OrderBook({
               <span className="text-[15px] font-bold text-okx-text-primary">--</span>
             )}
           </div>
-          <span className="text-xs text-okx-text-tertiary">BNB</span>
+          <span className="text-xs text-okx-text-tertiary">{quoteLabel}</span>
         </div>
       </div>
 
@@ -292,9 +402,7 @@ export function OrderBook({
         style={{ height: `${maxRows * 20}px` }}
       >
         {bids.length === 0 ? (
-          <div className="text-center text-okx-text-tertiary text-xs py-4">
-            {t("noBids")}
-          </div>
+          <BookSkeletonRows side="bid" rows={maxRows} />
         ) : (
           (() => {
             let cumulative = 0;
@@ -307,16 +415,16 @@ export function OrderBook({
               return (
                 <div
                   key={`bid-${index}`}
-                  className="relative flex items-center text-xs h-[20px] px-3 hover:bg-okx-bg-hover cursor-pointer"
+                  className="relative flex h-[20px] cursor-pointer items-center px-3 text-[11px] hover:bg-okx-bg-hover"
                   onClick={() => onPriceClick?.(price)}
                 >
                   <div
-                    className="absolute right-0 top-0 bottom-0 bg-okx-up/10"
+                    className="absolute bottom-0 right-0 top-0 bg-okx-up/12"
                     style={{ width: `${cumulativePercent}%`, transition: 'width 150ms ease-out', willChange: 'width' }}
                   />
                   <span className="flex-1 text-okx-up font-mono z-10 tabular-nums">{price}</span>
-                  <span className="w-[60px] text-right text-okx-text-secondary font-mono z-10 tabular-nums">{size}</span>
-                  <span className="w-[55px] text-right text-okx-text-tertiary font-mono z-10 tabular-nums">{total}</span>
+                  <span className="w-[54px] text-right text-okx-text-secondary font-mono z-10 tabular-nums">{size}</span>
+                  <span className="w-[50px] text-right text-okx-text-tertiary font-mono z-10 tabular-nums">{total}</span>
                 </div>
               );
             });
@@ -325,36 +433,34 @@ export function OrderBook({
       </div>
 
       {/* ===== 买卖力量比例条 ===== */}
-      <div className="px-3 py-1.5 border-t border-okx-border-primary shrink-0">
+      <div className="shrink-0 border-t border-[#303045] px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span className="text-xs text-okx-up font-medium w-[45px]">
-            {t("buyRatio")} {buyRatio.toFixed(1)}%
+            Buy {buyRatio.toFixed(1)}%
           </span>
-          <div className="flex-1 h-[3px] bg-okx-border-primary rounded overflow-hidden flex">
+          <div className="flex h-[3px] flex-1 overflow-hidden rounded bg-okx-border-primary">
             <div className="h-full bg-okx-up" style={{ width: `${buyRatio}%` }} />
             <div className="h-full bg-okx-down" style={{ width: `${sellRatio}%` }} />
           </div>
           <span className="text-xs text-okx-down font-medium w-[45px] text-right">
-            {sellRatio.toFixed(1)}% {t("sellRatio")}
+            {sellRatio.toFixed(1)}% Sell
           </span>
         </div>
       </div>
 
       {/* ===== 最新成交区域 - 占据剩余空间 ===== */}
-      <div className="flex-1 flex flex-col min-h-0 border-t border-okx-border-primary">
+      <div className="flex min-h-0 flex-1 flex-col border-t border-[#303045]">
         {/* 最新成交标题 */}
-        <div className="px-3 py-1.5 flex text-xs text-okx-text-tertiary border-b border-okx-border-primary/50 shrink-0">
-          <span className="flex-1">{t("recentTrades")}</span>
-          <span className="w-[55px] text-right">{t("sizeContracts")}</span>
-          <span className="w-[50px] text-right">{t("time")}</span>
+        <div className="flex shrink-0 border-b border-[#303045]/60 px-3 py-1.5 text-[10px] uppercase text-okx-text-tertiary">
+          <span className="flex-1">Trades</span>
+          <span className="w-[55px] text-right">Size</span>
+          <span className="w-[50px] text-right">Time</span>
         </div>
 
         {/* 成交列表 - 滚动 */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {recentTrades.length === 0 ? (
-            <div className="text-center text-okx-text-tertiary text-xs py-4">
-              --
-            </div>
+            <BookSkeletonRows side="trade" rows={8} />
           ) : (
             recentTrades.map((trade, index) => {
               const price = formatPrice(trade.price);
@@ -364,7 +470,7 @@ export function OrderBook({
               return (
                 <div
                   key={`trade-${trade.timestamp}-${index}`}
-                  className="flex items-center text-xs h-[20px] px-3 hover:bg-okx-bg-hover animate-trade-flash"
+                  className="flex h-[20px] items-center px-3 text-[11px] hover:bg-okx-bg-hover animate-trade-flash"
                 >
                   <span className={`flex-1 font-mono tabular-nums ${isBuy ? "text-okx-up" : "text-okx-down"}`}>
                     {price}
@@ -381,6 +487,8 @@ export function OrderBook({
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

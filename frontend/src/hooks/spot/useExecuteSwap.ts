@@ -15,7 +15,7 @@ import { useWriteContract, useWaitForTransactionReceipt, useChainId, useAccount 
 import { parseUnits, type Address } from "viem";
 import { useToast } from "@/components/shared/Toast";
 import { CONTRACTS } from "@/lib/contracts";
-import { isValidChainId, CHAIN_ID_BSC_TESTNET } from "@/lib/eip712";
+import { isValidChainId, CHAIN_ID_BSC_MAINNET } from "@/lib/eip712";
 
 // 请求锁管理器 (用于防止并发交易)
 class RequestLockManager {
@@ -159,7 +159,7 @@ export function useExecuteSwap() {
     if (effectiveChainId && !isValidChainId(effectiveChainId)) {
       devLog.warn(
         `[useExecuteSwap] Invalid chain ID: ${effectiveChainId}. ` +
-        `Please switch to BSC Testnet (${CHAIN_ID_BSC_TESTNET}).`
+        `Please switch to BSC Mainnet (${CHAIN_ID_BSC_MAINNET}).`
       );
     }
   }, [effectiveChainId]);
@@ -262,7 +262,7 @@ export function useExecuteSwap() {
         }
 
         if (!effectiveChainId || !isValidChainId(effectiveChainId)) {
-          throw new Error(`请切换到 BSC Testnet 网络 (Chain ID: ${CHAIN_ID_BSC_TESTNET})`);
+          throw new Error(`请切换到 BSC Mainnet 网络 (Chain ID: ${CHAIN_ID_BSC_MAINNET})`);
         }
 
         devLog.log("[useExecuteSwap] Executing swap:", {

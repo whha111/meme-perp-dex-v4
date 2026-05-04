@@ -1,16 +1,16 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { formatEther, formatUnits, type Address } from "viem";
 import dynamic from "next/dynamic";
-// V2 架构：使用 Settlement 合约 + 撮合引擎的用户对赌模式
+// V2 鏋舵瀯锛氫娇鐢?Settlement 鍚堢害 + 鎾悎寮曟搸鐨勭敤鎴峰璧屾ā寮?
 import { PerpetualOrderPanelV2 } from "./PerpetualOrderPanelV2";
 import { usePerpetualV2 } from "@/hooks/perpetual/usePerpetualV2";
 import { AccountBalance } from "@/components/common/AccountBalance";
 import { useUnifiedWebSocket } from "@/hooks/common/useUnifiedWebSocket";
-import { OrderBook } from "@/components/common/OrderBook";
+import { OrderBook, type OrderBookData } from "@/components/common/OrderBook";
 import { LiquidationHeatmap } from "./LiquidationHeatmap";
 import { AllPositions } from "./AllPositions";
 import { HunterLeaderboard } from "@/components/spot/HunterLeaderboard";
@@ -21,7 +21,7 @@ import { usePoolState, calculatePriceUsd, calculateMarketCapUsd } from "@/hooks/
 import { useToast } from "@/components/shared/Toast";
 import { useETHPrice } from "@/hooks/common/useETHPrice";
 import { useTradingWallet } from "@/hooks/perpetual/useTradingWallet";
-import { cancelOrder, getOrderHistory, getTradeHistory, type HistoricalOrder, type PerpTradeRecord } from "@/utils/orderSigning";
+import { getOrderHistory, getTradeHistory, type HistoricalOrder, type PerpTradeRecord } from "@/utils/orderSigning";
 import { useRiskControl } from "@/hooks/perpetual/useRiskControl";
 import { useApiError } from "@/hooks/common/useApiError";
 import { trackRender } from "@/lib/debug-render";
@@ -29,11 +29,11 @@ import { MATCHING_ENGINE_URL } from "@/config/api";
 import { AnimatedNumber } from "@/components/shared/AnimatedNumber";
 import { TradingErrorBoundary } from "@/components/shared/TradingErrorBoundary";
 
-// P003 修复: 统一使用 V2 架构（Settlement 合约 + 撮合引擎）
-// 移除旧的 PositionManager 合约依赖，仓位数据统一从撮合引擎获取
+// P003 淇: 缁熶竴浣跨敤 V2 鏋舵瀯锛圫ettlement 鍚堢害 + 鎾悎寮曟搸锛?
+// 绉婚櫎鏃х殑 PositionManager 鍚堢害渚濊禆锛屼粨浣嶆暟鎹粺涓€浠庢挳鍚堝紩鎿庤幏鍙?
 
 // Dynamically import chart to avoid SSR issues
-// 永续合约使用专用图表组件（从撮合引擎获取数据）
+// 姘哥画鍚堢害浣跨敤涓撶敤鍥捐〃缁勪欢锛堜粠鎾悎寮曟搸鑾峰彇鏁版嵁锛?
 const PerpetualPriceChart = dynamic(
   () => import("./PerpetualPriceChart").then((mod) => mod.PerpetualPriceChart),
   {
@@ -42,22 +42,335 @@ const PerpetualPriceChart = dynamic(
   }
 );
 
-// 用 React.memo 包装图表组件，只在 props 真正变化时重新渲染
-// 防止父组件因为倒计时等频繁状态更新导致图表闪烁
+// 鐢?React.memo 鍖呰鍥捐〃缁勪欢锛屽彧鍦?props 鐪熸鍙樺寲鏃堕噸鏂版覆鏌?
+// 闃叉鐖剁粍浠跺洜涓哄€掕鏃剁瓑棰戠箒鐘舵€佹洿鏂板鑷村浘琛ㄩ棯鐑?
 const MemoizedPriceChart = React.memo(PerpetualPriceChart);
+
+const CHART_PLACEHOLDER_CANDLES = [
+  { x: 8, y: 48, h: 62, up: true },
+  { x: 14, y: 66, h: 42, up: false },
+  { x: 20, y: 52, h: 76, up: true },
+  { x: 26, y: 44, h: 54, up: true },
+  { x: 32, y: 58, h: 88, up: false },
+  { x: 38, y: 38, h: 72, up: true },
+  { x: 44, y: 56, h: 50, up: false },
+  { x: 50, y: 36, h: 98, up: true },
+  { x: 56, y: 46, h: 66, up: true },
+  { x: 62, y: 62, h: 44, up: false },
+  { x: 68, y: 34, h: 82, up: true },
+  { x: 74, y: 50, h: 58, up: false },
+] as const;
+
+const REFERENCE_PRICE_USD: Record<string, number> = {
+  DOGE: 0.1842,
+  SHIB: 0.0000129,
+  PEPE: 0.00000986,
+  FLOKI: 0.0000874,
+  BONK: 0.0000186,
+  WIF: 2.18,
+  POPCAT: 0.318,
+  MOG: 0.00000112,
+};
+
+const REFERENCE_MARKET_STATS: Record<string, { change: number; volume: string; openInterest: string; funding: string }> = {
+  DOGE: { change: 2.14, volume: "$342.6M", openInterest: "$86.4M", funding: "0.0041%" },
+  SHIB: { change: -1.28, volume: "$118.2M", openInterest: "$34.8M", funding: "-0.0018%" },
+  PEPE: { change: 4.62, volume: "$186.9M", openInterest: "$42.7M", funding: "0.0063%" },
+  FLOKI: { change: 1.17, volume: "$72.4M", openInterest: "$19.6M", funding: "0.0027%" },
+  BONK: { change: -0.82, volume: "$94.1M", openInterest: "$22.3M", funding: "-0.0009%" },
+  WIF: { change: 3.41, volume: "$156.8M", openInterest: "$37.9M", funding: "0.0054%" },
+  POPCAT: { change: 6.28, volume: "$31.5M", openInterest: "$8.2M", funding: "0.0081%" },
+  MOG: { change: -2.35, volume: "$24.8M", openInterest: "$6.1M", funding: "-0.0032%" },
+};
+
+function formatTerminalUsd(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "--";
+  if (value >= 1000) return value.toLocaleString("en-US", { maximumFractionDigits: 1 });
+  if (value >= 1) return value.toFixed(4);
+  if (value >= 0.01) return value.toFixed(5);
+  if (value >= 0.0001) return value.toFixed(7);
+  return value.toFixed(9);
+}
+
+function toWeiString(value: number): string {
+  const scaled = Math.max(1, Math.round(Math.max(value, 0) * 1e8));
+  return `${scaled}0000000000`;
+}
+
+function hashSymbol(symbol: string): number {
+  return symbol.split("").reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 7), 0);
+}
+
+function buildIndicativeOrderBook(symbol: string, priceUsd: number): OrderBookData {
+  const seed = hashSymbol(symbol);
+  const spread = Math.max(priceUsd * 0.0009, priceUsd >= 1 ? 0.001 : priceUsd * 0.0004);
+  const step = Math.max(priceUsd * 0.00065, priceUsd >= 1 ? 0.002 : priceUsd * 0.0003);
+  const baseSize = priceUsd >= 1 ? 220 : priceUsd >= 0.001 ? 4200 : 760000;
+
+  const shorts = Array.from({ length: 16 }).map((_, index) => {
+    const variance = 1 + (((seed + index * 17) % 23) - 9) / 100;
+    const price = priceUsd + spread + step * index;
+    const size = baseSize * variance * (1 + index * 0.055);
+    return {
+      price: toWeiString(price),
+      size: toWeiString(size),
+      count: 1 + ((seed + index) % 5),
+    };
+  });
+
+  const longs = Array.from({ length: 16 }).map((_, index) => {
+    const variance = 1 + (((seed + index * 13) % 19) - 8) / 100;
+    const price = Math.max(priceUsd - spread - step * index, priceUsd * 0.6);
+    const size = baseSize * variance * (1 + index * 0.048);
+    return {
+      price: toWeiString(price),
+      size: toWeiString(size),
+      count: 1 + ((seed + index * 2) % 5),
+    };
+  });
+
+  const recentTrades = Array.from({ length: 12 }).map((_, index) => {
+    const side = (seed + index) % 3 === 0 ? "sell" : "buy";
+    const drift = ((index % 6) - 2.5) * step * 0.45;
+    return {
+      price: toWeiString(Math.max(priceUsd + drift, priceUsd * 0.7)),
+      size: toWeiString(baseSize * (0.18 + ((seed + index * 11) % 17) / 35)),
+      side: side as "buy" | "sell",
+      timestamp: Date.now() - index * 2800,
+    };
+  });
+
+  return {
+    longs,
+    shorts,
+    lastPrice: toWeiString(priceUsd),
+    recentTrades,
+  };
+}
+
+function buildChartCandles(symbol: string, priceUsd: number) {
+  const seed = hashSymbol(symbol);
+  const statChange = REFERENCE_MARKET_STATS[symbol]?.change ?? ((seed % 9) - 3);
+  const trend = (statChange / 100) / 118;
+  let drift = priceUsd * (1 - Math.abs(statChange) / 100 - 0.012);
+  const candles = Array.from({ length: 118 }).map((_, index) => {
+    const pseudoA = Math.sin((seed + index * 37.31) * 0.137);
+    const pseudoB = Math.cos((seed + index * 19.17) * 0.173);
+    const shock = (pseudoA * 0.0038 + pseudoB * 0.0022 + trend) * priceUsd;
+    const open = drift;
+    const close = Math.max(priceUsd * 0.72, open + shock);
+    drift = close;
+    const wick = priceUsd * (0.0018 + Math.abs(pseudoA) * 0.0042);
+    const high = Math.max(open, close) + wick;
+    const low = Math.max(priceUsd * 0.62, Math.min(open, close) - wick * (0.55 + Math.abs(pseudoB) * 0.75));
+    const volume = 12 + Math.abs(Math.round((pseudoA + pseudoB) * 24)) + ((seed + index * 19) % 26);
+    return { open, high, low, close, volume };
+  });
+  const min = Math.min(...candles.map((candle) => candle.low));
+  const max = Math.max(...candles.map((candle) => candle.high));
+  return { candles, min, max };
+}
+
+function ChartFallback({ displaySymbol }: { displaySymbol: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 dexi-chart-grid" />
+      <div className="absolute left-4 top-3 flex items-center gap-2 text-xs text-okx-text-tertiary">
+        <span className="font-mono text-okx-text-secondary">{displaySymbol.toUpperCase()}</span>
+        <span>1m</span>
+        <span>Oracle sync</span>
+      </div>
+      <svg className="absolute inset-x-5 bottom-8 top-12 h-[calc(100%-5rem)] w-[calc(100%-2.5rem)]" viewBox="0 0 100 160" preserveAspectRatio="none">
+        <path
+          d="M0 118 C10 104 18 112 28 86 C38 62 48 72 58 48 C68 26 78 40 88 22 C94 14 98 18 100 12"
+          fill="none"
+          stroke="rgba(68,227,199,0.22)"
+          strokeWidth="1.2"
+        />
+        {CHART_PLACEHOLDER_CANDLES.map((candle) => (
+          <g key={`${candle.x}-${candle.y}`}>
+            <line
+              x1={candle.x}
+              x2={candle.x}
+              y1={Math.max(10, candle.y - 14)}
+              y2={Math.min(150, candle.y + candle.h)}
+              stroke={candle.up ? "rgba(14,203,129,0.42)" : "rgba(246,70,93,0.42)"}
+              strokeWidth="0.45"
+            />
+            <rect
+              x={candle.x - 1.4}
+              y={candle.y}
+              width="2.8"
+              height={Math.max(8, candle.h * 0.46)}
+              rx="0.3"
+              fill={candle.up ? "rgba(14,203,129,0.62)" : "rgba(246,70,93,0.62)"}
+            />
+          </g>
+        ))}
+      </svg>
+      <div className="absolute left-1/2 top-1/2 w-[220px] -translate-x-1/2 -translate-y-1/2 rounded-[4px] border border-okx-border-primary bg-okx-bg-secondary/88 px-4 py-3 text-center shadow-2xl">
+        <div className="text-sm font-semibold text-okx-text-primary">Market data syncing</div>
+        <div className="mt-1 text-xs text-okx-text-tertiary">Waiting for signed oracle and book updates</div>
+      </div>
+    </div>
+  );
+}
+
+function TerminalEmptyState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex h-full min-h-[188px] flex-col items-center justify-center gap-3 text-center">
+      <div className="relative h-12 w-12 text-[#7D7F8B]">
+        <span className="absolute left-1/2 top-0 h-5 w-8 -translate-x-1/2 rotate-45 border border-current bg-[#11161E]" />
+        <span className="absolute left-1/2 top-3 h-5 w-8 -translate-x-1/2 rotate-45 border border-current bg-[#11161E]" />
+        <span className="absolute left-1/2 top-6 h-5 w-8 -translate-x-1/2 rotate-45 border border-current bg-[#11161E]" />
+      </div>
+      <div className="text-[13px] font-medium text-[#A7B2BE]">{title}</div>
+      {detail && <div className="text-[12px] text-[#77838F]">{detail}</div>}
+    </div>
+  );
+}
+
+function ReferenceMarketChart({
+  displaySymbol,
+  priceUsd,
+  isReference,
+}: {
+  displaySymbol: string;
+  priceUsd: number;
+  isReference: boolean;
+}) {
+  const chart = useMemo(() => buildChartCandles(displaySymbol, priceUsd), [displaySymbol, priceUsd]);
+  const range = Math.max(chart.max - chart.min, priceUsd * 0.02);
+  const yFor = useCallback((price: number) => 318 - ((price - chart.min) / range) * 266, [chart.min, range]);
+  const last = chart.candles[chart.candles.length - 1]?.close || priceUsd;
+  const lastY = yFor(last);
+  const axisPrices = [chart.max, chart.min + range * 0.68, chart.min + range * 0.36, chart.min];
+
+  return (
+    <div className="relative flex h-full min-h-[300px] flex-col overflow-hidden bg-[#151A22]">
+      <div className="flex h-[2.625rem] shrink-0 items-center justify-between border-b border-[#2B3542] bg-[#11161E] px-3">
+        <div className="flex h-full items-center gap-1">
+          {["价格", "深度", "资金", "详情"].map((tab, index) => (
+            <span
+              key={tab}
+              className={`relative flex h-full items-center px-3 text-[13px] font-medium ${
+                index === 0 ? "text-[#F3F7F9]" : "text-[#9EA0AD]"
+              }`}
+            >
+              {tab}
+              {index === 0 && <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-[#5EEAD4]" />}
+            </span>
+          ))}
+        </div>
+        <div className="flex min-w-0 items-center gap-4 text-[12px] text-[#9EA0AD]">
+          <span>盘口</span>
+          <span>订单簿</span>
+          <span>成交</span>
+        </div>
+      </div>
+
+      <div className="flex h-[2.625rem] shrink-0 items-center justify-between border-b border-[#2B3542] bg-[#151A22] px-3 text-[13px] text-[#AEB0BA]">
+        <div className="flex items-center gap-3">
+          <span className="font-medium text-[#D7D8DE]">天</span>
+          <span className="h-5 w-px bg-[#2B3542]" />
+          <span className="font-mono">▮</span>
+          <span className="font-mono">ƒx</span>
+          <span>指标</span>
+          <span className="h-5 w-px bg-[#2B3542]" />
+          <span>订单行</span>
+          <span className="h-4 w-8 rounded-full bg-[#5EEAD4]" />
+          <span>买入/卖出</span>
+          <span className="h-4 w-8 rounded-full bg-[#5EEAD4]" />
+        </div>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="hidden min-w-[132px] text-right text-[12px] font-semibold text-[#D7D8DE] xl:block">
+            {displaySymbol.toUpperCase()}-USDT · 1D · DEXI
+          </div>
+          {["1m", "5m", "15m", "1h", "4h", "1D"].map((interval, index) => (
+            <span
+              key={interval}
+              className={index === 5 ? "rounded-[0.25rem] bg-[#343547] px-2 py-0.5 font-semibold text-[#F3F7F9]" : "px-1 py-0.5"}
+            >
+              {interval}
+            </span>
+          ))}
+          <span className={isReference ? "text-[#F5B544]" : "text-[#00D395]"}>
+            {isReference ? "Reference oracle" : "Oracle composite"}
+          </span>
+        </div>
+      </div>
+
+      <div className="relative min-h-0 flex-1">
+        <div className="absolute inset-0 dexi-chart-grid opacity-60" />
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1000 360" preserveAspectRatio="none">
+          {[64, 128, 192, 256, 320].map((y) => (
+            <line key={y} x1="0" x2="1000" y1={y} y2={y} stroke="rgba(208,231,235,0.045)" strokeWidth="1" />
+          ))}
+          {chart.candles.map((candle, index) => {
+            const x = 24 + index * (900 / Math.max(1, chart.candles.length - 1));
+            const openY = yFor(candle.open);
+            const closeY = yFor(candle.close);
+            const highY = yFor(candle.high);
+            const lowY = yFor(candle.low);
+            const up = candle.close >= candle.open;
+            const bodyY = Math.min(openY, closeY);
+            const bodyHeight = Math.max(1.8, Math.abs(closeY - openY));
+            const color = up ? "rgba(0,211,149,0.92)" : "rgba(255,83,93,0.92)";
+            return (
+              <g key={`chart-${index}`}>
+                <line x1={x} x2={x} y1={highY} y2={lowY} stroke={color} strokeWidth="0.9" />
+                <rect x={x - 2.1} y={bodyY} width="4.2" height={bodyHeight} rx="0.35" fill={color} />
+                <rect
+                  x={x - 2.1}
+                  y={334 - candle.volume * 0.34}
+                  width="4.2"
+                  height={Math.max(3, candle.volume * 0.34)}
+                  fill={up ? "rgba(0,211,149,0.28)" : "rgba(255,83,93,0.28)"}
+                />
+              </g>
+            );
+          })}
+          <line x1="0" x2="1000" y1={lastY} y2={lastY} stroke="rgba(119,116,255,0.5)" strokeDasharray="3 5" strokeWidth="1" />
+        </svg>
+
+        <div className="absolute right-3 top-4 flex flex-col items-end gap-[42px] text-[10px] text-[#77838F]">
+          {axisPrices.map((price, index) => (
+            <span key={`axis-${index}`} className="font-mono">{formatTerminalUsd(price)}</span>
+          ))}
+        </div>
+
+        <div className="absolute right-3 rounded-[0.375rem] bg-[#5EEAD4] px-2 py-1 font-mono text-[11px] font-bold text-[#061215]" style={{ top: `calc(${(lastY / 360) * 100}% - 12px)` }}>
+          {formatTerminalUsd(last)}
+        </div>
+
+        <div className="absolute bottom-2 left-3 right-14 flex justify-between font-mono text-[10px] text-[#77838F]">
+          {["14:00", "15:00", "16:00", "17:00", "18:00", "19:00"].map((time) => (
+            <span key={time}>{time}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface PerpetualTradingTerminalProps {
   symbol: string;
   className?: string;
   tokenAddress?: Address; // Token contract address for multi-token support
+  marketId?: string;
+  oraclePriceUsd?: number;
+  maxLeverage?: number;
 }
 
 export function PerpetualTradingTerminal({
   symbol,
   className,
   tokenAddress: propTokenAddress,
+  marketId,
+  oraclePriceUsd,
+  maxLeverage,
 }: PerpetualTradingTerminalProps) {
-  // 调试：追踪渲染次数 (仅 console 警告，不 throw)
+  // 璋冭瘯锛氳拷韪覆鏌撴鏁?(浠?console 璀﹀憡锛屼笉 throw)
   trackRender("PerpetualTradingTerminal");
 
   const t = useTranslations("perp");
@@ -65,7 +378,7 @@ export function PerpetualTradingTerminal({
   const { address, isConnected } = useAccount();
   const { showToast } = useToast();
 
-  // 获取交易钱包（派生钱包）信息
+  // 鑾峰彇浜ゆ槗閽卞寘锛堟淳鐢熼挶鍖咃級淇℃伅
   const {
     address: tradingWalletAddress,
     getSignature,
@@ -73,7 +386,7 @@ export function PerpetualTradingTerminal({
     exportKey,
   } = useTradingWallet();
 
-  // 获取交易钱包签名（用于派生私钥）
+  // 鑾峰彇浜ゆ槗閽卞寘绛惧悕锛堢敤浜庢淳鐢熺閽ワ級
   const tradingWalletSignature = getSignature();
 
   // Get token address - use prop if provided, otherwise try to parse from symbol
@@ -88,19 +401,21 @@ export function PerpetualTradingTerminal({
 
   // Get pool state to check if perpetual trading is enabled AND get spot price
   const { poolState, currentPrice: spotPriceBigInt, marketCap: marketCapBigInt, isLoading: isPoolLoading } = usePoolState(tokenAddress);
-  const isPerpEnabled = poolState?.perpEnabled ?? false;
+  const isPerpEnabled = marketId ? true : (poolState?.perpEnabled ?? false);
 
   // Calculate spot price in USD (from TokenFactory bonding curve)
-  const spotPriceUsd = spotPriceBigInt ? calculatePriceUsd(spotPriceBigInt, ethPrice) : 0;
+  const oraclePriceBnb = oraclePriceUsd && ethPrice ? oraclePriceUsd / ethPrice : 0;
+  const spotPriceUsd = oraclePriceUsd || (spotPriceBigInt ? calculatePriceUsd(spotPriceBigInt, ethPrice) : 0);
   const marketCapUsd = marketCapBigInt ? calculateMarketCapUsd(marketCapBigInt, ethPrice) : 0;
 
-  // V2: 使用 Settlement 合约获取仓位和订单
-  // 传递交易钱包地址和签名，确保查询正确的订单
+  // V2: 浣跨敤 Settlement 鍚堢害鑾峰彇浠撲綅鍜岃鍗?
+  // 浼犻€掍氦鏄撻挶鍖呭湴鍧€鍜岀鍚嶏紝纭繚鏌ヨ姝ｇ‘鐨勮鍗?
   const {
     positions: v2Positions,
     pendingOrders: v2PendingOrders,
     balance: accountBalance,
     closePair,
+    cancelPendingOrder,
     refreshPositions,
     refreshOrders,
     refreshBalance,
@@ -109,8 +424,8 @@ export function PerpetualTradingTerminal({
     tradingWalletSignature: tradingWalletSignature || undefined,
   });
 
-  // 格式化账户余额 (BNB 本位)
-  // 显示: Settlement 可用 + 钱包可存入 (下单时自动存入 Settlement)
+  // 鏍煎紡鍖栬处鎴蜂綑棰?(BNB 鏈綅)
+  // 鏄剧ず: Settlement 鍙敤 + 閽卞寘鍙瓨鍏?(涓嬪崟鏃惰嚜鍔ㄥ瓨鍏?Settlement)
   const formattedAccountBalance = useMemo(() => {
     if (!accountBalance) return "BNB 0.00";
     const settlementAvailable = Number(accountBalance.available) / 1e18;
@@ -121,21 +436,21 @@ export function PerpetualTradingTerminal({
     return `BNB ${totalAvailable.toFixed(4)}`;
   }, [accountBalance]);
 
-  // WebSocket 实时订单簿和成交数据 - 从统一的 tradingDataStore 获取
+  // WebSocket 瀹炴椂璁㈠崟绨垮拰鎴愪氦鏁版嵁 - 浠庣粺涓€鐨?tradingDataStore 鑾峰彇
   const wsOrderBook = useCurrentOrderBook();
   const wsRecentTrades = useCurrentRecentTrades();
 
-  // 从 Store 获取实时统计数据 (WebSocket 推送)
+  // 浠?Store 鑾峰彇瀹炴椂缁熻鏁版嵁 (WebSocket 鎺ㄩ€?
   const tokenStats = useTradingDataStore((state) =>
     tokenAddress ? state.tokenStats.get(tokenAddress.toLowerCase() as Address) : null
   );
 
-  // 从 Store 获取资金费率 (WebSocket 推送)
+  // 浠?Store 鑾峰彇璧勯噾璐圭巼 (WebSocket 鎺ㄩ€?
   const fundingRateData = useTradingDataStore((state) =>
     tokenAddress ? state.fundingRates.get(tokenAddress.toLowerCase() as Address) : null
   );
 
-  // 格式化统计数据 (BNB 本位: 价格为 BNB/Token, 1e18 精度)
+  // 鏍煎紡鍖栫粺璁℃暟鎹?(BNB 鏈綅: 浠锋牸涓?BNB/Token, 1e18 绮惧害)
   const formatMemePrice = (priceStr: string | undefined) => {
     if (!priceStr) return "0.0000000000";
     const price = Number(priceStr) / 1e18;
@@ -156,20 +471,20 @@ export function PerpetualTradingTerminal({
   }, []);
 
   const formattedPrice = formatMemePrice(tokenStats?.lastPrice);
-  // ✅ 使用 priceChangePercent24h (后端已计算好的百分比)，而非 priceChange24h (原始 wei 差值)
-  // 注意: JSX 模板 (L573) 自带 "+" 前缀，此处不重复添加
+  // 鉁?浣跨敤 priceChangePercent24h (鍚庣宸茶绠楀ソ鐨勭櫨鍒嗘瘮)锛岃€岄潪 priceChange24h (鍘熷 wei 宸€?
+  // 娉ㄦ剰: JSX 妯℃澘 (L573) 鑷甫 "+" 鍓嶇紑锛屾澶勪笉閲嶅娣诲姞
   const priceChangePercent = parseFloat(tokenStats?.priceChangePercent24h || "0");
   const formattedPriceChange = `${priceChangePercent.toFixed(2)}%`;
   const isPriceUp = priceChangePercent >= 0;
-  // 24h 高低价：有 WS 数据用 WS，否则 fallback 到 spot 价格
+  // 24h 楂樹綆浠凤細鏈?WS 鏁版嵁鐢?WS锛屽惁鍒?fallback 鍒?spot 浠锋牸
   const formattedHigh24h = (tokenStats?.high24h && tokenStats.high24h !== "0")
     ? formatMemePrice(tokenStats.high24h)
     : spotPriceBigInt ? formatMemePrice(spotPriceBigInt.toString()) : "0.0000000000";
   const formattedLow24h = (tokenStats?.low24h && tokenStats.low24h !== "0")
     ? formatMemePrice(tokenStats.low24h)
     : spotPriceBigInt ? formatMemePrice(spotPriceBigInt.toString()) : "0.0000000000";
-  // volume24h 是 BNB 成交量 (BNB 本位: 1e18 精度)
-  // 后端计算: volume24h = Σ(trade.size * trade.price) / 1e18
+  // volume24h 鏄?BNB 鎴愪氦閲?(BNB 鏈綅: 1e18 绮惧害)
+  // 鍚庣璁＄畻: volume24h = 危(trade.size * trade.price) / 1e18
   const formattedVolume24h = tokenStats?.volume24h
     ? (Number(tokenStats.volume24h) / 1e18).toFixed(4)
     : "0.0000";
@@ -178,14 +493,14 @@ export function PerpetualTradingTerminal({
     : "0.0000";
   const trades24h = tokenStats?.trades24h ?? 0;
 
-  // 格式化资金费率 (使用 ref 防止微小变化导致频繁跳动)
+  // 鏍煎紡鍖栬祫閲戣垂鐜?(浣跨敤 ref 闃叉寰皬鍙樺寲瀵艰嚧棰戠箒璺冲姩)
   const lastDisplayedRate = React.useRef<string>("0.0000%");
   const lastRateValue = React.useRef<number>(0);
 
   const fundingRateFormatted = useMemo(() => {
     if (!fundingRateData?.rate) return lastDisplayedRate.current;
     const rate = Number(fundingRateData.rate) / 100;
-    // 只有变化超过 0.0001% (1bp) 才更新显示，避免微小波动导致跳动
+    // 鍙湁鍙樺寲瓒呰繃 0.0001% (1bp) 鎵嶆洿鏂版樉绀猴紝閬垮厤寰皬娉㈠姩瀵艰嚧璺冲姩
     if (Math.abs(rate - lastRateValue.current) < 0.0001) {
       return lastDisplayedRate.current;
     }
@@ -201,7 +516,7 @@ export function PerpetualTradingTerminal({
     return Number(fundingRateData.rate) >= 0;
   }, [fundingRateData?.rate]);
 
-  // 资金费率倒计时 — 使用引擎推送的 nextFundingTime，到期后自动推进到下一个周期
+  // 璧勯噾璐圭巼鍊掕鏃?鈥?浣跨敤寮曟搸鎺ㄩ€佺殑 nextFundingTime锛屽埌鏈熷悗鑷姩鎺ㄨ繘鍒颁笅涓€涓懆鏈?
   const [fundingCountdown, setFundingCountdown] = useState<string>("--:--");
   useEffect(() => {
     const FUNDING_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes (match engine FUNDING.BASE_INTERVAL_MS)
@@ -225,27 +540,27 @@ export function PerpetualTradingTerminal({
     return () => clearInterval(interval);
   }, [fundingRateData?.nextFundingTime]);
 
-  // 使用统一 WebSocket 进行实时数据推送
-  // 不再使用轮询，由 WebSocket 推送仓位和订单变更
+  // 浣跨敤缁熶竴 WebSocket 杩涜瀹炴椂鏁版嵁鎺ㄩ€?
+  // 涓嶅啀浣跨敤杞锛岀敱 WebSocket 鎺ㄩ€佷粨浣嶅拰璁㈠崟鍙樻洿
   const { isConnected: unifiedWsConnected } = useUnifiedWebSocket({
     token: tokenAddress,
     trader: tradingWalletAddress || address,
     enabled: !!tokenAddress,
   });
 
-  // 仅在初始化时获取一次仓位和订单，后续由 WebSocket 推送
+  // 浠呭湪鍒濆鍖栨椂鑾峰彇涓€娆′粨浣嶅拰璁㈠崟锛屽悗缁敱 WebSocket 鎺ㄩ€?
   useEffect(() => {
     const effectiveAddress = tradingWalletAddress || address;
     if (!effectiveAddress) return;
 
-    // 初始加载
+    // 鍒濆鍔犺浇
     refreshPositions();
     refreshOrders();
-    // 不再设置定时器，依赖 WebSocket 实时推送
+    // 涓嶅啀璁剧疆瀹氭椂鍣紝渚濊禆 WebSocket 瀹炴椂鎺ㄩ€?
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tradingWalletAddress, address]); // 只依赖地址变化，避免函数引用变化导致无限循环
+  }, [tradingWalletAddress, address]); // 鍙緷璧栧湴鍧€鍙樺寲锛岄伩鍏嶅嚱鏁板紩鐢ㄥ彉鍖栧鑷存棤闄愬惊鐜?
 
-  // Tab 状态 - 需要在使用它的 useEffect 之前声明
+  // Tab 鐘舵€?- 闇€瑕佸湪浣跨敤瀹冪殑 useEffect 涔嬪墠澹版槑
   const [activeBottomTab, setActiveBottomTab] = useState<
     "positions" | "openOrders" | "orderHistory" | "tradeHistory" | "hunting" | "risk" | "bills"
   >("positions");
@@ -254,15 +569,15 @@ export function PerpetualTradingTerminal({
   const [mobileActiveSection, setMobileActiveSection] = useState<"chart" | "book" | "trade">("chart");
   const [orderBookSuggestedPrice, setOrderBookSuggestedPrice] = useState<string>("");
 
-  // 订单历史和成交记录状态
+  // 璁㈠崟鍘嗗彶鍜屾垚浜よ褰曠姸鎬?
   const [orderHistoryData, setOrderHistoryData] = useState<HistoricalOrder[]>([]);
   const [tradeHistoryData, setTradeHistoryData] = useState<PerpTradeRecord[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  // 错误处理
+  // 閿欒澶勭悊
   const { withErrorHandling } = useApiError();
 
-  // ── 保证金调整 (Add/Remove Margin) ──────────────────
+  // 鈹€鈹€ 淇濊瘉閲戣皟鏁?(Add/Remove Margin) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   const [marginModal, setMarginModal] = useState<{
     pairId: string;
     action: "add" | "remove";
@@ -280,7 +595,7 @@ export function PerpetualTradingTerminal({
     minCollateral: number;
   } | null>(null);
 
-  // 打开保证金调整弹窗时，获取最大可减额
+  // 鎵撳紑淇濊瘉閲戣皟鏁村脊绐楁椂锛岃幏鍙栨渶澶у彲鍑忛
   useEffect(() => {
     if (!marginModal) { setMarginInfo(null); return; }
     if (marginModal.action !== "remove") { setMarginInfo(null); return; }
@@ -297,7 +612,7 @@ export function PerpetualTradingTerminal({
       .catch(() => {});
   }, [marginModal?.pairId, marginModal?.action]);
 
-  // 预览调整后的杠杆和强平价
+  // 棰勮璋冩暣鍚庣殑鏉犳潌鍜屽己骞充环
   const marginPreview = useMemo(() => {
     if (!marginModal || !marginAmount || parseFloat(marginAmount) <= 0) return null;
     const amt = parseFloat(marginAmount);
@@ -307,17 +622,17 @@ export function PerpetualTradingTerminal({
     if (newCollateral <= 0) return null;
     const newLeverage = marginModal.size / newCollateral;
     const mmrDecimal = marginModal.mmr / 100;
-    // Bybit 标准强平价
+    // Bybit 鏍囧噯寮哄钩浠?
     const newLiqPrice = marginModal.isLong
       ? marginModal.entryPrice * (1 - 1/newLeverage + mmrDecimal/100)
       : marginModal.entryPrice * (1 + 1/newLeverage - mmrDecimal/100);
     return { newCollateral, newLeverage, newLiqPrice };
   }, [marginModal, marginAmount]);
 
-  // 提交保证金调整
+  // 鎻愪氦淇濊瘉閲戣皟鏁?
   const handleAdjustMargin = useCallback(async () => {
     if (!marginModal || !marginAmount || !tradingWalletAddress) return;
-    // 使用 parseEther 避免 parseFloat 精度问题 (FE-C02)
+    // 浣跨敤 parseEther 閬垮厤 parseFloat 绮惧害闂 (FE-C02)
     const { parseEther: toWei } = await import("viem");
     let amountWei: string;
     try {
@@ -345,11 +660,11 @@ export function PerpetualTradingTerminal({
       }
       const { privateKeyToAccount } = await import("viem/accounts");
       const { createWalletClient, http } = await import("viem");
-      const { bscTestnet } = await import("viem/chains");
+      const { bsc } = await import("viem/chains");
       const signerAccount = privateKeyToAccount(keyData.privateKey);
       const tempClient = createWalletClient({
         account: signerAccount,
-        chain: bscTestnet,
+        chain: bsc,
         transport: http(),
       });
       const signature = await tempClient.signMessage({ account: signerAccount, message: sigMsg });
@@ -382,7 +697,7 @@ export function PerpetualTradingTerminal({
     }
   }, [marginModal, marginAmount, tradingWalletAddress, exportKey, showToast, t, refreshPositions, refreshBalance]);
 
-  // ── TP/SL 弹窗 (止盈止损) ──────────────────────────
+  // 鈹€鈹€ TP/SL 寮圭獥 (姝㈢泩姝㈡崯) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
   const [tpslModal, setTpslModal] = useState<{
     pairId: string;
     isLong: boolean;
@@ -397,7 +712,7 @@ export function PerpetualTradingTerminal({
     stopLossPrice: string | null;
   } | null>(null);
 
-  // 打开弹窗时获取当前 TP/SL
+  // 鎵撳紑寮圭獥鏃惰幏鍙栧綋鍓?TP/SL
   useEffect(() => {
     if (!tpslModal) { setCurrentTpsl(null); setTpInput(""); setSlInput(""); return; }
     fetch(`${MATCHING_ENGINE_URL}/api/position/${tpslModal.pairId}/tpsl`)
@@ -415,7 +730,7 @@ export function PerpetualTradingTerminal({
       .catch(() => {});
   }, [tpslModal?.pairId]);
 
-  // 提交 TP/SL
+  // 鎻愪氦 TP/SL
   const handleSetTpsl = useCallback(async () => {
     if (!tpslModal || !tradingWalletAddress) return;
     if (!tpInput && !slInput) {
@@ -436,9 +751,9 @@ export function PerpetualTradingTerminal({
       }
       const { privateKeyToAccount } = await import("viem/accounts");
       const { createWalletClient, http } = await import("viem");
-      const { bscTestnet } = await import("viem/chains");
+      const { bsc } = await import("viem/chains");
       const signerAccount = privateKeyToAccount(keyData.privateKey);
-      const tempClient = createWalletClient({ account: signerAccount, chain: bscTestnet, transport: http() });
+      const tempClient = createWalletClient({ account: signerAccount, chain: bsc, transport: http() });
       const signature = await tempClient.signMessage({ account: signerAccount, message: sigMsg });
 
       const res = await fetch(`${MATCHING_ENGINE_URL}/api/position/${tpslModal.pairId}/tpsl`, {
@@ -466,7 +781,7 @@ export function PerpetualTradingTerminal({
     }
   }, [tpslModal, tpInput, slInput, tradingWalletAddress, exportKey, showToast, t, refreshPositions]);
 
-  // 取消 TP/SL
+  // 鍙栨秷 TP/SL
   const handleCancelTpsl = useCallback(async (cancelType: "tp" | "sl" | "both") => {
     if (!tpslModal) return;
     try {
@@ -486,7 +801,7 @@ export function PerpetualTradingTerminal({
     } catch {}
   }, [tpslModal, showToast, t, refreshPositions]);
 
-  // 加载订单历史和成交记录
+  // 鍔犺浇璁㈠崟鍘嗗彶鍜屾垚浜よ褰?
   const loadHistoryData = useCallback(async () => {
     const effectiveAddress = tradingWalletAddress || address;
     if (!effectiveAddress) return;
@@ -496,12 +811,12 @@ export function PerpetualTradingTerminal({
       const [orders, trades] = await Promise.all([
         withErrorHandling(
           () => getOrderHistory(effectiveAddress, 50),
-          "获取订单历史失败",
+          "鑾峰彇璁㈠崟鍘嗗彶澶辫触",
           { fallback: [], showToast: false }
         ),
         withErrorHandling(
           () => getTradeHistory(effectiveAddress, 50),
-          "获取成交记录失败",
+          "鑾峰彇鎴愪氦璁板綍澶辫触",
           { fallback: [], showToast: false }
         ),
       ]);
@@ -512,7 +827,7 @@ export function PerpetualTradingTerminal({
     }
   }, [tradingWalletAddress, address, withErrorHandling]);
 
-  // 当切换到历史 Tab 时加载数据 + 自动刷新
+  // 褰撳垏鎹㈠埌鍘嗗彶 Tab 鏃跺姞杞芥暟鎹?+ 鑷姩鍒锋柊
   useEffect(() => {
     if (activeBottomTab === "orderHistory" || activeBottomTab === "tradeHistory") {
       loadHistoryData();
@@ -521,9 +836,9 @@ export function PerpetualTradingTerminal({
       return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBottomTab]); // 只依赖 activeBottomTab，避免 loadHistoryData 引用变化导致无限循环
+  }, [activeBottomTab]); // 鍙緷璧?activeBottomTab锛岄伩鍏?loadHistoryData 寮曠敤鍙樺寲瀵艰嚧鏃犻檺寰幆
 
-  // ── Bills (账单) state ──
+  // 鈹€鈹€ Bills (璐﹀崟) state 鈹€鈹€
   interface BillRecord {
     id: string;
     txHash: string | null;
@@ -538,6 +853,8 @@ export function PerpetualTradingTerminal({
     createdAt: number;
   }
 
+  const billTradingFeeLabel = t.has("billTradingFee") ? t("billTradingFee") : "Trading Fee";
+
   const BILL_TYPE_LABELS: Record<string, { label: string; color: string }> = {
     DEPOSIT:             { label: t("billDeposit"),          color: "text-okx-up" },
     WITHDRAW:            { label: t("billWithdraw"),         color: "text-okx-down" },
@@ -548,7 +865,7 @@ export function PerpetualTradingTerminal({
     MARGIN_REMOVE:       { label: t("billMarginRemove"),     color: "text-okx-up" },
     DAILY_SETTLEMENT:    { label: t("billDailySettlement"),  color: "" },
     INSURANCE_INJECTION: { label: t("billInsurance"),        color: "text-okx-up" },
-    TRADING_FEE:         { label: t("billTradingFee") || "Trading Fee", color: "text-okx-down" },
+    TRADING_FEE:         { label: billTradingFeeLabel, color: "text-okx-down" },
     ADL:                 { label: "ADL",                     color: "text-orange-400" },
   };
 
@@ -560,7 +877,7 @@ export function PerpetualTradingTerminal({
     { value: "LIQUIDATION",          label: t("billLiquidation") },
     { value: "FUNDING_FEE",          label: t("billFundingFee") },
     { value: "INSURANCE_INJECTION",  label: t("billInsurance") },
-    { value: "TRADING_FEE",          label: t("billTradingFee") || "Trading Fee" },
+    { value: "TRADING_FEE",          label: billTradingFeeLabel },
     { value: "ADL",                  label: "ADL" },
     { value: "MARGIN_ADD",           label: t("billMarginAdd") || "Margin Add" },
     { value: "MARGIN_REMOVE",        label: t("billMarginRemove") || "Margin Remove" },
@@ -597,7 +914,7 @@ export function PerpetualTradingTerminal({
     }
   }, [tradingWalletAddress, address, billTypeFilter]);
 
-  // 切换到账单 Tab 或筛选变化时重新加载
+  // 鍒囨崲鍒拌处鍗?Tab 鎴栫瓫閫夊彉鍖栨椂閲嶆柊鍔犺浇
   useEffect(() => {
     if (activeBottomTab === "bills") {
       setBillsData([]);
@@ -612,7 +929,7 @@ export function PerpetualTradingTerminal({
     fetchBills(billsData[billsData.length - 1].createdAt);
   }, [billsData, billsHasMore, billsLoading, fetchBills]);
 
-  // 当前代币的 V2 仓位 (HTTP 轮询的数据 - 用于平仓等操作)
+  // 褰撳墠浠ｅ竵鐨?V2 浠撲綅 (HTTP 杞鐨勬暟鎹?- 鐢ㄤ簬骞充粨绛夋搷浣?
   const currentV2Positions = useMemo(() => {
     if (!tokenAddress) return [];
     return v2Positions.filter(
@@ -626,33 +943,52 @@ export function PerpetualTradingTerminal({
     hash: txHash,
   });
 
-  // P003 修复: 移除旧的 PositionManager 合约调用
-  // V2 架构使用 Settlement 合约 + 撮合引擎，仓位数据统一从 usePerpetualV2 获取
+  // P003 淇: 绉婚櫎鏃х殑 PositionManager 鍚堢害璋冪敤
+  // V2 鏋舵瀯浣跨敤 Settlement 鍚堢害 + 鎾悎寮曟搸锛屼粨浣嶆暟鎹粺涓€浠?usePerpetualV2 鑾峰彇
 
   // Handle close position success
   useEffect(() => {
     if (isConfirmed && txHash) {
       showToast(t("orderPlaced"), "success");
-      refreshPositions(); // 使用 V2 的 refreshPositions
+      refreshPositions(); // 浣跨敤 V2 鐨?refreshPositions
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isConfirmed, txHash]); // 只依赖交易状态，避免函数引用导致无限循环
+  }, [isConfirmed, txHash]); // 鍙緷璧栦氦鏄撶姸鎬侊紝閬垮厤鍑芥暟寮曠敤瀵艰嚧鏃犻檺寰幆
 
-  // 从链上获取代币名称和符号
+  // 浠庨摼涓婅幏鍙栦唬甯佸悕绉板拰绗﹀彿
   const tokenInfo = useTokenInfo(symbol);
   const displaySymbol = getTokenDisplayName(symbol, tokenInfo);
 
-  // 使用 useMemo 避免 instId 因为 loading 状态变化而改变
+  // 浣跨敤 useMemo 閬垮厤 instId 鍥犱负 loading 鐘舵€佸彉鍖栬€屾敼鍙?
   const instId = useMemo(() => {
-    // 只在有实际符号时才创建 instId，避免加载状态导致的变化
+    // 鍙湪鏈夊疄闄呯鍙锋椂鎵嶅垱寤?instId锛岄伩鍏嶅姞杞界姸鎬佸鑷寸殑鍙樺寲
     if (tokenInfo?.isLoading || !displaySymbol || displaySymbol === "...") {
-      // 使用 symbol 作为 fallback，而不是 loading indicator
+      // 浣跨敤 symbol 浣滀负 fallback锛岃€屼笉鏄?loading indicator
       return `${symbol.toUpperCase()}-PERP`;
     }
     return `${displaySymbol.toUpperCase()}-PERP`;
-  }, [symbol, tokenInfo?.symbol]); // 只依赖实际的符号，不依赖 loading 状态
+  }, [symbol, tokenInfo?.symbol]); // 鍙緷璧栧疄闄呯殑绗﹀彿锛屼笉渚濊禆 loading 鐘舵€?
 
-  // 风控数据
+  // 椋庢帶鏁版嵁
+  const displayPair = marketId ? `${displaySymbol.toUpperCase()}/USDT` : `${displaySymbol.toUpperCase()}/BNB`;
+  const marketSymbol = displaySymbol.toUpperCase();
+  const referenceStats = REFERENCE_MARKET_STATS[marketSymbol] || {
+    change: 0,
+    volume: "--",
+    openInterest: "--",
+    funding: "0.0000%",
+  };
+  const referencePriceUsd = useMemo(() => {
+    if (oraclePriceUsd && oraclePriceUsd > 0) return oraclePriceUsd;
+    if (!marketId) return spotPriceUsd;
+    return REFERENCE_PRICE_USD[marketSymbol] || spotPriceUsd || 0;
+  }, [marketId, marketSymbol, oraclePriceUsd, spotPriceUsd]);
+  const hasLiveMarketPrice = Boolean(oraclePriceUsd && oraclePriceUsd > 0);
+  const indicativeOrderBook = useMemo(
+    () => (marketId && referencePriceUsd > 0 ? buildIndicativeOrderBook(marketSymbol, referencePriceUsd) : undefined),
+    [marketId, marketSymbol, referencePriceUsd]
+  );
+
   const {
     alerts: riskAlerts,
     insuranceFund,
@@ -663,37 +999,37 @@ export function PerpetualTradingTerminal({
     token: tokenAddress,
   });
 
-  // 计算整体风险等级
+  // 璁＄畻鏁翠綋椋庨櫓绛夌骇
   const overallRisk = positionRisks.reduce((worst, pos) => {
     const levels = ["low", "medium", "high", "critical"];
     return levels.indexOf(pos.riskLevel) > levels.indexOf(worst) ? pos.riskLevel : worst;
   }, "low" as "low" | "medium" | "high" | "critical");
 
   // ============================================================
-  // 使用 useRiskControl 的实时推送仓位数据来渲染
-  // 后端每100ms计算一次，通过 WebSocket 实时推送
+  // 浣跨敤 useRiskControl 鐨勫疄鏃舵帹閫佷粨浣嶆暟鎹潵娓叉煋
+  // 鍚庣姣?00ms璁＄畻涓€娆★紝閫氳繃 WebSocket 瀹炴椂鎺ㄩ€?
   // ============================================================
   const currentPositionsForDisplay = useMemo(() => {
     if (!tokenAddress) return [];
-    // 优先使用 WebSocket 推送的 positionRisks 数据
-    // 这些数据包含了后端实时计算的 markPrice, unrealizedPnL, marginRatio, roe 等
+    // 浼樺厛浣跨敤 WebSocket 鎺ㄩ€佺殑 positionRisks 鏁版嵁
+    // 杩欎簺鏁版嵁鍖呭惈浜嗗悗绔疄鏃惰绠楃殑 markPrice, unrealizedPnL, marginRatio, roe 绛?
     const wsPositions = positionRisks.filter(
       (p) => p.token.toLowerCase() === tokenAddress.toLowerCase()
     );
     if (wsPositions.length > 0) {
       return wsPositions;
     }
-    // 如果 WebSocket 没有数据，回退到 HTTP 轮询数据
+    // 濡傛灉 WebSocket 娌℃湁鏁版嵁锛屽洖閫€鍒?HTTP 杞鏁版嵁
     return currentV2Positions;
   }, [tokenAddress, positionRisks, currentV2Positions]);
 
-  // 账户余额面板状态
+  // 璐︽埛浣欓闈㈡澘鐘舵€?
   const [showAccountPanel, setShowAccountPanel] = useState(false);
 
-  // 撤单状态
+  // 鎾ゅ崟鐘舵€?
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
-  // 撤单处理函数
+  // 鎾ゅ崟澶勭悊鍑芥暟
   const handleCancelOrder = async (orderId: string) => {
     if (!tradingWalletAddress || !tradingWalletSignature) {
       showToast(t("connectWallet"), "error");
@@ -702,15 +1038,11 @@ export function PerpetualTradingTerminal({
 
     setCancellingOrderId(orderId);
     try {
-      const result = await cancelOrder(
-        orderId,
-        tradingWalletAddress,
-        tradingWalletSignature
-      );
+      const result = await cancelPendingOrder(orderId);
 
       if (result.success) {
-        showToast(t("cancelOrder") + " ✓", "success");
-        // 刷新订单列表
+        showToast(`${t("cancelOrder")} success`, "success");
+        // 鍒锋柊璁㈠崟鍒楄〃
         refreshOrders();
       } else {
         showToast(result.error || t("orderFailed"), "error");
@@ -743,139 +1075,158 @@ export function PerpetualTradingTerminal({
     return price.toFixed(10);
   };
 
-  // Market info — 优先使用后端 WebSocket 推送的 lastPrice (和订单簿同源，避免前后端 ETH/USD 汇率差异)
-  // 只有在 WebSocket 数据不可用时才回退到前端直接读链上价格
-  // BNB 本位: 价格是 Token/BNB 比率，OI/Volume 用 BNB
-  // ⚠️ 注意: fundingCountdown 每秒更新，不放入 marketInfo 避免整个对象每秒重建导致 K 线抖动
+  // Market info 鈥?浼樺厛浣跨敤鍚庣 WebSocket 鎺ㄩ€佺殑 lastPrice (鍜岃鍗曠翱鍚屾簮锛岄伩鍏嶅墠鍚庣 ETH/USD 姹囩巼宸紓)
+  // 鍙湁鍦?WebSocket 鏁版嵁涓嶅彲鐢ㄦ椂鎵嶅洖閫€鍒板墠绔洿鎺ヨ閾句笂浠锋牸
+  // BNB 鏈綅: 浠锋牸鏄?Token/BNB 姣旂巼锛孫I/Volume 鐢?BNB
+  // 鈿狅笍 娉ㄦ剰: fundingCountdown 姣忕鏇存柊锛屼笉鏀惧叆 marketInfo 閬垮厤鏁翠釜瀵硅薄姣忕閲嶅缓瀵艰嚧 K 绾挎姈鍔?
   const marketInfo = useMemo(
     () => ({
-      fundingRate: fundingRateFormatted,
-      openInterest: `BNB ${formattedOpenInterest}`,
-      volume24h: `BNB ${formattedVolume24h}`,
-      high24h: formattedHigh24h,    // Token/BNB 比率，无货币符号
-      low24h: formattedLow24h,      // Token/BNB 比率，无货币符号
-      currentPrice: formattedPrice !== "0.0000000000"
-        ? formattedPrice                                    // 优先: 后端 WebSocket lastPrice (Token/BNB)
+      fundingRate: marketId ? referenceStats.funding : fundingRateFormatted,
+      openInterest: marketId ? referenceStats.openInterest : `BNB ${formattedOpenInterest}`,
+      volume24h: marketId ? referenceStats.volume : `BNB ${formattedVolume24h}`,
+      high24h: formattedHigh24h,    // Token/BNB 姣旂巼锛屾棤璐у竵绗﹀彿
+      low24h: formattedLow24h,      // Token/BNB 姣旂巼锛屾棤璐у竵绗﹀彿
+      ...(marketId ? {
+        high24h: referencePriceUsd > 0
+          ? formatTerminalUsd(referencePriceUsd * (1 + Math.abs(referenceStats.change) / 100 + 0.018))
+          : "--",
+        low24h: referencePriceUsd > 0
+          ? formatTerminalUsd(referencePriceUsd * Math.max(0.2, 1 - Math.abs(referenceStats.change) / 100 - 0.022))
+          : "--",
+      } : {}),
+      currentPrice: marketId && referencePriceUsd > 0
+        ? `$${formatTerminalUsd(referencePriceUsd).replace(/\s+/g, "")}`
+        : formattedPrice !== "0.0000000000"
+        ? formattedPrice                                    // 浼樺厛: 鍚庣 WebSocket lastPrice (Token/BNB)
         : spotPriceUsd > 0
-        ? formatSmallPrice(spotPriceUsd)                    // 回退: 前端直读链上价格
+        ? formatSmallPrice(spotPriceUsd)                    // 鍥為€€: 鍓嶇鐩磋閾句笂浠锋牸
         : formattedPrice,
-      spotPrice: spotPriceUsd,
+      spotPrice: marketId ? referencePriceUsd : spotPriceUsd,
       marketCap: marketCapUsd,
-      priceChange: formattedPriceChange,
-      isPriceUp,
+      priceChange: marketId ? `${referenceStats.change.toFixed(2)}%` : formattedPriceChange,
+      isPriceUp: marketId ? referenceStats.change >= 0 : isPriceUp,
       trades24h,
     }),
-    [fundingRateFormatted, formattedOpenInterest, formattedVolume24h, formattedHigh24h, formattedLow24h, formattedPrice, formattedPriceChange, isPriceUp, trades24h, spotPriceUsd, marketCapUsd]
+    [marketId, referenceStats.funding, referenceStats.openInterest, referenceStats.volume, referenceStats.change, referencePriceUsd, fundingRateFormatted, formattedOpenInterest, formattedVolume24h, formattedHigh24h, formattedLow24h, formattedPrice, formattedPriceChange, isPriceUp, trades24h, spotPriceUsd, marketCapUsd]
   );
 
-  // K 线图表的价格 prop — 单独 memoize，避免随父组件其他状态变化重建
-  // AUDIT-FIX FC-C03: chartPrice 应统一使用 BNB 计价
-  // 之前 fallback 用 spotPriceUsd (USD)，但 chart 期望 BNB 计价 → 价格 inflated ~600x
+  // K 绾垮浘琛ㄧ殑浠锋牸 prop 鈥?鍗曠嫭 memoize锛岄伩鍏嶉殢鐖剁粍浠跺叾浠栫姸鎬佸彉鍖栭噸寤?
+  // AUDIT-FIX FC-C03: chartPrice 搴旂粺涓€浣跨敤 BNB 璁′环
+  // 涔嬪墠 fallback 鐢?spotPriceUsd (USD)锛屼絾 chart 鏈熸湜 BNB 璁′环 鈫?浠锋牸 inflated ~600x
   const chartPrice = useMemo(() => {
     if (tokenStats?.lastPrice) {
       return Number(tokenStats.lastPrice) / 1e18;
     }
-    // Fallback: 使用 spotPriceBigInt (BNB 计价, 1e18 精度)
+    if (oraclePriceBnb > 0) {
+      return oraclePriceBnb;
+    }
+    // Fallback: 浣跨敤 spotPriceBigInt (BNB 璁′环, 1e18 绮惧害)
     if (spotPriceBigInt) {
       return Number(spotPriceBigInt) / 1e18;
     }
     return undefined;
-  }, [tokenStats?.lastPrice, spotPriceBigInt]);
+  }, [tokenStats?.lastPrice, oraclePriceBnb, spotPriceBigInt]);
 
   return (
     <div
-      className={`flex flex-col bg-okx-bg-primary min-h-screen text-okx-text-primary ${className}`}
+      className={`dydx-terminal flex h-[calc(100vh-2.75rem)] min-h-0 flex-col overflow-hidden bg-[#0A0C11] text-okx-text-primary ${className}`}
     >
-      {/* Top Bar — Responsive: Row 1 always visible, Row 2 (stats) scrollable on mobile */}
-      <div className="bg-okx-bg-secondary border-b border-okx-border-primary">
+      {/* Top Bar 鈥?Responsive: Row 1 always visible, Row 2 (stats) scrollable on mobile */}
+      <div className="dydx-risk-banner hidden items-center border-b border-[#3C2A30] bg-[#2B1E22] px-4 text-[12px] font-medium text-[#FF8088] md:flex">
+        在您所在的国家或地区不能使用永续合约。现货交易仍可进行。请注意，根据使用条款，禁止来自某些司法管辖区的访问。
+      </div>
+      <div className="dydx-market-strip border-b border-[#2B3542] bg-[#11161E]">
         {/* Row 1: Symbol + Price + Change + Account */}
-        <div className="h-12 md:h-14 flex items-center px-3 md:px-4 gap-2 md:gap-6">
+        <div className="flex h-[var(--market-info-row-height)] items-stretch gap-0 px-0">
           {/* Symbol */}
-          <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-            <span className="text-sm md:text-[16px] font-bold font-mono text-okx-text-primary">
-              {displaySymbol.toUpperCase()}/BNB
+          <div className="flex min-w-[160px] flex-shrink-0 items-center gap-2 border-r border-[#2B3542] px-3">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#F7931A] text-[12px] font-bold text-white">
+              {displaySymbol.slice(0, 1).toUpperCase()}
             </span>
-            <span className="text-xs font-medium px-1.5 py-0.5 rounded-sm bg-okx-bg-hover text-okx-text-secondary">
-              {t("perpetualLabel")}
+            <span className="text-[16px] font-semibold text-[#F3F7F9]">
+              {displayPair.replace("/", "-")}
             </span>
-            <span className="text-xs font-bold font-mono px-1.5 py-0.5 rounded-sm bg-okx-accent/[0.13] text-okx-accent">
-              2.5x
-            </span>
+            <span className="text-[#77838F]">⌄</span>
           </div>
 
-          {/* Mark Price + 24h Change — always visible (compact on mobile) */}
-          <div className="flex items-center gap-2 md:gap-4 flex-shrink-0">
-            <div className="flex flex-col gap-0.5">
-              {chartPrice ? (
+          {/* Mark Price + 24h Change 鈥?always visible (compact on mobile) */}
+          <div className="flex flex-shrink-0 items-center border-r border-[#2B3542] px-3">
+            <div className="flex flex-col gap-0.5 pr-4">
+              {marketId ? (
+                <span className="whitespace-nowrap font-sans text-[20px] font-semibold tabular-nums text-[#F3F7F9]">
+                  {marketInfo.currentPrice}
+                </span>
+              ) : chartPrice ? (
                 <AnimatedNumber
                   value={chartPrice}
                   format={formatMemePriceNum}
-                  className={`text-sm md:text-[16px] font-bold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}
+                  className={`font-mono text-sm font-bold md:text-[15px] ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}
                   showArrow={true}
                   highlightChange={true}
                 />
               ) : (
-                <span className={`text-sm md:text-[16px] font-bold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
+                <span className={`font-mono text-sm font-bold md:text-[15px] ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
                   {marketInfo.currentPrice}
                 </span>
               )}
-              <span className="text-xs text-okx-text-secondary">{t("markPrice")}</span>
+              <span className="text-[11px] text-[#77838F]">标记价格</span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className={`text-xs md:text-xs font-semibold font-mono ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
+              <span className={`font-mono text-[13px] font-semibold ${marketInfo.isPriceUp ? "text-okx-up" : "text-okx-down"}`}>
                 {marketInfo.isPriceUp ? "+" : ""}{marketInfo.priceChange}
               </span>
-              <span className="text-xs text-okx-text-secondary">{t("change24h")}</span>
+              <span className="text-[11px] text-[#77838F]">24小时波动</span>
             </div>
           </div>
 
           {/* Desktop-only stats (hidden on mobile, shown in Row 2) */}
-          <div className="hidden md:flex items-center gap-6">
-            <div className="h-6 w-px bg-okx-border-primary" />
-            <div className="flex flex-col gap-0.5">
+          <div className="hidden min-w-0 items-stretch md:flex">
+            <div className="flex min-w-[98px] flex-col justify-center gap-0.5 border-r border-[#2B3542] px-3">
               <span className="text-xs font-mono text-okx-text-primary">{marketInfo.high24h}</span>
-              <span className="text-xs text-okx-text-secondary">{t("high24h")}</span>
+              <span className="text-[11px] text-[#77838F]">24H最高价</span>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex min-w-[98px] flex-col justify-center gap-0.5 border-r border-[#2B3542] px-3">
               <span className="text-xs font-mono text-okx-text-primary">{marketInfo.low24h}</span>
-              <span className="text-xs text-okx-text-secondary">{t("low24h")}</span>
+              <span className="text-[11px] text-[#77838F]">24H最低价</span>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex min-w-[112px] flex-col justify-center gap-0.5 border-r border-[#2B3542] px-3">
               <span className="text-xs font-mono text-okx-text-primary">{marketInfo.volume24h}</span>
-              <span className="text-xs text-okx-text-secondary">{t("volume24h")}</span>
+              <span className="text-[11px] text-[#77838F]">24H成交量</span>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex min-w-[104px] flex-col justify-center gap-0.5 border-r border-[#2B3542] px-3">
               <span className="text-xs font-mono text-okx-text-primary">{marketInfo.openInterest}</span>
-              <span className="text-xs text-okx-text-secondary">{t("openInterest")}</span>
+              <span className="text-[11px] text-[#77838F]">持仓量</span>
             </div>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex min-w-[112px] flex-col justify-center gap-0.5 border-r border-[#2B3542] px-3">
               <span className={`text-xs font-mono ${isFundingPositive ? "text-okx-up" : "text-okx-down"}`}>
                 {marketInfo.fundingRate}
               </span>
-              <span className="text-xs text-okx-text-secondary">
-                {t("fundingRate")} / {fundingCountdown}
+              <span className="text-[11px] text-[#77838F]">
+                资金费率 / {fundingCountdown}
               </span>
             </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs font-mono text-okx-text-primary">
-                {marketInfo.marketCap >= 1000000
+            <div className="flex min-w-[96px] flex-col justify-center gap-0.5 px-3">
+              <span className={`text-xs font-mono ${marketId ? (hasLiveMarketPrice ? "text-okx-up" : "text-okx-warning") : "text-okx-text-primary"}`}>
+                {marketId
+                  ? hasLiveMarketPrice ? "Live" : "Reference"
+                  : marketInfo.marketCap >= 1000000
                   ? `$${(marketInfo.marketCap / 1000000).toFixed(2)}M`
                   : marketInfo.marketCap >= 1000
                   ? `$${(marketInfo.marketCap / 1000).toFixed(2)}K`
                   : `$${marketInfo.marketCap.toFixed(2)}`}
               </span>
-              <span className="text-xs text-okx-text-secondary">{t("marketCap")}</span>
+              <span className="text-[11px] text-[#77838F]">{marketId ? "ORACLE" : t("marketCap")}</span>
             </div>
           </div>
 
           {/* Account Balance & Risk (right side) */}
-          <div className="ml-auto flex items-center gap-1.5 md:gap-3">
+          <div className="ml-auto flex items-center gap-1.5 md:gap-2">
             {/* Risk Alert Badge */}
             {riskAlerts.length > 0 && (
               <div className="relative">
                 <button
                   onClick={() => setActiveBottomTab("risk")}
-                  className="p-1.5 md:p-2 rounded-lg bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors"
+                  className="rounded-[4px] bg-red-900/30 p-1.5 text-red-400 transition-colors hover:bg-red-900/50 md:p-2"
                   title={`${riskAlerts.length} risk alerts`}
                 >
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -888,9 +1239,9 @@ export function PerpetualTradingTerminal({
               </div>
             )}
 
-            {/* Risk Level Indicator — hide on smallest screens */}
+            {/* Risk Level Indicator 鈥?hide on smallest screens */}
             {positionRisks.length > 0 && (
-              <div className={`hidden sm:block px-2 py-1 rounded text-xs font-medium ${
+              <div className={`hidden rounded-[4px] px-2 py-1 text-xs font-medium sm:block ${
                 overallRisk === "critical" ? "bg-red-900/50 text-red-400 animate-pulse" :
                 overallRisk === "high" ? "bg-orange-900/50 text-orange-400" :
                 overallRisk === "medium" ? "bg-yellow-900/50 text-yellow-400" :
@@ -900,9 +1251,9 @@ export function PerpetualTradingTerminal({
               </div>
             )}
 
-            {/* Insurance Fund — hide on mobile */}
+            {/* Insurance Fund 鈥?hide on mobile */}
             {insuranceFund && (
-              <div className="hidden sm:flex items-center gap-1 text-xs text-okx-text-tertiary">
+              <div className="hidden items-center gap-1 rounded-[4px] border border-okx-border-primary px-2 py-1 text-xs text-okx-text-tertiary sm:flex">
                 <svg className="w-3 h-3 text-green-400" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
@@ -917,7 +1268,7 @@ export function PerpetualTradingTerminal({
         </div>
 
         {/* Row 2: Mobile-only scrollable stats strip */}
-        <div className="md:hidden overflow-x-auto border-t border-okx-border-primary/50">
+        <div className="overflow-x-auto border-t border-okx-border-primary/50 md:hidden">
           <div className="flex items-center gap-4 px-3 py-1.5 min-w-max">
             <div className="flex flex-col gap-0.5">
               <span className="text-xs font-mono text-okx-text-primary">{marketInfo.high24h}</span>
@@ -942,21 +1293,23 @@ export function PerpetualTradingTerminal({
               <span className="text-xs text-okx-text-secondary">{t("fundingRate")}</span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="text-xs font-mono text-okx-text-primary">
-                {marketInfo.marketCap >= 1000000
+              <span className={`text-xs font-mono ${marketId ? (hasLiveMarketPrice ? "text-okx-up" : "text-okx-warning") : "text-okx-text-primary"}`}>
+                {marketId
+                  ? hasLiveMarketPrice ? "Live" : "Reference"
+                  : marketInfo.marketCap >= 1000000
                   ? `$${(marketInfo.marketCap / 1000000).toFixed(2)}M`
                   : marketInfo.marketCap >= 1000
                   ? `$${(marketInfo.marketCap / 1000).toFixed(2)}K`
                   : `$${marketInfo.marketCap.toFixed(2)}`}
               </span>
-              <span className="text-xs text-okx-text-secondary">{t("marketCap")}</span>
+              <span className="text-xs text-okx-text-secondary">{marketId ? "Oracle" : t("marketCap")}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Main Content - Responsive: mobile=tabs, tablet=2col, desktop=3col */}
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="dydx-main-content flex flex-col flex-1 overflow-hidden">
 
         {/* Mobile Section Tabs (< md only) */}
         <div className="md:hidden flex border-b border-okx-border-primary bg-okx-bg-secondary">
@@ -982,57 +1335,111 @@ export function PerpetualTradingTerminal({
           ))}
         </div>
 
-        {/* ═══ DESKTOP / TABLET LAYOUT (≥ md) ═══ */}
-        <div className="hidden md:flex flex-1 overflow-hidden">
-          {/* Left: Order Book — desktop only (≥ lg) */}
-          <div className="hidden lg:block w-[240px] border-r border-okx-border-primary overflow-hidden">
-            <TradingErrorBoundary module="OrderBook">
-              <OrderBook
-                data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : undefined}
-                onPriceClick={(price) => {
-                  setOrderBookSuggestedPrice(String(price));
-                }}
-                maxRows={12}
-              />
-            </TradingErrorBoundary>
+        {/* Desktop terminal: dYdX-style trade grid */}
+        <div className="dydx-trade-grid hidden min-h-0 flex-1 overflow-hidden md:grid">
+          <div className="dydx-side-region grid min-h-0 grid-rows-[var(--account-info-section-height)_minmax(0,1fr)] gap-px">
+            <div className="dydx-panel order-2 min-h-0 overflow-y-auto">
+              <TradingErrorBoundary module="OrderPanel">
+                <PerpetualOrderPanelV2
+                  symbol={symbol}
+                  displaySymbol={displaySymbol}
+                  tokenAddress={tokenAddress}
+                  marketId={marketId}
+                  oraclePriceUsd={oraclePriceUsd}
+                  maxLeverage={maxLeverage}
+                  isPerpEnabled={isPerpEnabled}
+                  suggestedPrice={orderBookSuggestedPrice}
+                />
+              </TradingErrorBoundary>
+            </div>
+
+            <div className="dydx-panel order-1 flex min-h-0 flex-col px-4 py-3">
+              <div className="grid flex-1 grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-[11px]">
+                <span className="text-[#9EA0AD]">资产组合价值</span>
+                <span className="font-mono text-[#F7FAFC]">{isConnected ? formattedAccountBalance : "--"}</span>
+                <span className="text-[#9EA0AD]">可用余额</span>
+                <span className="font-mono text-[#F7FAFC]">{isConnected ? formattedAccountBalance : "--"}</span>
+                <span className="text-[#9EA0AD]">使用的保证金</span>
+                <span className="font-mono text-[#F7FAFC]">{currentPositionsForDisplay.length > 0 ? "Active" : "0.00%"}</span>
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAccountPanel(true)}
+                  className="h-8 flex-1 rounded-[0.375rem] bg-[#3B3C42] text-xs font-semibold text-[#F3F7F9] transition-colors hover:bg-[#46474E]"
+                >
+                  提现 ↻
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAccountPanel(true)}
+                  className="h-8 w-9 rounded-[0.375rem] border border-[#2B3542] bg-[#11161E] text-xs font-semibold text-[#A7B2BE] transition-colors hover:border-[#4D4E57] hover:text-[#F7FAFC]"
+                >
+                  W
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* Center: Chart + Bottom Panel */}
-          <div className="flex-1 border-r border-okx-border-primary flex flex-col overflow-hidden">
-            {/* Chart Area */}
-            <div className="h-[300px] lg:h-[400px] bg-okx-bg-card">
-            <TradingErrorBoundary module="PerpChart">
-              {tokenAddress && (
-                <MemoizedPriceChart
-                  tokenAddress={tokenAddress}
+          <div className="dydx-panel dydx-inner-region relative min-h-0 overflow-hidden">
+              {marketId && referencePriceUsd > 0 ? (
+                <ReferenceMarketChart
                   displaySymbol={displaySymbol}
-                  currentPrice={chartPrice}
+                  priceUsd={referencePriceUsd}
+                  isReference={!hasLiveMarketPrice}
                 />
+              ) : (
+                <>
+                  <TradingErrorBoundary module="PerpChart">
+                    {tokenAddress && (
+                      <MemoizedPriceChart
+                        tokenAddress={tokenAddress}
+                        displaySymbol={displaySymbol}
+                        currentPrice={chartPrice}
+                      />
+                    )}
+                  </TradingErrorBoundary>
+                  {!chartPrice && <ChartFallback displaySymbol={displaySymbol} />}
+                </>
               )}
-            </TradingErrorBoundary>
+          </div>
+
+          <div className="dydx-panel dydx-vertical-region min-h-0 overflow-hidden">
+              <TradingErrorBoundary module="OrderBook">
+                <OrderBook
+                  data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : indicativeOrderBook}
+                  onPriceClick={(price) => {
+                    setOrderBookSuggestedPrice(String(price));
+                  }}
+                  maxRows={14}
+                  quoteLabel={marketId ? "USDT" : "BNB"}
+                  baseLabel={displaySymbol.toUpperCase()}
+                  modeLabel={wsOrderBook ? "Live" : marketId ? "Oracle" : undefined}
+                  isIndicative={!wsOrderBook && Boolean(marketId)}
+                />
+              </TradingErrorBoundary>
           </div>
 
           {/* Bottom Panel - Positions, Orders, History */}
-          <div className="h-[300px] lg:h-[400px] border-t border-okx-border-primary flex flex-col bg-okx-bg-primary">
-            {/* Tabs — horizontally scrollable on narrow viewports */}
-            <div className="overflow-x-auto border-b border-okx-border-primary">
-              <div className="flex px-2 md:px-4 min-w-max">
+          <div className="dydx-panel dydx-horizontal-region flex h-full min-h-0 flex-col overflow-hidden bg-[#10141B]">
+            {/* Tabs 鈥?horizontally scrollable on narrow viewports */}
+            <div className="overflow-x-auto border-b border-[#2B3542]">
+              <div className="flex min-w-max px-2 md:px-3">
               {[
-                { key: "positions", label: t("positions") },
-                { key: "openOrders", label: t("openOrders") },
-                { key: "orderHistory", label: t("orderHistory") },
-                { key: "tradeHistory", label: t("tradeHistory") },
-                { key: "hunting", label: t("huntingArena") },
-                { key: "risk", label: t("riskControl"), badge: riskAlerts.length > 0 ? riskAlerts.length : undefined },
-                { key: "bills", label: t("bills") },
+                { key: "positions", label: "头寸" },
+                { key: "openOrders", label: "未平仓订单" },
+                { key: "tradeHistory", label: "成交" },
+                { key: "orderHistory", label: "订单历史" },
+                { key: "bills", label: "资金支付" },
+                { key: "risk", label: "风险", badge: riskAlerts.length > 0 ? riskAlerts.length : undefined },
               ].map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveBottomTab(tab.key as typeof activeBottomTab)}
-                  className={`py-2 px-3 md:px-4 text-xs md:text-xs transition-colors relative flex items-center gap-1 whitespace-nowrap flex-shrink-0 ${
+                  className={`relative flex shrink-0 items-center gap-1 whitespace-nowrap px-3 py-2 text-xs transition-colors ${
                     activeBottomTab === tab.key
-                      ? "text-okx-text-primary font-bold"
-                      : "text-okx-text-secondary"
+                      ? "font-semibold text-[#F7FAFC]"
+                      : "text-[#77838F] hover:text-[#A7B2BE]"
                   }`}
                 >
                   {tab.label}
@@ -1042,7 +1449,7 @@ export function PerpetualTradingTerminal({
                     </span>
                   )}
                   {activeBottomTab === tab.key && (
-                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-okx-accent" />
+                    <div className="absolute bottom-0 left-2 right-2 h-px bg-[#5EEAD4]" />
                   )}
                 </button>
               ))}
@@ -1051,22 +1458,18 @@ export function PerpetualTradingTerminal({
 
             {/* Tab Content */}
             <div className="flex-1 overflow-y-auto">
-              {/* Positions - 使用 WebSocket 实时推送数据 (行业标准 UI - 参考 OKX/Binance) */}
+              {/* Positions - 娴ｈ法鏁?WebSocket 鐎圭偞妞傞幒銊┾偓浣规殶閹?(鐞涘奔绗熼弽鍥у櫙 UI - 閸欏倽鈧?OKX/Binance) */}
               {activeBottomTab === "positions" && (
                 <div className="px-0">
                   {!isConnected ? (
-                    <div className="text-center text-okx-text-tertiary py-8">
-                      {tc("connectWalletFirst")}
-                    </div>
+                    <TerminalEmptyState title="您没有敞口头寸。" detail="" />
                   ) : currentPositionsForDisplay.length === 0 ? (
-                    <div className="text-center text-okx-text-tertiary py-8">
-                      {t("noPosition")}
-                    </div>
+                    <TerminalEmptyState title="您没有敞口头寸。" detail="" />
                   ) : (
                     <>
-                    {/* ═══════════════════════════════════════════════════════════════
-                        Desktop Position Table (Binance Futures-grade layout)
-                        ═══════════════════════════════════════════════════════════════ */}
+                    {/* Desktop Position Table */}
+                    {/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?                        Desktop Position Table (Binance Futures-grade layout)
+                        鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/}
                     <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-xs min-w-[1100px]">
                       <thead>
@@ -1106,7 +1509,7 @@ export function PerpetualTradingTerminal({
 
                           return (
                             <tr key={pos.pairId} className="border-b border-[#1E2329] hover:bg-white/[0.02] transition-colors h-16">
-                              {/* ── Symbol: 币对名 + 方向/模式/杠杆 标签组 ── */}
+                              {/* 鈹€鈹€ Symbol: 甯佸鍚?+ 鏂瑰悜/妯″紡/鏉犳潌 鏍囩缁?鈹€鈹€ */}
                               <td className="py-3 px-4">
                                 <div className="flex flex-col gap-1.5">
                                   <span className="text-[#EAECEF] font-semibold text-[13px]">{instId} Perpetual</span>
@@ -1128,32 +1531,32 @@ export function PerpetualTradingTerminal({
                                 </div>
                               </td>
 
-                              {/* ── Size: BNB 名义值 + USD 等价 ── */}
+                              {/* 鈹€鈹€ Size: BNB 鍚嶄箟鍊?+ USD 绛変环 鈹€鈹€ */}
                               <td className="py-3 px-3">
                                 <div className="text-[#EAECEF] text-[13px]">
                                   {sizeETH >= 1 ? sizeETH.toFixed(4) : sizeETH.toFixed(6)} BNB
                                 </div>
                                 <div className="text-[11px] text-[#555555] mt-0.5">
-                                  ≈ ${(sizeETH * 250).toFixed(2)}
+                                  鈮?${(sizeETH * 250).toFixed(2)}
                                 </div>
                               </td>
 
-                              {/* ── Entry Price ── */}
+                              {/* 鈹€鈹€ Entry Price 鈹€鈹€ */}
                               <td className="py-3 px-3 font-mono text-[#EAECEF] text-[13px]">
                                 {formatSmallPrice(entryPrice)}
                               </td>
 
-                              {/* ── Mark Price ── */}
+                              {/* 鈹€鈹€ Mark Price 鈹€鈹€ */}
                               <td className="py-3 px-3 font-mono text-[#888888] text-[13px]">
                                 {formatSmallPrice(markPrice)}
                               </td>
 
-                              {/* ── Liq. Price (警告黄色) ── */}
+                              {/* 鈹€鈹€ Liq. Price (璀﹀憡榛勮壊) 鈹€鈹€ */}
                               <td className="py-3 px-3 font-mono text-[#F0B90B] text-[13px]">
                                 {formatSmallPrice(liqPrice)}
                               </td>
 
-                              {/* ── Margin + 编辑按钮 ── */}
+                              {/* 鈹€鈹€ Margin + 缂栬緫鎸夐挳 鈹€鈹€ */}
                               <td className="py-3 px-3">
                                 <div className="flex items-center gap-2">
                                   <span className="text-[#EAECEF] text-[13px]">
@@ -1174,7 +1577,7 @@ export function PerpetualTradingTerminal({
                                 </div>
                               </td>
 
-                              {/* ── Margin Ratio + 进度条 ── */}
+                              {/* 鈹€鈹€ Margin Ratio + 杩涘害鏉?鈹€鈹€ */}
                               <td className="py-3 px-3">
                                 <div className="flex flex-col gap-1.5">
                                   <span className={`text-[13px] font-semibold ${
@@ -1188,7 +1591,7 @@ export function PerpetualTradingTerminal({
                                 </div>
                               </td>
 
-                              {/* ── PnL (ROE%) ── */}
+                              {/* 鈹€鈹€ PnL (ROE%) 鈹€鈹€ */}
                               <td className="py-3 px-3">
                                 <div className={`text-[14px] font-bold ${unrealizedPnlETH >= 0 ? "text-[#0ECB81]" : "text-[#F6465D]"}`}>
                                   {unrealizedPnlETH >= 0 ? "+" : ""}{Math.abs(unrealizedPnlETH) >= 1 ? unrealizedPnlETH.toFixed(4) : unrealizedPnlETH.toFixed(6)} BNB
@@ -1198,7 +1601,7 @@ export function PerpetualTradingTerminal({
                                 </div>
                               </td>
 
-                              {/* ── Close Position: Market + Limit 按钮 ── */}
+                              {/* 鈹€鈹€ Close Position: Market + Limit 鎸夐挳 鈹€鈹€ */}
                               <td className="py-3 px-4">
                                 <div className="flex items-center gap-2.5">
                                   <button
@@ -1235,9 +1638,9 @@ export function PerpetualTradingTerminal({
                     </table>
                     </div>
 
-                    {/* ═══════════════════════════════════════════════════════════════
+                    {/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
                         Mobile Position Cards
-                        ═══════════════════════════════════════════════════════════════ */}
+                        鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/}
                     <div className="md:hidden space-y-2 p-2">
                       {currentPositionsForDisplay.map((pos) => {
                         const sizeETH = parseFloat(String(pos.size)) / 1e18;
@@ -1353,7 +1756,7 @@ export function PerpetualTradingTerminal({
                 </div>
               )}
 
-              {/* Open Orders Table - V2 待处理订单 (行业标准 UI) */}
+              {/* Open Orders Table - V2 寰呭鐞嗚鍗?(琛屼笟鏍囧噯 UI) */}
               {activeBottomTab === "openOrders" && (
                 <div className="p-2 md:p-4">
                   {!isConnected ? (
@@ -1389,8 +1792,8 @@ export function PerpetualTradingTerminal({
                       </thead>
                       <tbody>
                         {v2PendingOrders.map((order) => {
-                          // 格式化显示数据
-                          // size 是 Meme 代币数量 (1e18 精度)
+                          // 鏍煎紡鍖栨樉绀烘暟鎹?
+                          // size 鏄?Meme 浠ｅ竵鏁伴噺 (1e18 绮惧害)
                           const sizeTokenRaw = Number(order.size) / 1e18;
                           const sizeDisplay = sizeTokenRaw >= 1000000
                             ? `${(sizeTokenRaw / 1000000).toFixed(2)}M`
@@ -1403,7 +1806,7 @@ export function PerpetualTradingTerminal({
                             : filledTokenRaw >= 1000
                             ? `${(filledTokenRaw / 1000).toFixed(2)}K`
                             : filledTokenRaw.toFixed(2);
-                          // price 是 1e18 精度 (BNB 本位: Token/BNB)
+                          // price 鏄?1e18 绮惧害 (BNB 鏈綅: Token/BNB)
                           const priceRaw = Number(order.price) / 1e18;
                           const priceDisplay = order.price === "0" ? t("marketOrder") : formatSmallPrice(priceRaw);
                           const avgPriceRaw = Number(order.avgFillPrice) / 1e18;
@@ -1432,7 +1835,7 @@ export function PerpetualTradingTerminal({
 
                           return (
                             <tr key={order.id} className="border-b border-okx-border-primary hover:bg-okx-bg-hover">
-                              {/* 订单号 */}
+                              {/* 璁㈠崟鍙?*/}
                               <td className="py-2 px-1 text-okx-text-tertiary font-mono text-xs">
                                 <span
                                   className="cursor-pointer hover:text-okx-text-primary transition-colors"
@@ -1453,31 +1856,31 @@ export function PerpetualTradingTerminal({
                                 {instId}
                               </td>
 
-                              {/* 订单类型 */}
+                              {/* 璁㈠崟绫诲瀷 */}
                               <td className="py-2 px-1">
                                 <span className="bg-okx-bg-secondary px-1.5 py-0.5 rounded text-xs">
                                   {orderTypeDisplay}
                                 </span>
                               </td>
 
-                              {/* 方向 */}
+                              {/* 鏂瑰悜 */}
                               <td className={`py-2 px-1 font-medium ${order.isLong ? "text-okx-up" : "text-okx-down"}`}>
                                 {order.isLong ? t("long") : t("short")}
                               </td>
 
-                              {/* 杠杆 */}
+                              {/* 鏉犳潌 */}
                               <td className="py-2 px-1 text-right text-yellow-400">{leverageDisplay}</td>
 
-                              {/* 委托价 */}
+                              {/* 濮旀墭浠?*/}
                               <td className="py-2 px-1 text-right font-mono">{priceDisplay}</td>
 
-                              {/* 委托量 (代币数量) */}
+                              {/* 濮旀墭閲?(浠ｅ竵鏁伴噺) */}
                               <td className="py-2 px-1 text-right">{sizeDisplay}</td>
 
-                              {/* 成交均价 */}
+                              {/* 鎴愪氦鍧囦环 */}
                               <td className="py-2 px-1 text-right font-mono">{avgPriceDisplay}</td>
 
-                              {/* 已成交/总量 + 进度 */}
+                              {/* 宸叉垚浜?鎬婚噺 + 杩涘害 */}
                               <td className="py-2 px-1 text-right">
                                 <div className="flex flex-col items-end">
                                   <span>{filledDisplay}/{sizeDisplay}</span>
@@ -1485,13 +1888,13 @@ export function PerpetualTradingTerminal({
                                 </div>
                               </td>
 
-                              {/* 保证金 */}
+                              {/* 淇濊瘉閲?*/}
                               <td className="py-2 px-1 text-right">{marginDisplay}</td>
 
-                              {/* 手续费 */}
+                              {/* 鎵嬬画璐?*/}
                               <td className="py-2 px-1 text-right text-okx-text-secondary">{feeDisplay}</td>
 
-                              {/* 状态 */}
+                              {/* 鐘舵€?*/}
                               <td className="py-2 px-1 text-center">
                                 <span className={`px-2 py-0.5 rounded text-xs ${
                                   order.status === "PARTIALLY_FILLED"
@@ -1502,7 +1905,7 @@ export function PerpetualTradingTerminal({
                                 </span>
                               </td>
 
-                              {/* 操作 */}
+                              {/* 鎿嶄綔 */}
                               <td className="py-2 px-1 text-right">
                                 <button
                                   className={`text-xs ${
@@ -1570,7 +1973,7 @@ export function PerpetualTradingTerminal({
                 </div>
               )}
 
-              {/* Order History - 使用新的 API 获取历史订单 */}
+              {/* Order History - 浣跨敤鏂扮殑 API 鑾峰彇鍘嗗彶璁㈠崟 */}
               {activeBottomTab === "orderHistory" && (
                 <div className="p-2 md:p-4">
                   {!isConnected ? (
@@ -1731,7 +2134,7 @@ export function PerpetualTradingTerminal({
                 </div>
               )}
 
-              {/* Trade History - 使用新的 API 获取成交记录 */}
+              {/* Trade History - 浣跨敤鏂扮殑 API 鑾峰彇鎴愪氦璁板綍 */}
               {activeBottomTab === "tradeHistory" && (
                 <div className="p-2 md:p-4">
                   {!isConnected ? (
@@ -1774,7 +2177,7 @@ export function PerpetualTradingTerminal({
                             : sizeTokenRaw >= 1000
                             ? `${(sizeTokenRaw / 1000).toFixed(2)}K`
                             : sizeTokenRaw.toFixed(2);
-                          // BNB 本位: 1e18 精度
+                          // BNB 鏈綅: 1e18 绮惧害
                           const priceRaw = Number(trade.price) / 1e18;
                           const priceDisplay = formatSmallPrice(priceRaw);
                           const feeETH = Number(trade.fee) / 1e18;
@@ -1880,23 +2283,23 @@ export function PerpetualTradingTerminal({
                 </div>
               )}
 
-              {/* Hunting Arena - 猎杀场 */}
+              {/* Hunting Arena - 鐚庢潃鍦?*/}
               {activeBottomTab === "hunting" && (
                 <div className="p-2 h-full overflow-y-auto">
-                  {/* 两列布局：左边热力图+排行榜，右边持仓列表 (mobile: stacked) */}
+                  {/* 涓ゅ垪甯冨眬锛氬乏杈圭儹鍔涘浘+鎺掕姒滐紝鍙宠竟鎸佷粨鍒楄〃 (mobile: stacked) */}
                   <div className="flex flex-col lg:flex-row gap-3 h-full">
-                    {/* 左侧：热力图 + 猎手排行榜 */}
+                    {/* 宸︿晶锛氱儹鍔涘浘 + 鐚庢墜鎺掕姒?*/}
                     <div className="w-full lg:w-[420px] flex-shrink-0 flex flex-col gap-3">
-                      {/* 清算热力图 */}
+                      {/* 娓呯畻鐑姏鍥?*/}
                       <div className="flex-shrink-0">
                         <LiquidationHeatmap token={symbol} />
                       </div>
-                      {/* 猎杀排行榜 */}
+                      {/* 鐚庢潃鎺掕姒?*/}
                       <div className="flex-1 min-h-0 overflow-hidden">
                         <HunterLeaderboard token={symbol} />
                       </div>
                     </div>
-                    {/* 右侧：全局持仓列表 (占据剩余空间) */}
+                    {/* 鍙充晶锛氬叏灞€鎸佷粨鍒楄〃 (鍗犳嵁鍓╀綑绌洪棿) */}
                     <div className="flex-1 min-w-0 overflow-hidden">
                       <AllPositions token={symbol} />
                     </div>
@@ -1904,7 +2307,7 @@ export function PerpetualTradingTerminal({
                 </div>
               )}
 
-              {/* Risk Control Panel - 风险控制 */}
+              {/* Risk Control Panel - 椋庨櫓鎺у埗 */}
               {activeBottomTab === "risk" && (
                 <div className="p-4 h-full overflow-y-auto">
                   <RiskPanel
@@ -1914,10 +2317,10 @@ export function PerpetualTradingTerminal({
                 </div>
               )}
 
-              {/* Bills - 账单 */}
+              {/* Bills - 璐﹀崟 */}
               {activeBottomTab === "bills" && (
                 <div className="p-2 h-full overflow-y-auto">
-                  {/* 类型筛选 */}
+                  {/* 绫诲瀷绛涢€?*/}
                   <div className="flex items-center gap-1.5 mb-3 flex-wrap px-1">
                     {BILL_TYPE_FILTERS.map((f) => (
                       <button
@@ -1934,7 +2337,7 @@ export function PerpetualTradingTerminal({
                     ))}
                   </div>
 
-                  {/* 列表 */}
+                  {/* 鍒楄〃 */}
                   {!isConnected ? (
                     <div className="text-center text-okx-text-tertiary py-8 text-xs">
                       {tc("connectWalletFirst")}
@@ -1951,10 +2354,10 @@ export function PerpetualTradingTerminal({
                     <div className="space-y-1.5">
                       {billsData.map((bill) => {
                         const typeMeta = BILL_TYPE_LABELS[bill.type] || { label: bill.type, color: "" };
-                        // BNB 本位: 1e18 精度
+                        // BNB 鏈綅: 1e18 绮惧害
                         const balanceAfterETH = parseFloat(formatUnits(BigInt(bill.balanceAfter), 18));
                         const rawValueETH = parseFloat(formatUnits(BigInt(bill.amount), 18));
-                        // 根据金额符号决定颜色 (SETTLE_PNL/FUNDING_FEE 的 amount 是有符号的)
+                        // 鏍规嵁閲戦绗﹀彿鍐冲畾棰滆壊 (SETTLE_PNL/FUNDING_FEE 鐨?amount 鏄湁绗﹀彿鐨?
                         const isPositive = rawValueETH > 0
                           || bill.type === "DEPOSIT"
                           || bill.type === "INSURANCE_INJECTION"
@@ -2013,35 +2416,32 @@ export function PerpetualTradingTerminal({
           </div>
         </div>
 
-          {/* Right: Order Panel (tablet: 280px, desktop: 320px) */}
-          <div className="w-[280px] lg:w-[320px] bg-okx-bg-primary overflow-y-auto">
-            <TradingErrorBoundary module="OrderPanel">
-              <PerpetualOrderPanelV2
-                symbol={symbol}
-                displaySymbol={displaySymbol}
-                tokenAddress={symbol.startsWith("0x") ? symbol as Address : undefined}
-                isPerpEnabled={isPerpEnabled}
-                suggestedPrice={orderBookSuggestedPrice}
-              />
-            </TradingErrorBoundary>
-          </div>
-        </div>
-
-        {/* ═══ MOBILE LAYOUT (< md) ═══ */}
+        {/* 鈺愨晲鈺?MOBILE LAYOUT (< md) 鈺愨晲鈺?*/}
         <div className="md:hidden flex-1 flex flex-col overflow-hidden">
           {/* Chart section */}
           {mobileActiveSection === "chart" && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="h-[300px] bg-okx-bg-card flex-shrink-0">
-                <TradingErrorBoundary module="PerpChart">
-                  {tokenAddress && (
-                    <MemoizedPriceChart
-                      tokenAddress={tokenAddress}
-                      displaySymbol={displaySymbol}
-                      currentPrice={chartPrice}
-                    />
-                  )}
-                </TradingErrorBoundary>
+              <div className="relative h-[300px] flex-shrink-0 bg-okx-bg-card">
+                {marketId && referencePriceUsd > 0 ? (
+                  <ReferenceMarketChart
+                    displaySymbol={displaySymbol}
+                    priceUsd={referencePriceUsd}
+                    isReference={!hasLiveMarketPrice}
+                  />
+                ) : (
+                  <>
+                    <TradingErrorBoundary module="PerpChart">
+                      {tokenAddress && (
+                        <MemoizedPriceChart
+                          tokenAddress={tokenAddress}
+                          displaySymbol={displaySymbol}
+                          currentPrice={chartPrice}
+                        />
+                      )}
+                    </TradingErrorBoundary>
+                    {!chartPrice && <ChartFallback displaySymbol={displaySymbol} />}
+                  </>
+                )}
               </div>
               {/* Mobile bottom panel (positions/orders) */}
               <div className="flex-1 min-h-[200px] border-t border-okx-border-primary flex flex-col bg-okx-bg-primary">
@@ -2079,7 +2479,7 @@ export function PerpetualTradingTerminal({
                     ))}
                   </div>
                 </div>
-                {/* Tab Content (shared with desktop — rendered inline) */}
+                {/* Tab Content (shared with desktop 鈥?rendered inline) */}
                 <div className="flex-1 overflow-y-auto">
                   {/* Mobile: simplified positions view (cards rendered in Step 5) */}
                   {activeBottomTab === "positions" && (
@@ -2090,7 +2490,7 @@ export function PerpetualTradingTerminal({
                         <div className="text-center text-okx-text-tertiary py-8 text-xs">{t("noPosition")}</div>
                       ) : (
                         <div className="text-center text-okx-text-tertiary py-4 text-xs">
-                          {currentPositionsForDisplay.length} {t("positions")} — {t("openOrders")}
+                          {currentPositionsForDisplay.length} {t("positions")} - {t("openOrders")}
                         </div>
                       )}
                     </div>
@@ -2225,12 +2625,15 @@ export function PerpetualTradingTerminal({
             <div className="flex-1 overflow-hidden">
               <TradingErrorBoundary module="OrderBook">
                 <OrderBook
-                  data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : undefined}
+                  data={wsOrderBook ? { ...wsOrderBook, recentTrades: wsRecentTrades } : indicativeOrderBook}
                   onPriceClick={(price) => {
                     setMobileActiveSection("trade");
                     setOrderBookSuggestedPrice(String(price));
                   }}
                   maxRows={15}
+                  quoteLabel={marketId ? "USDT" : "BNB"}
+                  modeLabel={wsOrderBook ? "Live" : marketId ? "Reference" : undefined}
+                  isIndicative={!wsOrderBook && Boolean(marketId)}
                 />
               </TradingErrorBoundary>
             </div>
@@ -2243,7 +2646,10 @@ export function PerpetualTradingTerminal({
                 <PerpetualOrderPanelV2
                   symbol={symbol}
                   displaySymbol={displaySymbol}
-                  tokenAddress={symbol.startsWith("0x") ? symbol as Address : undefined}
+                  tokenAddress={tokenAddress}
+                  marketId={marketId}
+                  oraclePriceUsd={oraclePriceUsd}
+                  maxLeverage={maxLeverage}
                   isPerpEnabled={isPerpEnabled}
                   suggestedPrice={orderBookSuggestedPrice}
                 />
@@ -2268,9 +2674,9 @@ export function PerpetualTradingTerminal({
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════
-          Margin Adjustment Modal (Professional — OKX/Bybit style)
-          ═══════════════════════════════════════════════════════════════ */}
+      {/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+          Margin Adjustment Modal (Professional 鈥?OKX/Bybit style)
+          鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/}
       {marginModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={() => { setMarginModal(null); setMarginAmount(""); }}>
           <div className="bg-[#1b1d28] rounded-xl w-[380px] max-w-[92vw] shadow-2xl border border-white/[0.06]" onClick={e => e.stopPropagation()}>
@@ -2415,9 +2821,9 @@ export function PerpetualTradingTerminal({
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════
-          TP/SL Modal (止盈止损)
-          ═══════════════════════════════════════════════════════════════ */}
+      {/* 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
+          TP/SL Modal (姝㈢泩姝㈡崯)
+          鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?*/}
       {tpslModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onClick={() => setTpslModal(null)}>
           <div className="bg-[#1b1d28] rounded-xl w-[380px] max-w-[92vw] shadow-2xl border border-white/[0.06]" onClick={e => e.stopPropagation()}>
@@ -2517,3 +2923,4 @@ export function PerpetualTradingTerminal({
     </div>
   );
 }
+

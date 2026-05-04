@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Navbar } from "@/components/layout/Navbar";
 import { useTranslations } from "next-intl";
 import { MATCHING_ENGINE_URL } from "@/config/api";
 
@@ -95,8 +94,6 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-okx-bg-primary text-okx-text-primary">
-      <Navbar />
-
       {/* Hero Section */}
       <div className="w-full bg-gradient-to-b from-okx-bg-secondary to-okx-bg-primary py-8 md:py-10 px-4 md:px-8 lg:px-16">
         <div className="max-w-[1440px] mx-auto">

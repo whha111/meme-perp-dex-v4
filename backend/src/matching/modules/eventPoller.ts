@@ -16,7 +16,7 @@
  */
 
 import { type Address, type Log, createPublicClient, http, parseAbiItem } from "viem";
-import { bsc, bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { getRedisClient, isRedisConnected } from "../database/redis";
 import { rpcTransport } from "../config";
 
@@ -128,7 +128,10 @@ export async function createEventPoller(config: EventPollerConfig): Promise<Poll
     redisKeyPrefix,
   } = config;
 
-  const chain = chainId === 97 ? bscTestnet : bsc;
+  if (chainId !== 56) {
+    throw new Error(`EventPoller only supports BSC mainnet chainId 56 in this product mode. Got ${chainId}.`);
+  }
+  const chain = bsc;
   // Use shared fallback transport for reliability; ignore rpcUrl param
   const client = createPublicClient({ chain, transport: rpcTransport });
 

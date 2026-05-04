@@ -46,19 +46,19 @@
     "invite": "초대"
   },
   "home": {
-    "badge": "✦ BSC Testnet 운영 중",
-    "heroTitle": "다음",
-    "heroSubtitle": "Meme 토큰 생성, 거래, 무기한 선물을 하나의 플랫폼에서. 공정한 출시, 온체인 투명성, 최대 10x 레버리지.",
-    "createToken": "토큰 생성 →",
-    "startTrading": "거래 시작",
+    "badge": "Curated meme perps",
+    "heroTitle": "Meme 현물과 무기한 시장을 하나의 거래 터미널에서.",
+    "heroSubtitle": "토큰 발행, 현물 거래, 무기한 포지션 관리를 가격, 리스크, 계정 상태를 읽기 쉬운 셀프 커스터디 UI에 담았습니다.",
+    "createToken": "토큰 발행",
+    "startTrading": "터미널 열기",
     "stats": {
       "volume24h": "24h 거래량",
       "marketCap": "총 시가총액",
       "activeTokens": "활성 토큰",
       "totalTraders": "누적 트레이더"
     },
-    "whyTitle": "왜 MEMEPERP인가?",
-    "whySubtitle": "탈중앙화, 투명, 무허가 Meme 토큰 거래 인프라",
+    "whyTitle": "실제 거래 화면처럼 설계",
+    "whySubtitle": "데이터 밀도, 리스크 상태, 결제 모델, 절제된 브랜드 표현을 우선합니다.",
     "features": {
       "fairLaunch": {
         "title": "공정한 출시",
@@ -87,7 +87,7 @@
     },
     "ctaTitle": "준비되셨나요?",
     "ctaSubtitle": "지갑을 연결하고 Meme 거래 여정을 시작하세요",
-    "ctaButton": "마켓 진입 →",
+    "ctaButton": "마켓 진입",
     "footer": {
       "settings": "설정",
       "invite": "초대"
@@ -95,7 +95,7 @@
   },
   "wallet": {
     "connect": "지갑 연결",
-    "switchNetwork": "BSC Testnet로 전환"
+    "switchNetwork": "BSC Mainnet로 전환"
   },
   "market": {
     "new": "신규 토큰",
@@ -270,7 +270,7 @@
   },
   "trading": {
     "back": "뒤로",
-    "baseSepolia": "BSC Testnet",
+    "baseSepolia": "BSC Mainnet",
     "connecting": "연결 중...",
     "loadingKline": "차트 데이터 로딩 중...",
     "noTradeData": "거래 데이터가 없습니다",

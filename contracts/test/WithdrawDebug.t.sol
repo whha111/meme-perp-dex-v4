@@ -25,6 +25,11 @@ contract WithdrawDebugTest is Test {
     uint256 deployerPK = 0x4698c351c4aead4844a41399b035e1177535db94a5418a79df07b7f0bf158776;
 
     function testWithdraw() public {
+        vm.skip(
+            block.chainid != 97 || address(sv2).code.length == 0,
+            "WithdrawDebug requires a BSC testnet fork with the deployed SettlementV2 contract"
+        );
+
         uint256 equity = 27.1 ether;
 
         // Check state

@@ -60,14 +60,14 @@ export interface ActivationCriteria {
   minBCProgressPct: number;     // BC 进度百分比
 }
 
-// Testnet mode: drastically lower thresholds for development/testing
-const IS_TESTNET = process.env.CHAIN_ID === "97" || process.env.NODE_ENV === "test";
+// Test mode: drastically lower thresholds for automated tests only.
+const IS_TEST_MODE = process.env.NODE_ENV === "test";
 
-const ACTIVATION_THRESHOLDS: ActivationCriteria = IS_TESTNET
+const ACTIVATION_THRESHOLDS: ActivationCriteria = IS_TEST_MODE
   ? {
-      minLiquidityBNB: 0n,                // no liquidity requirement (testnet)
+      minLiquidityBNB: 0n,                // no liquidity requirement in tests
       minHolders: 0,
-      minVolume1hBNB: 0n,                 // no volume requirement (testnet)
+      minVolume1hBNB: 0n,                 // no volume requirement in tests
       minBCProgressPct: 0,
     }
   : {
@@ -88,11 +88,11 @@ interface HeatThresholds {
   hotHolders: number;
 }
 
-const HEAT_THRESHOLDS: HeatThresholds = IS_TESTNET
+const HEAT_THRESHOLDS: HeatThresholds = IS_TEST_MODE
   ? {
       activeVolume1h: 0n,
       activeHolders: 1,
-      hotVolume1h: 1n * 10n ** 16n,     // 0.01 BNB (testnet)
+      hotVolume1h: 1n * 10n ** 16n,     // 0.01 BNB in tests
       hotHolders: 5,
     }
   : {

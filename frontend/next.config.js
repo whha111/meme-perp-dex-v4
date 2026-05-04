@@ -1,9 +1,11 @@
 const { withSentryConfig } = require("@sentry/nextjs");
+const path = require("path");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Enable standalone output for Docker deployment
   output: 'standalone',
+  outputFileTracingRoot: path.join(__dirname, '..'),
 
   // Security headers (prevent clickjacking, XSS, etc.)
   async headers() {
@@ -43,21 +45,21 @@ const nextConfig = {
 
   // 禁用开发指示器避免 WebSocket URL 错误
   devIndicators: {
-    buildActivity: false,
-    buildActivityPosition: 'bottom-right',
+    position: 'bottom-right',
   },
+
+  // Server-only packages (Sentry/OpenTelemetry Node.js instrumentation)
+  serverExternalPackages: [
+    'import-in-the-middle',
+    'require-in-the-middle',
+    '@opentelemetry/instrumentation',
+    '@fastify/otel',
+  ],
 
   // 实验性功能：加速开发模式
   experimental: {
     // 优化包导入
     optimizePackageImports: ['@rainbow-me/rainbowkit', 'wagmi', 'viem', 'lucide-react'],
-    // Server-only packages (Sentry/OpenTelemetry Node.js instrumentation)
-    serverComponentsExternalPackages: [
-      'import-in-the-middle',
-      'require-in-the-middle',
-      '@opentelemetry/instrumentation',
-      '@fastify/otel',
-    ],
   },
 
   webpack: (config, { dev }) => {

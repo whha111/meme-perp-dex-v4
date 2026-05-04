@@ -26,7 +26,7 @@ const TRANSFER_EVENT = parseAbiItem(
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 const CACHE_TTL_SECONDS = 60;
-const MAX_BLOCK_RANGE = 2000n; // BSC Testnet public RPC limits ~5000, use 2000 for safety
+const MAX_BLOCK_RANGE = 2000n; // BSC public RPC limits vary; use 2000 for safety
 
 // ============================================================
 // Types
@@ -84,7 +84,7 @@ async function fetchTransferLogs(token: Address, tokenCreatedAt?: number): Promi
   let fromBlock = 0n;
 
   // Calculate start block based on token creation time
-  // BSC Testnet: ~3 seconds per block
+  // BSC: ~3 seconds per block
   if (tokenCreatedAt && tokenCreatedAt > 0) {
     const nowSeconds = Math.floor(Date.now() / 1000);
     const ageSeconds = nowSeconds - tokenCreatedAt;

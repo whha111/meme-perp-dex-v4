@@ -45,6 +45,9 @@ export const CONTRACTS = {
   // PerpVault (GMX-style LP pool)
   PERP_VAULT: (process.env.NEXT_PUBLIC_PERP_VAULT_ADDRESS || "") as Address,
 
+  // Curated meme perpetual market whitelist
+  MARKET_REGISTRY: (process.env.NEXT_PUBLIC_MARKET_REGISTRY_ADDRESS || "") as Address,
+
   // Other contracts
   AMM: (process.env.NEXT_PUBLIC_AMM_ADDRESS || "") as Address,
   LENDING_POOL: (process.env.NEXT_PUBLIC_LENDING_POOL_ADDRESS || "") as Address,
@@ -60,9 +63,9 @@ export const CONTRACTS = {
  */
 export const NETWORK_CONFIG = {
   CHAIN_ID: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56"),
-  CHAIN_NAME: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || "56") === 56 ? "BSC Mainnet" : "BSC Testnet",
+  CHAIN_NAME: "BSC Mainnet",
   BLOCK_EXPLORER: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || "https://bscscan.com",
-  RPC_URL: process.env.NEXT_PUBLIC_BSC_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/",
+  RPC_URL: process.env.NEXT_PUBLIC_BSC_RPC_URL || process.env.NEXT_PUBLIC_RPC_URL || "https://bsc-dataseed.bnbchain.org/",
 };
 
 /**
@@ -403,8 +406,7 @@ export function getExplorerUrl(addressOrTx: string, type: "address" | "tx" = "ad
  * PancakeSwap V2 integration for graduated tokens
  */
 export function getPancakeSwapUrl(tokenAddress: string): string {
-  const chainParam = NETWORK_CONFIG.CHAIN_ID === 56 ? "bsc" : "bscTestnet";
-  return `https://pancakeswap.finance/swap?chain=${chainParam}&outputCurrency=${tokenAddress}`;
+  return `https://pancakeswap.finance/swap?chain=bsc&outputCurrency=${tokenAddress}`;
 }
 
 /**
@@ -415,9 +417,10 @@ export function areContractsConfigured(): boolean {
   const criticalContracts = [
     CONTRACTS.SETTLEMENT_V2,
     CONTRACTS.PERP_VAULT,
-    CONTRACTS.TOKEN_FACTORY,
+    CONTRACTS.MARKET_REGISTRY,
     CONTRACTS.PRICE_FEED,
     CONTRACTS.WETH,
+    CONTRACTS.USDT,
   ];
   return criticalContracts.every((addr) => addr && addr !== ("" as Address));
 }

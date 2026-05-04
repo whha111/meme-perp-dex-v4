@@ -37,7 +37,11 @@ if (rpcFallbackUrls.length > 0) {
 }
 export const CHAIN_ID = parseInt(process.env.CHAIN_ID || "");
 if (!process.env.CHAIN_ID || isNaN(CHAIN_ID)) {
-  console.error("🚨 FATAL: CHAIN_ID env var is required (e.g. 56 for BSC Mainnet, 97 for Testnet).");
+  console.error("🚨 FATAL: CHAIN_ID env var is required (56 for BSC Mainnet).");
+  process.exit(1);
+}
+if (process.env.NODE_ENV === "production" && CHAIN_ID !== 56) {
+  console.error(`🚨 FATAL: Production CHAIN_ID must be 56 for BSC Mainnet. Got ${CHAIN_ID}.`);
   process.exit(1);
 }
 
@@ -61,11 +65,14 @@ export const FUNDING_RATE_ADDRESS = process.env.FUNDING_RATE_ADDRESS as Address;
 export const LIQUIDATION_ADDRESS = process.env.LIQUIDATION_ADDRESS as Address;
 export const LENDING_POOL_ADDRESS = process.env.LENDING_POOL_ADDRESS as Address;
 export const PERP_VAULT_ADDRESS = process.env.PERP_VAULT_ADDRESS as Address;
+export const MARKET_REGISTRY_ADDRESS = process.env.MARKET_REGISTRY_ADDRESS as Address;
 export const SETTLEMENT_V2_ADDRESS = process.env.SETTLEMENT_V2_ADDRESS as Address;
 export const COLLATERAL_TOKEN_ADDRESS = process.env.COLLATERAL_TOKEN_ADDRESS as Address;
+export const WBNB_ADDRESS = process.env.WBNB_ADDRESS as Address;
+export const USDT_ADDRESS = process.env.USDT_ADDRESS as Address;
 export const FEE_RECEIVER_ADDRESS = process.env.FEE_RECEIVER_ADDRESS as Address;
 export const LIQUIDATOR_BOT_ADDRESS = (process.env.LIQUIDATOR_BOT_ADDRESS || process.env.FEE_RECEIVER_ADDRESS) as Address;
-export const WETH_ADDRESS = (process.env.WETH_ADDRESS || process.env.COLLATERAL_TOKEN_ADDRESS) as Address;
+export const WETH_ADDRESS = WBNB_ADDRESS;
 export const PANCAKESWAP_FACTORY_ADDRESS = process.env.PANCAKESWAP_FACTORY_ADDRESS as Address;
 export const ROUTER_ADDRESS = process.env.ROUTER_ADDRESS as Address;
 
@@ -79,8 +86,11 @@ const REQUIRED_CONTRACT_ADDRESSES: Record<string, Address | undefined> = {
   LIQUIDATION_ADDRESS,
   LENDING_POOL_ADDRESS,
   PERP_VAULT_ADDRESS,
+  MARKET_REGISTRY_ADDRESS,
   SETTLEMENT_V2_ADDRESS,
   COLLATERAL_TOKEN_ADDRESS,
+  WBNB_ADDRESS,
+  USDT_ADDRESS,
   FEE_RECEIVER_ADDRESS,
   SETTLEMENT_ADDRESS,
   INSURANCE_FUND_ADDRESS,
@@ -93,6 +103,29 @@ if (missingAddresses.length > 0) {
   console.error(`🚨 FATAL: Missing required contract address env vars: ${missingAddresses.join(", ")}`);
   console.error("All contract addresses must be explicitly set. No fallback values allowed.");
   process.exit(1);
+}
+
+export const MARKET_CONFIG_PATH = process.env.MARKET_CONFIG_PATH;
+export const ORACLE_SIGNERS = (process.env.ORACLE_SIGNERS || "")
+  .split(",")
+  .map((signer) => signer.trim())
+  .filter(Boolean) as Address[];
+export const ORACLE_SIGNER_SET_VERSION = parseInt(process.env.ORACLE_SIGNER_SET_VERSION || "1", 10);
+export const ORACLE_QUORUM = parseInt(process.env.ORACLE_QUORUM || "2", 10);
+
+if (process.env.NODE_ENV === "production") {
+  const missingOracleConfig = [
+    !MARKET_CONFIG_PATH ? "MARKET_CONFIG_PATH" : "",
+    ORACLE_SIGNERS.length === 0 ? "ORACLE_SIGNERS" : "",
+  ].filter(Boolean);
+  if (missingOracleConfig.length > 0) {
+    console.error(`🚨 FATAL: Missing required oracle/market env vars: ${missingOracleConfig.join(", ")}`);
+    process.exit(1);
+  }
+  if (ORACLE_SIGNERS.length < 3 || ORACLE_QUORUM < 2 || ORACLE_QUORUM > ORACLE_SIGNERS.length) {
+    console.error("🚨 FATAL: ORACLE_SIGNERS must provide at least 3 signers and ORACLE_QUORUM must be 2-of-3 or stronger.");
+    process.exit(1);
+  }
 }
 
 // ============================================================

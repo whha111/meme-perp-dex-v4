@@ -1,31 +1,47 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useConnectModal, useAccountModal, useChainModal } from '@rainbow-me/rainbowkit';
 import { useTranslations } from 'next-intl';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 import { LanguageSelector } from '@/components/shared/LanguageSelector';
 import { useAccount, useDisconnect, useBalance } from 'wagmi';
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useTradingDataStore } from '@/lib/stores/tradingDataStore';
+import {
+  ChevronDown,
+  Copy,
+  LogOut,
+  Menu,
+  Search,
+  Settings,
+  UserCircle,
+  Wallet,
+  X,
+} from 'lucide-react';
+
+const DEFAULT_PERP_HREF = '/perp?marketId=PEPE-USDT-PERP';
 
 const NAV_ITEMS = [
+  { href: '/', key: 'market' },
   { href: '/exchange', key: 'spot' },
-  { href: '/perp', key: 'perpetual' },
-  { href: '/create', key: 'launch' },
-  { href: '/account', key: 'assets' },
+  { href: DEFAULT_PERP_HREF, key: 'perpetual' },
+  { href: '/deposit', key: 'deposit' },
   { href: '/vault', key: 'vault' },
-  { href: '/earnings', key: 'invite' },
-  { href: '/leaderboard', key: 'leaderboard' },
+  { href: '/account', key: 'assets' },
 ] as const;
+
+function formatAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
 
 export function Navbar() {
   const t = useTranslations('nav');
   const tWallet = useTranslations('wallet');
   const tCommon = useTranslations('common');
   const pathname = usePathname();
+  const router = useRouter();
 
   const { address, isConnected, chain } = useAccount();
   const { disconnect } = useDisconnect();
@@ -34,7 +50,6 @@ export function Navbar() {
   const { openAccountModal } = useAccountModal();
   const { openChainModal } = useChainModal();
 
-  const router = useRouter();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -48,7 +63,11 @@ export function Navbar() {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase();
     return allTokens
-      .filter((t) => t.symbol?.toLowerCase().includes(q) || t.name?.toLowerCase().includes(q) || t.address.toLowerCase().includes(q))
+      .filter((token) =>
+        token.symbol?.toLowerCase().includes(q) ||
+        token.name?.toLowerCase().includes(q) ||
+        token.address.toLowerCase().includes(q)
+      )
       .slice(0, 8);
   }, [searchQuery, allTokens]);
 
@@ -56,7 +75,6 @@ export function Navbar() {
     setMounted(true);
   }, []);
 
-  // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -71,41 +89,187 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const targetChainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '56');
+  const isWrongNetwork = !!chain && chain.id !== targetChainId;
+  const formattedBalance = balance ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : '';
+
+  const goToToken = (tokenAddress: string) => {
+    router.push(`/perp?symbol=${tokenAddress}`);
+    setSearchQuery('');
+    setSearchFocused(false);
+    setMobileMenuOpen(false);
+  };
+
+  const isTradeShell = pathname.startsWith('/perp');
+
+  if (isTradeShell) {
+    return (
+      <nav className="sticky top-0 z-30 h-[2.75rem] border-b border-[#2B3542] bg-[#11161E] text-[#A7B2BE]">
+        <div className="flex h-full w-full items-center justify-between">
+          <div className="flex h-full min-w-0 items-center">
+            <Link href="/" className="flex h-full items-center gap-2 px-4 text-[#F3F7F9]">
+              <span className="dexi-logo-mark h-6 w-6 rounded-[4px] text-[11px]">D</span>
+              <span className="text-[14px] font-semibold">DEXI</span>
+            </Link>
+            <div className="flex h-full items-center gap-4 border-l border-[#2B3542] px-4 text-[13px]">
+              <span className="rounded-[0.375rem] bg-[#18191E] px-2 py-1 text-[12px] font-medium text-[#A7B2BE]">BSC Mainnet</span>
+            </div>
+            <div className="hidden h-full items-center gap-1 lg:flex">
+              {[
+                { href: '/', label: '行情' },
+                { href: '/exchange', label: '现货' },
+                { href: DEFAULT_PERP_HREF, label: '合约' },
+                { href: '/deposit', label: '充值' },
+                { href: '/vault', label: '金库' },
+                { href: '/account', label: '资产' },
+              ].map((item) => {
+                const itemPath = item.href.split('?')[0];
+                const isActive = pathname === itemPath || pathname.startsWith(itemPath + '/');
+                return (
+                  <Link
+                  key={item.href}
+                  href={item.href}
+                  prefetch={false}
+                  className={`relative flex h-full items-center px-3 text-[14px] transition-colors ${
+                      isActive ? 'text-[#F3F7F9]' : 'text-[#A0ACB8] hover:text-[#F3F7F9]'
+                    }`}
+                  >
+                    {item.label}
+                    {isActive && <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-[#5EEAD4]" />}
+                  </Link>
+                );
+              })}
+              <span className="ml-2 rounded-[0.375rem] border border-[#2B3542] bg-[#18191E] px-2 py-1 text-[12px] font-medium text-[#77838F]">
+                Curated Meme Perps
+              </span>
+            </div>
+          </div>
+
+          <div className="flex h-full items-center gap-2 px-4">
+            <div className="relative hidden md:block" ref={searchRef}>
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#77838F]" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && searchResults.length > 0) {
+                    goToToken(searchResults[0].address);
+                  }
+                  if (event.key === 'Escape') setSearchFocused(false);
+                }}
+                placeholder="搜索市场 / 地址"
+                className="h-8 w-56 rounded-[0.375rem] border border-[#2B3542] bg-[#18191E] pl-9 pr-3 text-[13px] text-[#F3F7F9] placeholder:text-[#77838F] transition-colors focus:border-[#465565] focus:outline-none xl:w-72"
+              />
+              {searchFocused && searchQuery.trim() && (
+                <div className="absolute right-0 top-full z-50 mt-2 max-h-[320px] w-80 overflow-y-auto rounded-lg border border-[#2B3542] bg-[#11161E] shadow-2xl">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((token) => (
+                      <button
+                        key={token.address}
+                        onClick={() => goToToken(token.address)}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#1D2430]"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#5EEAD4]/20 text-xs font-bold text-[#8FF7E8]">
+                          {token.symbol?.charAt(0)?.toUpperCase() || '?'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-[#F3F7F9]">{token.symbol}</div>
+                          <div className="truncate text-xs text-[#77838F]">{token.name}</div>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-6 text-center text-xs text-[#77838F]">没有结果</div>
+                  )}
+                </div>
+              )}
+            </div>
+            <Link
+              href="/deposit"
+              className="hidden h-8 items-center justify-center rounded-full bg-[#5EEAD4] px-4 text-[13px] font-semibold text-[#061215] transition-colors hover:bg-[#8FF7E8] sm:flex"
+            >
+              充值
+            </Link>
+            <LanguageSelector />
+            <button className="hidden h-8 w-8 items-center justify-center rounded-[0.375rem] text-[#77838F] hover:bg-[#1D2430] hover:text-[#F3F7F9] md:flex">
+              ?
+            </button>
+            <Link
+              href="/settings"
+              className="hidden h-8 w-8 items-center justify-center rounded-[0.375rem] text-[#77838F] transition-colors hover:bg-[#1D2430] hover:text-[#F3F7F9] sm:flex"
+              title={tCommon('settings')}
+            >
+              <Settings className="h-[17px] w-[17px]" />
+            </Link>
+            {!mounted ? (
+              <div className="h-8 w-24 rounded-[0.375rem] bg-[#1D2430]" />
+            ) : !isConnected || !address ? (
+              <button
+                onClick={() => openConnectModal?.()}
+                data-testid="connect-wallet-btn"
+                className="inline-flex h-8 items-center gap-2 rounded-[0.375rem] bg-[#5EEAD4] px-3 text-[13px] font-semibold text-[#061215] transition-colors hover:bg-[#8FF7E8]"
+              >
+                <Wallet className="h-4 w-4" />
+                <span className="hidden sm:inline">{tWallet('connect')}</span>
+              </button>
+            ) : isWrongNetwork ? (
+              <button
+                onClick={() => openChainModal?.()}
+                className="h-8 rounded-[0.375rem] bg-okx-down px-3 text-[13px] font-semibold text-white"
+              >
+                {tWallet('switchNetwork')}
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowAccountMenu((open) => !open)}
+                data-testid="wallet-address"
+                className="flex h-8 items-center gap-2 rounded-[0.375rem] bg-[#1D2430] px-3 text-[13px] font-medium text-[#F3F7F9]"
+              >
+                {formatAddress(address)}
+                <ChevronDown className="h-3.5 w-3.5 text-[#77838F]" />
+              </button>
+            )}
+          </div>
+        </div>
+      </nav>
+    );
+  }
+
   return (
-    <nav className="sticky top-0 z-30 bg-okx-bg-primary border-b border-okx-border-primary h-[64px]">
-      <div className="max-w-[1440px] mx-auto px-4 h-full flex items-center justify-between">
-        {/* 左侧: Logo + 汉堡菜单 + 导航链接 */}
-        <div className="flex items-center gap-4 lg:gap-8">
-          {/* 汉堡菜单按钮 (mobile/tablet only) */}
+    <nav className="sticky top-0 z-30 h-[2.75rem] border-b border-[#2B3542] bg-[#0A0C11]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0A0C11]/90">
+      <div className="flex h-full w-full items-center justify-between gap-3 px-3">
+        <div className="flex min-w-0 items-center gap-3 lg:gap-5">
           <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-1.5 rounded-md hover:bg-okx-bg-hover transition-colors text-okx-text-secondary"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-okx-text-secondary transition-colors hover:bg-okx-bg-hover hover:text-okx-text-primary lg:hidden"
             aria-label="Toggle menu"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-              {mobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-              )}
-            </svg>
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
-          <Link href="/" className="flex items-center gap-2 text-okx-text-primary font-bold text-xl">
-            <span className="text-meme-lime text-lg">✦</span>
-            <span className="tracking-tight">DEXI</span>
+          <Link href="/" className="flex shrink-0 items-center gap-2 text-okx-text-primary">
+            <span className="dexi-logo-mark rounded-[4px]">
+              D
+            </span>
+            <span className="hidden text-sm font-semibold tracking-normal sm:inline">DEXI</span>
+            <span className="text-sm font-semibold tracking-normal sm:hidden">DEXI</span>
           </Link>
-          <div className="flex items-center gap-6 text-sm font-mono">
+
+          <div className="hidden items-center gap-1 lg:flex">
             {NAV_ITEMS.map(({ href, key }) => {
-              const isActive = pathname === href || pathname.startsWith(href + '/');
+              const itemPath = href.split('?')[0];
+              const isActive = pathname === itemPath || pathname.startsWith(itemPath + '/');
               return (
                 <Link
                   key={href}
                   href={href}
-                  className={`hidden lg:inline transition-colors ${
+                  prefetch={false}
+                  className={`rounded-[0.375rem] px-3 py-1.5 text-[13px] font-medium transition-colors ${
                     isActive
-                      ? 'text-meme-lime font-medium'
-                      : 'text-okx-text-secondary hover:text-okx-text-primary'
+                      ? 'bg-[#151A22] text-[#F7FAFC]'
+                      : 'text-[#A7B2BE] hover:bg-[#151A22] hover:text-[#F7FAFC]'
                   }`}
                 >
                   {t(key)}
@@ -115,248 +279,190 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* 右侧: 搜索框 + 语言 + 主题 + 钱包 */}
-        <div className="flex items-center gap-3">
-          {/* 搜索框 */}
+        <div className="flex items-center gap-2">
           <div className="relative hidden md:block" ref={searchRef}>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-okx-text-tertiary" />
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => setSearchQuery(event.target.value)}
               onFocus={() => setSearchFocused(true)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && searchResults.length > 0) {
-                  router.push(`/exchange?symbol=${searchResults[0].address}`);
-                  setSearchQuery('');
-                  setSearchFocused(false);
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && searchResults.length > 0) {
+                  goToToken(searchResults[0].address);
                 }
-                if (e.key === 'Escape') setSearchFocused(false);
+                if (event.key === 'Escape') setSearchFocused(false);
               }}
               placeholder={t('searchPlaceholder')}
-              className="bg-okx-bg-hover border border-okx-border-primary rounded-full px-4 py-1.5 text-xs text-okx-text-primary w-64 focus:outline-none focus:border-okx-border-secondary placeholder:text-okx-text-tertiary"
+              className="h-8 w-56 rounded-[0.5rem] border border-[#2B3542] bg-[#10141B] pl-9 pr-3 text-sm text-[#F7FAFC] placeholder:text-[#77838F] transition-colors focus:border-[#465565] focus:outline-none xl:w-72"
             />
             {searchFocused && searchQuery.trim() && (
-              <div className="absolute top-full mt-1 left-0 w-80 bg-okx-bg-card border border-okx-border-primary rounded-lg shadow-xl z-50 max-h-[320px] overflow-y-auto">
+              <div className="absolute right-0 top-full z-50 mt-2 max-h-[320px] w-80 overflow-y-auto rounded-lg border border-okx-border-primary bg-okx-bg-card shadow-2xl">
                 {searchResults.length > 0 ? (
                   searchResults.map((token) => (
                     <button
                       key={token.address}
-                      onClick={() => {
-                        router.push(`/exchange?symbol=${token.address}`);
-                        setSearchQuery('');
-                        setSearchFocused(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-okx-bg-hover text-left transition-colors"
+                      onClick={() => goToToken(token.address)}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-okx-bg-hover"
                     >
-                      <div className="w-7 h-7 rounded-full bg-meme-lime/20 flex items-center justify-center text-meme-lime text-xs font-bold flex-shrink-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-dexi-accent-soft text-xs font-bold text-meme-lime">
                         {token.symbol?.charAt(0)?.toUpperCase() || '?'}
                       </div>
-                      <div className="flex flex-col gap-px flex-1 min-w-0">
-                        <span className="text-sm font-semibold text-okx-text-primary">{token.symbol}</span>
-                        <span className="text-xs text-okx-text-tertiary truncate">{token.name}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold text-okx-text-primary">{token.symbol}</div>
+                        <div className="truncate text-xs text-okx-text-tertiary">{token.name}</div>
                       </div>
                       <span className="font-mono text-xs text-okx-text-secondary">
-                        {Number(token.price || '0') > 0
-                          ? `${(Number(token.price) / 1e18).toFixed(8)}`
-                          : '--'}
+                        {Number(token.price || '0') > 0 ? (Number(token.price) / 1e18).toFixed(8) : '--'}
                       </span>
                     </button>
                   ))
                 ) : (
-                  <div className="px-4 py-6 text-center text-okx-text-tertiary text-xs">
-                    {t('noResults')}
-                  </div>
+                  <div className="px-4 py-6 text-center text-xs text-okx-text-tertiary">{t('noResults')}</div>
                 )}
               </div>
             )}
           </div>
 
-          {/* 语言选择器 */}
           <LanguageSelector />
-
-          {/* 主题切换 */}
           <ThemeToggle />
 
-          {/* 设置 */}
           <Link
             href="/settings"
-            className="p-2 rounded-full hover:bg-okx-bg-hover transition-colors text-okx-text-secondary hover:text-okx-text-primary"
+            className="hidden h-8 w-8 items-center justify-center rounded-[0.5rem] text-[#A7B2BE] transition-colors hover:bg-[#151A22] hover:text-[#F7FAFC] sm:inline-flex"
             title={tCommon('settings')}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
+            <Settings className="h-[18px] w-[18px]" />
           </Link>
 
-          {/* 钱包按钮 */}
           {!mounted ? (
-            <div className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-sm font-bold opacity-50">
-              {tWallet('connect')}
+            <div className="inline-flex h-8 items-center gap-2 rounded-[0.5rem] bg-dexi-accent px-3 text-sm font-bold text-[#061215]">
+              <Wallet className="h-4 w-4" />
+              <span className="hidden sm:inline">{tWallet('connect')}</span>
             </div>
           ) : !isConnected || !address ? (
             <button
-              onClick={openConnectModal}
+              onClick={() => openConnectModal?.()}
               data-testid="connect-wallet-btn"
-              className="bg-meme-lime text-black px-4 py-1.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity"
+              className="inline-flex h-8 items-center gap-2 rounded-[0.5rem] bg-dexi-accent px-3 text-sm font-bold text-[#061215] transition-colors hover:bg-dexi-accent-strong"
             >
-              {tWallet('connect')}
+              <Wallet className="h-4 w-4" />
+              <span className="hidden sm:inline">{tWallet('connect')}</span>
+            </button>
+          ) : isWrongNetwork ? (
+            <button
+              onClick={() => openChainModal?.()}
+              className="h-8 rounded-[4px] bg-okx-down px-3 text-sm font-bold text-white transition-opacity hover:opacity-90"
+            >
+              {tWallet('switchNetwork')}
             </button>
           ) : (
-            <>
-              {/* Check if wrong network */}
-              {chain && (
-                <>
-                  {(() => {
-                    const targetChainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '97');
-                    if (chain.id !== targetChainId) {
-                      return (
-                        <button
-                          onClick={openChainModal}
-                          className="bg-okx-down text-white px-4 py-1.5 rounded-full text-sm font-bold hover:opacity-90 transition-opacity"
-                        >
-                          {tWallet('switchNetwork')}
-                        </button>
-                      );
-                    }
+            <div className="flex items-center gap-2" data-testid="wallet-connected">
+              <button
+                onClick={() => openChainModal?.()}
+                data-testid="network-badge"
+                className="hidden h-8 items-center gap-1.5 rounded-[4px] border border-okx-border-primary bg-okx-bg-secondary px-3 text-xs font-medium text-okx-text-secondary transition-colors hover:border-okx-border-hover hover:text-okx-text-primary sm:inline-flex"
+              >
+                {chain?.name || 'BSC Mainnet'}
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
 
-                    // Format address: 0x1234...5678
-                    const formattedAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-                    const formattedBalance = balance
-                      ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}`
-                      : '';
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setShowAccountMenu((open) => !open)}
+                  data-testid="wallet-address"
+                  className="flex h-8 items-center overflow-hidden rounded-[4px] border border-okx-border-primary bg-okx-bg-secondary text-xs transition-colors hover:border-okx-border-hover"
+                >
+                  {formattedBalance && (
+                    <span className="hidden border-r border-okx-border-primary px-3 font-mono text-okx-text-primary md:inline" data-testid="wallet-balance">
+                      {formattedBalance}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-2 px-3 font-medium text-okx-text-primary">
+                    {formatAddress(address)}
+                    <ChevronDown className="h-3.5 w-3.5 text-okx-text-tertiary" />
+                  </span>
+                </button>
 
-                    return (
-                      <div className="flex items-center gap-2" data-testid="wallet-connected">
-                        <button
-                          onClick={openChainModal}
-                          data-testid="network-badge"
-                          className="flex items-center gap-2 bg-okx-bg-hover border border-okx-border-primary text-okx-text-primary px-3 py-1.5 rounded-full text-xs hover:border-okx-border-secondary transition-colors"
-                        >
-                          {chain.name && (
-                            <>
-                              <span className="font-bold hidden sm:inline">{chain.name}</span>
-                              <span className="text-xs text-okx-text-tertiary">▼</span>
-                            </>
-                          )}
-                        </button>
-
-                        <div className="relative" ref={menuRef}>
-                          <button
-                            onClick={() => setShowAccountMenu(!showAccountMenu)}
-                            data-testid="wallet-address"
-                            className="flex items-center bg-okx-bg-hover border border-okx-border-primary rounded-full overflow-hidden hover:border-okx-border-secondary transition-colors"
-                          >
-                            {formattedBalance && (
-                              <span
-                                className="px-3 py-1.5 text-okx-text-primary text-xs font-bold border-r border-okx-border-primary"
-                                data-testid="wallet-balance"
-                              >
-                                {formattedBalance}
-                              </span>
-                            )}
-                            <div className="px-3 py-1.5 flex items-center gap-2">
-                              <span className="text-okx-text-primary text-xs font-medium">
-                                {formattedAddress}
-                              </span>
-                              <span className="text-xs text-okx-text-tertiary">▼</span>
-                            </div>
-                          </button>
-
-                          {/* Account dropdown menu */}
-                          {showAccountMenu && (
-                            <div className="absolute right-0 mt-2 bg-okx-bg-card rounded-lg border border-okx-border-primary shadow-lg z-50 min-w-[180px]">
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(address);
-                                  setShowAccountMenu(false);
-                                }}
-                                className="w-full px-4 py-2.5 text-okx-text-primary text-sm hover:bg-okx-bg-hover text-left flex items-center gap-2 border-b border-okx-border-primary"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
-                                {tCommon('copyAddress')}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  openAccountModal?.();
-                                  setShowAccountMenu(false);
-                                }}
-                                className="w-full px-4 py-2.5 text-okx-text-primary text-sm hover:bg-okx-bg-hover text-left flex items-center gap-2 border-b border-okx-border-primary"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                {tCommon('accountDetails')}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  router.push('/settings');
-                                  setShowAccountMenu(false);
-                                }}
-                                className="w-full px-4 py-2.5 text-okx-text-primary text-sm hover:bg-okx-bg-hover text-left flex items-center gap-2 border-b border-okx-border-primary"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                                {tCommon('settings')}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  disconnect();
-                                  setShowAccountMenu(false);
-                                }}
-                                className="w-full px-4 py-2.5 text-okx-down text-sm hover:bg-okx-bg-hover text-left flex items-center gap-2"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                                </svg>
-                                {tCommon('disconnect')}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </>
-              )}
-            </>
+                {showAccountMenu && (
+                  <div className="absolute right-0 z-50 mt-2 min-w-[190px] overflow-hidden rounded-lg border border-okx-border-primary bg-okx-bg-card shadow-2xl">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(address);
+                        setShowAccountMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 border-b border-okx-border-primary px-4 py-2.5 text-left text-sm text-okx-text-primary transition-colors hover:bg-okx-bg-hover"
+                    >
+                      <Copy className="h-4 w-4 text-okx-text-secondary" />
+                      {tCommon('copyAddress')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        openAccountModal?.();
+                        setShowAccountMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 border-b border-okx-border-primary px-4 py-2.5 text-left text-sm text-okx-text-primary transition-colors hover:bg-okx-bg-hover"
+                    >
+                      <UserCircle className="h-4 w-4 text-okx-text-secondary" />
+                      {tCommon('accountDetails')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        router.push('/settings');
+                        setShowAccountMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 border-b border-okx-border-primary px-4 py-2.5 text-left text-sm text-okx-text-primary transition-colors hover:bg-okx-bg-hover"
+                    >
+                      <Settings className="h-4 w-4 text-okx-text-secondary" />
+                      {tCommon('settings')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        disconnect();
+                        setShowAccountMenu(false);
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-okx-down transition-colors hover:bg-okx-bg-hover"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {tCommon('disconnect')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="lg:hidden absolute top-[64px] left-0 right-0 bg-okx-bg-primary border-b border-okx-border-primary shadow-lg z-40">
-          <div className="flex flex-col py-2 px-4">
+        <div className="absolute left-0 right-0 top-12 z-40 border-b border-okx-border-primary bg-okx-bg-secondary shadow-2xl lg:hidden">
+          <div className="flex flex-col gap-1 p-3">
             {NAV_ITEMS.map(({ href, key }) => {
-              const isActive = pathname === href || pathname.startsWith(href + '/');
+              const itemPath = href.split('?')[0];
+              const isActive = pathname === itemPath || pathname.startsWith(itemPath + '/');
               return (
                 <Link
                   key={href}
                   href={href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`py-3 px-3 rounded-lg text-sm font-mono transition-colors ${
+                  prefetch={false}
+                  className={`rounded-md px-3 py-3 text-sm font-medium transition-colors ${
                     isActive
-                      ? 'text-meme-lime font-medium bg-meme-lime/5'
-                      : 'text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-hover'
+                      ? 'bg-okx-bg-hover text-okx-text-primary'
+                      : 'text-okx-text-secondary hover:bg-okx-bg-hover hover:text-okx-text-primary'
                   }`}
                 >
                   {t(key)}
                 </Link>
               );
             })}
-            {/* Settings link in mobile menu */}
             <Link
               href="/settings"
               onClick={() => setMobileMenuOpen(false)}
-              className={`py-3 px-3 rounded-lg text-sm font-mono transition-colors ${
+              className={`rounded-md px-3 py-3 text-sm font-medium transition-colors ${
                 pathname === '/settings'
-                  ? 'text-meme-lime font-medium bg-meme-lime/5'
-                  : 'text-okx-text-secondary hover:text-okx-text-primary hover:bg-okx-bg-hover'
+                  ? 'bg-okx-bg-hover text-okx-text-primary'
+                  : 'text-okx-text-secondary hover:bg-okx-bg-hover hover:text-okx-text-primary'
               }`}
             >
               {tCommon('settings')}
@@ -367,3 +473,4 @@ export function Navbar() {
     </nav>
   );
 }
+

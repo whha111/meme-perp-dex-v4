@@ -1,129 +1,230 @@
 "use client";
 
 import { useAccount } from "wagmi";
-import { useTranslations } from "next-intl";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { Navbar } from "@/components/layout/Navbar";
-import { usePerpVaultLP } from "@/hooks/perpetual/usePerpVaultLP";
-import { VaultDashboard } from "@/components/perpetual/VaultDashboard";
-import { VaultActionPanel } from "@/components/perpetual/VaultActionPanel";
-import { VaultPoolInfo } from "@/components/perpetual/VaultPoolInfo";
+import { ChevronDown, ChevronLeft, ChevronRight, Search, SlidersHorizontal, Wallet } from "lucide-react";
+
+const protocolVaults = [
+  {
+    name: "DEXI Liquidity Provider",
+    tag: "DLP",
+    manager: "0x677d...846e7",
+    apr: "-0.04%",
+    aprTone: "text-[#F45B69]",
+    tvl: "$397,322,441.59",
+    deposit: "$0.00",
+    age: "1095",
+    spark: "M24 28 L42 29 L60 28 L78 30 L96 30 L114 31 L132 31 L150 30",
+    sparkTone: "#F45B69",
+  },
+  {
+    name: "Liquidator",
+    tag: "LIQ",
+    manager: "0xfc13...80c9",
+    apr: "-0.00%",
+    aprTone: "text-[#F45B69]",
+    tvl: "$16,474.25",
+    deposit: "$0.00",
+    age: "1162",
+    spark: "M24 26 L45 28 L66 28 L87 29 L108 46 L129 46 L150 36",
+    sparkTone: "#F45B69",
+  },
+];
+
+const userVaults = [
+  ["[ Systemic Strategies ] HyperGrowth", "0x2b80...6f4b", "72.87%", "$11,073,850.65", "$0.00", "247", "up"],
+  ["[ Systemic Strategies ] L/S Grids", "0x2b80...6f4b", "72.28%", "$8,510,509.77", "$0.00", "466", "up"],
+  ["Growi HF", "0x7789...f60d", "33.76%", "$7,901,349.02", "$0.00", "664", "up"],
+  ["Ultron", "0x8d3f...c056", "149.66%", "$5,159,339.58", "$0.00", "151", "up"],
+  ["drkmttr", "0xf4f7...239f", "728.02%", "$4,447,173.82", "$0.00", "145", "up"],
+  ["Bitcoin Moving Average Long/Short", "0x1fa1...1d08", "-13.57%", "$3,354,909.66", "$0.00", "214", "down"],
+  ["Orbit Value Strategies", "0xf292...9edf", "114.40%", "$3,097,298.94", "$0.00", "140", "up"],
+  ["AIQuantPulse", "0xcbdf...b4b3", "-0.45%", "$2,671,948.60", "$0.00", "91", "down"],
+  ["FC Genesis - Quantum", "0x3d32...cfec", "0.23%", "$2,448,049.86", "$0.00", "233", "up"],
+  ["Long HYPE & BTC | Short Garbage", "0xa380...d939", "133.31%", "$2,056,560.45", "$0.00", "389", "up"],
+];
+
+const sparkUp = "M6 42 L16 24 L26 31 L36 16 L46 27 L56 25 L66 30 L76 18 L86 20 L96 14";
+const sparkDown = "M6 18 L16 23 L26 27 L36 25 L46 34 L56 36 L66 42 L76 38 L86 35 L96 39";
+
+function MiniSparkline({ tone, path }: { tone: string; path: string }) {
+  return (
+    <svg viewBox="0 0 160 58" className="h-10 w-24">
+      <path d={path} fill="none" stroke={tone} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function UserSparkline({ direction }: { direction: string }) {
+  const up = direction === "up";
+  return <MiniSparkline tone={up ? "#5EEAD4" : "#F45B69"} path={up ? sparkUp : sparkDown} />;
+}
+
+function VaultLogo({ name, tag }: { name: string; tag: string }) {
+  const initial = tag.slice(0, 1);
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#18212B] text-[11px] font-bold text-[#5EEAD4] ring-1 ring-[#334052]">
+        {initial}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-[13px] font-semibold text-white">{name}</span>
+        <span className="mt-0.5 block text-[11px] text-[#77838F]">{tag}</span>
+      </span>
+    </div>
+  );
+}
 
 export default function VaultPage() {
-  const t = useTranslations("vault");
   const { isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
 
-  const vault = usePerpVaultLP();
-
   return (
-    <div className="min-h-screen bg-okx-bg-primary text-okx-text-primary">
-      <Navbar />
+    <main className="relative min-h-screen overflow-hidden bg-[#0A0C11] text-white">
+      <div className="pointer-events-none absolute -bottom-[420px] -left-[260px] h-[760px] w-[760px] rounded-full border border-[rgba(51,64,82,0.18)]" />
+      <div className="pointer-events-none absolute -bottom-[360px] -left-[210px] h-[650px] w-[650px] rounded-full border border-[rgba(51,64,82,0.12)]" />
+      <div className="pointer-events-none absolute right-[-280px] top-[180px] h-[880px] w-[880px] rounded-full border border-[rgba(51,64,82,0.16)]" />
+      <div className="pointer-events-none absolute right-[-200px] top-[250px] h-[740px] w-[740px] rounded-full border border-[rgba(51,64,82,0.10)]" />
+      <div className="relative z-10 border-b border-[#2B3542] bg-[#10141B] px-4 py-3 text-[13px] text-[#8FF7E8]">
+        欢迎来到 DEXI 金库：选择策略池，或连接钱包查看您的存款与收益。
+      </div>
 
-      <div className="max-w-[1200px] mx-auto px-4 py-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between mb-6">
+      <div className="relative z-10 mx-auto max-w-[1312px] px-6 py-10">
+        <section className="mb-7 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">{t("title")}</h1>
-            <p className="text-okx-text-secondary text-sm mt-1">
-              {t("subtitle")}
-            </p>
+            <h1 className="text-[42px] font-semibold leading-none tracking-normal text-white">金库</h1>
+            <div className="mt-7 w-[360px] max-w-full rounded-[8px] bg-[#121822] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.24)]">
+              <div className="text-[13px] text-[#8E9AA7]">总锁定价值</div>
+              <div className="mt-2 font-mono text-[31px] font-semibold leading-tight text-white">$479,025,345</div>
+            </div>
           </div>
-          {isConnected && (
-            <button
-              onClick={() => {
-                vault.refetch();
-                vault.refetchNative();
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-okx-text-secondary border border-okx-border-primary hover:border-okx-border-secondary hover:text-okx-text-primary transition-colors"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              Refresh
-            </button>
-          )}
-        </div>
 
-        {!isConnected ? (
-          /* Not Connected */
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="max-w-md text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-okx-accent/20 to-okx-up/20 flex items-center justify-center">
-                <svg
-                  className="w-10 h-10 text-okx-accent"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                  />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold mb-2">{t("connectWallet")}</h2>
-              <p className="text-okx-text-secondary text-sm mb-6 leading-relaxed">
-                {t("connectWalletDesc")}
-              </p>
-              <button
-                onClick={openConnectModal}
-                className="bg-okx-accent text-black px-8 py-3 rounded-lg text-sm font-bold hover:opacity-90 transition-opacity"
-              >
-                {t("connectWallet")}
+          <button
+            onClick={() => openConnectModal?.()}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-[8px] bg-[#5EEAD4] px-5 text-[14px] font-semibold text-[#061215] transition-colors hover:bg-[#8FF7E8]"
+          >
+            <Wallet className="h-4 w-4" />
+            {isConnected ? "管理连接" : "建立连接"}
+          </button>
+        </section>
+
+        <section className="rounded-[8px] bg-[#121822] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex h-9 w-full items-center gap-2 rounded-[7px] border border-[#334052] bg-[#151C25] px-3 lg:max-w-[410px]">
+              <Search className="h-4 w-4 text-[#A7B2BE]" />
+              <input
+                className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-[#77838F]"
+                placeholder="按金库地址、名称或创建者搜索..."
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#334052] bg-[#151C25] px-3 text-[13px] font-semibold text-white">
+                Leading, Deposited, Others
+                <ChevronDown className="h-4 w-4 text-[#8E9AA7]" />
+              </button>
+              <button className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#334052] bg-[#151C25] px-3 text-[13px] font-semibold text-white">
+                30D
+                <ChevronDown className="h-4 w-4 text-[#8E9AA7]" />
               </button>
             </div>
           </div>
-        ) : vault.isLoading ? (
-          /* Loading skeleton */
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              {[...Array(4)].map((_, i) => (
+
+          <section className="mb-9">
+            <h2 className="mb-5 text-[15px] font-semibold text-white">协议金库</h2>
+            <div className="grid grid-cols-[minmax(240px,1.6fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center px-0 pb-3 text-[12px] text-[#77838F]">
+              <span>金库</span>
+              <span>创建者</span>
+              <span>年利率</span>
+              <span>TVL（总锁定价值）</span>
+              <span>您的存款</span>
+              <span>年龄（天）</span>
+              <span className="text-right">快照</span>
+            </div>
+            <div>
+              {protocolVaults.map((vault) => (
                 <div
-                  key={i}
-                  className="bg-okx-bg-card border border-okx-border-primary rounded-xl p-4 animate-pulse"
+                  key={vault.name}
+                  className="grid grid-cols-[minmax(240px,1.6fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center border-t border-[#2B3542] py-3 text-[13px]"
                 >
-                  <div className="h-3 w-20 bg-okx-bg-hover rounded mb-3" />
-                  <div className="h-6 w-24 bg-okx-bg-hover rounded" />
+                  <VaultLogo name={vault.name} tag={vault.tag} />
+                  <span className="font-mono font-semibold text-white">{vault.manager}</span>
+                  <span className={`font-mono ${vault.aprTone}`}>{vault.apr}</span>
+                  <span className="font-mono font-semibold text-white">{vault.tvl}</span>
+                  <span className="font-mono font-semibold text-white">{vault.deposit}</span>
+                  <span className="font-mono font-semibold text-white">{vault.age}</span>
+                  <span className="flex justify-end">
+                    <MiniSparkline tone={vault.sparkTone} path={vault.spark} />
+                  </span>
                 </div>
               ))}
             </div>
-          </div>
-        ) : (
-          /* Main Content */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Left column: Dashboard + Pool Info */}
-            <div className="lg:col-span-2 space-y-5">
-              <VaultDashboard
-                poolStats={vault.poolStats}
-                userPosition={vault.userPosition}
-                isConnected={isConnected}
-              />
-              <VaultPoolInfo
-                poolStats={vault.poolStats}
-                extendedStats={vault.extendedStats}
-              />
+          </section>
+
+          <section>
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-[15px] font-semibold text-white">用户金库</h2>
+              <button className="inline-flex items-center gap-2 text-[12px] font-semibold text-[#8E9AA7] hover:text-white">
+                <SlidersHorizontal className="h-4 w-4" />
+                筛选
+              </button>
+            </div>
+            <div className="grid grid-cols-[minmax(280px,1.7fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center px-0 pb-3 text-[12px] text-[#77838F]">
+              <span>金库</span>
+              <span>创建者</span>
+              <span>年利率</span>
+              <span>TVL（总锁定价值）</span>
+              <span>您的存款</span>
+              <span>年龄（天）</span>
+              <span className="text-right">快照</span>
+            </div>
+            <div>
+              {userVaults.map(([name, manager, apr, tvl, deposit, age, trend], index) => {
+                const positive = !apr.startsWith("-");
+                return (
+                  <div
+                    key={name}
+                    className="grid grid-cols-[minmax(280px,1.7fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center border-t border-[#2B3542] py-2.5 text-[13px]"
+                  >
+                    <VaultLogo name={name} tag={`V${index + 1}`} />
+                    <span className="font-mono font-semibold text-white">{manager}</span>
+                    <span className={`font-mono ${positive ? "text-[#20D7A1]" : "text-[#F45B69]"}`}>{apr}</span>
+                    <span className="font-mono font-semibold text-white">{tvl}</span>
+                    <span className="font-mono font-semibold text-white">{deposit}</span>
+                    <span className="font-mono font-semibold text-white">{age}</span>
+                    <span className="flex justify-end">
+                      <UserSparkline direction={trend} />
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Right column: Action Panel */}
-            <div className="lg:col-span-1">
-              <VaultActionPanel vault={vault} />
+            <div className="mt-5 flex items-center justify-end gap-4 text-[13px] text-white">
+              <span>Rows per page:</span>
+              <button className="inline-flex items-center gap-1 font-semibold">
+                10 <ChevronDown className="h-4 w-4" />
+              </button>
+              <span>1-10 of 3290</span>
+              <button className="text-[#72878B] hover:text-white">
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button className="text-white hover:text-[#5EEAD4]">
+                <ChevronRight className="h-5 w-5" />
+              </button>
             </div>
-          </div>
-        )}
+          </section>
+        </section>
       </div>
-    </div>
+
+      <div className="fixed bottom-3 left-3 z-20 rounded-[4px] border border-[#5EEAD4]/40 bg-[#0F2528] px-2 py-1 text-[12px] text-[#5EEAD4]">
+        ● 在线
+      </div>
+      <div className="fixed bottom-4 right-5 z-20 flex gap-5 text-[12px] font-semibold text-white/80">
+        <span>文档</span>
+        <span>支持</span>
+        <span>条款</span>
+        <span>隐私政策</span>
+      </div>
+    </main>
   );
 }

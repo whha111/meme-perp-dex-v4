@@ -10,9 +10,9 @@ import "dotenv/config";
 import { enableStructuredConsole } from "./utils/logger";
 enableStructuredConsole(); // In production: all console.* outputs become JSON
 import { type Address, type Hex, verifyTypedData, verifyMessage, createPublicClient, http, webSocket, parseEther, formatEther, formatUnits, getAddress } from "viem";
-import { bsc, bscTestnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { CHAIN_ID as CONFIG_CHAIN_ID, rpcTransport } from "./config";
-const activeChain = CONFIG_CHAIN_ID === 97 ? bscTestnet : bsc;
+const activeChain = bsc;
 import { WebSocketServer, WebSocket } from "ws";
 import { MatchingEngine, OrderType, OrderStatus, TimeInForce, OrderSource, registerPriceChangeCallback, type Order, type Match, type Trade, type Kline, type TokenStats } from "./engine";
 // ❌ Mode 2: SettlementSubmitter 已从导入中移除
@@ -67,6 +67,7 @@ import {
   getPendingSettlementInfo,
   increaseOI as vaultIncreaseOI,
   decreaseOI as vaultDecreaseOI,
+  getEngineOI,
   settleTraderPnL as vaultSettleTraderPnL,
   settleLiquidation as vaultSettleLiquidation,
   collectTradingFee as vaultCollectFee,
@@ -93,14 +94,24 @@ import {
   registerWalletKey,
   type PendingMarginOp,
 } from "./modules/marginBatch";
+import { getMarket, getMarketByIndexToken, getPublicMarkets, type MemePerpMarket } from "./modules/marketRegistry";
+import { getLatestOracleSnapshot, getLatestOracleSnapshots, getOracleStatus, type OraclePriceSnapshot } from "./modules/oracle";
+import {
+  canonicalV3Market,
+  normalizeV3Path,
+  parseV3AmountToWei,
+  parseV3Leverage,
+  resolveV3Market,
+  v3CollateralToken,
+} from "./modules/v3Compat";
 
 // ============================================================
 // Configuration
 // ============================================================
 
 const PORT = parseInt(process.env.PORT || "8081");
-const RPC_URL = process.env.RPC_URL || "https://data-seed-prebsc-1-s1.binance.org:8545/";
-const WSS_URL = process.env.WSS_URL || "wss://bsc-testnet-rpc.publicnode.com";
+const RPC_URL = process.env.RPC_URL as string;
+const WSS_URL = process.env.WSS_URL || "";
 const MATCHER_PRIVATE_KEY = process.env.MATCHER_PRIVATE_KEY as Hex;
 // Role separation: PLATFORM_SIGNER_KEY signs EIP-712 withdrawals, MATCHER_PRIVATE_KEY sends on-chain txs
 const PLATFORM_SIGNER_KEY = (process.env.PLATFORM_SIGNER_KEY || process.env.MATCHER_PRIVATE_KEY) as Hex;
@@ -117,6 +128,8 @@ const FUNDING_RATE_INTERVAL_MS = parseInt(process.env.FUNDING_RATE_INTERVAL_MS |
 const SPOT_PRICE_SYNC_INTERVAL_MS = parseInt(process.env.SPOT_PRICE_SYNC_INTERVAL_MS || "3000"); // 3s — balanced between price accuracy and RPC rate limits
 // P0-1: 签名验证仅在 NODE_ENV=test 时可跳过，生产环境硬编码开启
 const SKIP_SIGNATURE_VERIFY = process.env.NODE_ENV === "test" && process.env.SKIP_SIGNATURE_VERIFY === "true";
+const LOCAL_SMOKE_MODE = process.env.DEXI_LOCAL_SMOKE === "true";
+const DISABLE_CHAIN_POLLERS = LOCAL_SMOKE_MODE || process.env.DISABLE_CHAIN_POLLERS === "true";
 // P0-1: 生产环境硬保护 — 即使 env 配错也不能绕过签名
 if (process.env.NODE_ENV === "production" && process.env.SKIP_SIGNATURE_VERIFY === "true") {
   console.error("🚨 FATAL: SKIP_SIGNATURE_VERIFY=true is FORBIDDEN in production! Aborting.");
@@ -132,8 +145,10 @@ if (process.env.NODE_ENV === "production") {
     "MATCHER_PRIVATE_KEY", "SETTLEMENT_ADDRESS", "TOKEN_FACTORY_ADDRESS",
     "PRICE_FEED_ADDRESS", "RPC_URL", "FEE_RECEIVER_ADDRESS",
     "SETTLEMENT_V2_ADDRESS", "PERP_VAULT_ADDRESS", "COLLATERAL_TOKEN_ADDRESS",
+    "MARKET_REGISTRY_ADDRESS", "WBNB_ADDRESS", "USDT_ADDRESS",
     "INSURANCE_FUND_ADDRESS", "VAULT_ADDRESS", "POSITION_MANAGER_ADDRESS",
     "FUNDING_RATE_ADDRESS", "LIQUIDATION_ADDRESS", "LENDING_POOL_ADDRESS",
+    "MARKET_CONFIG_PATH", "ORACLE_SIGNERS",
   ];
   const missing = requiredEnvVars.filter((key) => !process.env[key]);
   if (missing.length > 0) {
@@ -680,6 +695,16 @@ const wsClients = new Map<WebSocket, Set<Address>>(); // client => subscribed to
 const wsTraderClients = new Map<Address, Set<WebSocket>>(); // trader => websocket connections (for risk data)
 const wsRiskSubscribers = new Set<WebSocket>(); // clients subscribed to global risk data
 const wsMarketStatsSubscribers = new Set<WebSocket>(); // clients subscribed to all_market_stats broadcast
+const wsMemeMarketSubscribers = new Set<WebSocket>(); // clients subscribed to curated meme markets + oracle snapshots
+type V3Channel = "v3_orderbook" | "v3_trades" | "v3_markets" | "v3_accounts";
+interface V3WsSubscription {
+  channel: V3Channel;
+  id?: string;
+  token?: Address;
+  trader?: Address;
+}
+const wsV3Subscriptions = new Map<WebSocket, V3WsSubscription[]>();
+let v3MessageCounter = 1;
 
 // Risk broadcast throttling
 let lastRiskBroadcast = 0;
@@ -775,7 +800,264 @@ function isPriceStale(token: Address): boolean {
   return (Date.now() - lastUpdate) > TRADING.MAX_PRICE_AGE_MS;
 }
 
+function parseAddress(value: string | undefined): Address | undefined {
+  if (!value) return undefined;
+  try {
+    return getAddress(value) as Address;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveMarketInstrument(input: {
+  token?: string;
+  marketId?: string;
+}): { token?: Address; market?: MemePerpMarket; error?: string } {
+  const market = input.marketId ? getMarket(input.marketId) : undefined;
+  if (input.marketId && !market) {
+    return { error: `Unsupported marketId: ${input.marketId}` };
+  }
+
+  const token = parseAddress(input.token);
+  if (input.token && !token) {
+    return { error: "Invalid token address" };
+  }
+
+  const marketFromToken = token ? getMarketByIndexToken(token) : undefined;
+  if (market && token && market.indexToken.toLowerCase() !== token.toLowerCase()) {
+    return {
+      error: `marketId/token mismatch: ${market.marketId} expects ${market.indexToken}`,
+    };
+  }
+
+  return {
+    token: token || market?.indexToken,
+    market: market || marketFromToken,
+  };
+}
+
+function oracleUsdToBnbPrice(snapshot: OraclePriceSnapshot): bigint {
+  const priceUsd = Number(snapshot.medianPriceUsd);
+  const bnbUsd = currentEthPriceUsd > 0 ? currentEthPriceUsd : 600;
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0 || !Number.isFinite(bnbUsd) || bnbUsd <= 0) {
+    return 0n;
+  }
+
+  const scaled = Math.floor((priceUsd / bnbUsd) * 1e18);
+  return BigInt(Math.max(1, scaled));
+}
+
+async function applyMarketOraclePrice(market: MemePerpMarket): Promise<OraclePriceSnapshot> {
+  const snapshot = await getLatestOracleSnapshot(market.marketId);
+  if (!snapshot) {
+    throw new Error(`Oracle snapshot unavailable for ${market.marketId}`);
+  }
+  applyOracleSnapshotToEngine(market, snapshot);
+  return snapshot;
+}
+
+function applyOracleSnapshotToEngine(market: MemePerpMarket, snapshot: OraclePriceSnapshot): void {
+  const markPrice = oracleUsdToBnbPrice(snapshot);
+  if (markPrice > 0n) {
+    const token = market.indexToken.toLowerCase() as Address;
+    engine.updatePrice(token, markPrice);
+    engine.setSpotPrice(token, markPrice);
+    priceLastUpdatedAt.set(token, snapshot.timestamp || Date.now());
+  }
+}
+
+function validateMarketOpenRisk(market: MemePerpMarket, token: Address, sizeBigInt: bigint): string | null {
+  const sizeUsd = Number(formatEther(sizeBigInt)) * currentEthPriceUsd;
+  if (Number.isFinite(sizeUsd) && market.maxPositionUsd > 0 && sizeUsd > market.maxPositionUsd) {
+    return `Position exceeds market max position: $${sizeUsd.toFixed(2)} > $${market.maxPositionUsd}`;
+  }
+
+  if (market.maxOiUsd > 0 && currentEthPriceUsd > 0) {
+    const currentOiBnb = getEngineOI(token, true) + getEngineOI(token, false);
+    const currentOiUsd = Number(formatEther(currentOiBnb)) * currentEthPriceUsd;
+    if (Number.isFinite(currentOiUsd + sizeUsd) && currentOiUsd + sizeUsd > market.maxOiUsd) {
+      return `Market OI cap reached: current $${currentOiUsd.toFixed(2)}, new $${sizeUsd.toFixed(2)}, cap $${market.maxOiUsd}`;
+    }
+  }
+
+  return null;
+}
+
 // 主钱包 → 派生钱包地址映射 (register-session 时填充, Redis 持久化)
+// ============================================================
+// dYdX v3-style compatibility helpers
+// ============================================================
+
+function getV3MarketOrError(marketOrAlias: string | null | undefined): { market?: MemePerpMarket; token?: Address; error?: string } {
+  const resolved = resolveV3Market(marketOrAlias, getPublicMarkets());
+  if (resolved.error || !resolved.market) return { error: resolved.error || "Unknown market" };
+  return { market: resolved.market, token: resolved.market.indexToken.toLowerCase() as Address };
+}
+
+function formatV3Market(market: MemePerpMarket): Record<string, unknown> {
+  const canonical = canonicalV3Market(market);
+  return {
+    market: canonical,
+    id: canonical,
+    displaySymbol: market.displaySymbol,
+    baseAsset: market.baseAsset,
+    quoteAsset: market.quoteAsset,
+    status: market.status,
+    indexToken: market.indexToken,
+    collateralTokens: market.collateralTokens,
+    sourceTags: market.sourceTags,
+    maxLeverage: market.maxLeverage.toString(),
+    maxOiUsd: market.maxOiUsd.toString(),
+    maxPositionUsd: market.maxPositionUsd.toString(),
+    experimental: market.experimental,
+    aliases: [
+      market.baseAsset,
+      `${market.baseAsset}-BNB`,
+      `${market.baseAsset}/BNB`,
+      canonical.replace("-USDT-PERP", "-USDT"),
+    ],
+  };
+}
+
+function formatV3OrderStatus(status: OrderStatus | string): string {
+  if (status === OrderStatus.CANCELLED || status === "CANCELLED") return "CANCELED";
+  return String(status);
+}
+
+function formatV3Order(order: Order): Record<string, unknown> {
+  const market = getMarketByIndexToken(order.token)?.marketId || `${order.token}-BNB`;
+  const remainingSize = order.size > order.filledSize ? order.size - order.filledSize : 0n;
+  return {
+    id: order.id,
+    orderId: order.id,
+    clientId: order.clientOrderId || null,
+    clientOrderId: order.clientOrderId || null,
+    market,
+    side: order.isLong ? "BUY" : "SELL",
+    type: order.orderType === OrderType.MARKET ? "MARKET" : "LIMIT",
+    size: order.size.toString(),
+    remainingSize: remainingSize.toString(),
+    filledSize: order.filledSize.toString(),
+    price: order.price.toString(),
+    averageFillPrice: order.avgFillPrice.toString(),
+    status: formatV3OrderStatus(order.status),
+    timeInForce: order.timeInForce || "GTC",
+    postOnly: order.postOnly,
+    reduceOnly: order.reduceOnly,
+    leverage: order.leverage.toString(),
+    fee: order.fee.toString(),
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    expiresAt: Number(order.deadline) * 1000,
+  };
+}
+
+function formatV3Position(position: Position): Record<string, unknown> {
+  const market = getMarketByIndexToken(position.token as Address)?.marketId || `${position.token}-BNB`;
+  return {
+    id: position.pairId,
+    market,
+    side: position.isLong ? "LONG" : "SHORT",
+    size: position.size,
+    entryPrice: position.entryPrice,
+    markPrice: position.markPrice || "0",
+    liquidationPrice: position.liquidationPrice || "0",
+    leverage: position.leverage,
+    margin: position.margin || position.collateral,
+    collateral: position.collateral,
+    unrealizedPnl: position.unrealizedPnL || "0",
+    realizedPnl: position.realizedPnL || "0",
+    status: position.status,
+    createdAt: position.createdAt,
+    updatedAt: position.updatedAt,
+  };
+}
+
+function getV3OrderBookContents(market: MemePerpMarket): Record<string, unknown> {
+  const token = market.indexToken.toLowerCase() as Address;
+  const orderBook = engine.getOrderBook(token);
+  const depth = orderBook.getDepth(20);
+  return {
+    market: canonicalV3Market(market),
+    bids: depth.longs.map((level) => ({ price: level.price.toString(), size: level.totalSize.toString() })),
+    asks: depth.shorts.map((level) => ({ price: level.price.toString(), size: level.totalSize.toString() })),
+    lastPrice: orderBook.getCurrentPrice().toString(),
+    timestamp: Date.now(),
+  };
+}
+
+function getV3TradesContents(market: MemePerpMarket, limit = 100): Record<string, unknown> {
+  const token = market.indexToken.toLowerCase() as Address;
+  const trades = engine.getRecentTrades(token, limit);
+  return {
+    market: canonicalV3Market(market),
+    trades: trades.map((trade) => ({
+      id: trade.id,
+      side: trade.side === "buy" ? "BUY" : "SELL",
+      price: trade.price.toString(),
+      size: trade.size.toString(),
+      createdAt: trade.timestamp,
+    })),
+  };
+}
+
+function getV3CandlesContents(market: MemePerpMarket, url: URL): Record<string, unknown> {
+  const token = market.indexToken.toLowerCase() as Address;
+  const interval = url.searchParams.get("interval") || url.searchParams.get("resolution") || "1m";
+  const limit = parseInt(url.searchParams.get("limit") || "100");
+  const candles = engine.getKlines(token, interval, limit);
+  return {
+    market: canonicalV3Market(market),
+    candles: candles.map((candle) => ({
+      startedAt: candle.timestamp * 1000,
+      open: candle.open.toString(),
+      high: candle.high.toString(),
+      low: candle.low.toString(),
+      close: candle.close.toString(),
+      baseTokenVolume: candle.volume.toString(),
+      trades: candle.trades,
+    })),
+  };
+}
+
+function getV3AccountContents(trader: Address): Record<string, unknown> {
+  const normalizedTrader = trader.toLowerCase() as Address;
+  const balance = getUserBalance(normalizedTrader);
+  const openPositions = (userPositions.get(normalizedTrader) || []).map(formatV3Position);
+  const orders = engine.getUserOrders(normalizedTrader).map(formatV3Order);
+  return {
+    account: {
+      address: normalizedTrader,
+      equity: balance.totalBalance.toString(),
+      freeCollateral: balance.availableBalance.toString(),
+      quoteBalance: balance.availableBalance.toString(),
+      usedMargin: balance.usedMargin.toString(),
+      unrealizedPnl: balance.unrealizedPnL.toString(),
+      collateralToken: "BNB",
+    },
+    openPositions,
+    orders,
+  };
+}
+
+function getV3TraderFromUrl(url: URL): Address | null {
+  const trader = url.searchParams.get("trader") || url.searchParams.get("account") || url.searchParams.get("address");
+  return trader && trader.startsWith("0x") ? trader.toLowerCase() as Address : null;
+}
+
+function v3ExpirationToDeadline(expiration: unknown): bigint {
+  if (expiration === undefined || expiration === null || expiration === "") {
+    return BigInt(Math.floor(Date.now() / 1000) + 24 * 60 * 60);
+  }
+  const raw = BigInt(String(expiration));
+  return raw > 10_000_000_000n ? raw / 1000n : raw;
+}
+
+function mapV3TimeInForce(value: unknown): string {
+  const tif = String(value || "GTC").toUpperCase();
+  return tif === "GTT" ? "GTD" : tif;
+}
+
 const traderToDerivedWallet = new Map<Address, Address>();
 // Redis key for owner→derived mapping persistence
 const DERIVED_WALLET_MAP_KEY = "memeperp:owner_to_derived";
@@ -5936,7 +6218,7 @@ async function syncFullTokenData(): Promise<void> {
         : 0;
 
       // Holder count: lazy-load only (don't block startup with 2M block scan)
-      // getTokenHolders() scans historical Transfer events — too slow for BSC Testnet pruned RPCs
+      // getTokenHolders() scans historical Transfer events and is too slow for many public RPCs.
       // Holders will be populated on first API request to /api/token/:address/holders
       let holderCount = 1;
 
@@ -6885,7 +7167,7 @@ async function pollTradeEventsViaRpc(
  * Receipt-based trade scanning (fallback when RPC getLogs is blocked)
  *
  * Uses eth_getBlockByNumber + eth_getTransactionReceipt instead of eth_getLogs.
- * These are cheap O(1) lookups that aren't throttled by BSC Testnet public RPCs.
+ * These are cheap O(1) lookups that are less likely to be throttled by public RPCs.
  */
 async function pollTradeEventsViaBscscan(
   fromBlock: bigint,
@@ -7059,6 +7341,7 @@ function broadcastBalanceUpdate(user: Address): void {
       }
     }
   }
+  broadcastV3Accounts(normalizedUser as Address);
 }
 
 /**
@@ -7087,6 +7370,7 @@ function broadcastPositionUpdate(user: Address, token: Address): void {
   // 2. 立即推送该用户的完整仓位数据 (position_risks)
   // 不等待 broadcastRiskData 的 500ms 周期，确保仓位变更即时反映
   broadcastUserPositionRisks(normalizedUser);
+  broadcastV3Accounts(normalizedUser);
 }
 
 /**
@@ -7129,6 +7413,7 @@ function broadcastUserPositionRisks(trader: Address): void {
       ws.send(message);
     }
   }
+  broadcastV3Accounts(trader);
 }
 
 /**
@@ -7722,14 +8007,213 @@ function jsonResponse(data: object, status = 200): Response {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, x-dexi-trader, x-dexi-signature",
     },
   });
 }
 
 function errorResponse(message: string, status = 400): Response {
   return jsonResponse({ success: false, error: message }, status);
+}
+
+async function handleV3CreateOrder(req: Request): Promise<Response> {
+  try {
+    const body = await req.json();
+    const resolved = getV3MarketOrError(body.market || body.marketId || body.id);
+    if (resolved.error || !resolved.market || !resolved.token) return errorResponse(resolved.error || "Unknown market", 404);
+
+    const side = String(body.side || "").toUpperCase();
+    if (side !== "BUY" && side !== "SELL" && side !== "LONG" && side !== "SHORT") {
+      return errorResponse("side must be BUY or SELL");
+    }
+
+    const type = String(body.type || "LIMIT").toUpperCase();
+    if (type !== "MARKET" && type !== "LIMIT") return errorResponse("type must be MARKET or LIMIT");
+
+    const trader = String(body.trader || req.headers.get("x-dexi-trader") || "").toLowerCase();
+    if (!trader.startsWith("0x")) return errorResponse("Missing trader");
+    if (!body.signature) return errorResponse("Missing signature");
+
+    const transformed = {
+      trader,
+      token: resolved.token,
+      marketId: canonicalV3Market(resolved.market),
+      collateralToken: v3CollateralToken(body.collateralToken),
+      isLong: side === "BUY" || side === "LONG",
+      size: parseV3AmountToWei(body.size, "size").toString(),
+      leverage: parseV3Leverage(body.leverage).toString(),
+      price: type === "MARKET" ? "0" : parseV3AmountToWei(body.price, "price").toString(),
+      deadline: v3ExpirationToDeadline(body.expiration || body.deadline).toString(),
+      nonce: String(body.nonce ?? "0"),
+      orderType: type === "MARKET" ? OrderType.MARKET : OrderType.LIMIT,
+      signature: body.signature,
+      reduceOnly: Boolean(body.reduceOnly),
+      postOnly: Boolean(body.postOnly),
+      timeInForce: mapV3TimeInForce(body.timeInForce),
+      clientOrderId: body.clientId || body.clientOrderId,
+      takeProfit: body.takeProfit,
+      stopLoss: body.stopLoss,
+    };
+
+    totalOrdersSubmitted++;
+    const legacyReq = new Request(req.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(transformed),
+    });
+    const legacyResponse = await handleOrderSubmit(legacyReq);
+    const payload = await legacyResponse.json() as any;
+    if (!legacyResponse.ok || payload.success === false) {
+      return jsonResponse({ success: false, error: payload.error || payload.rejectReason || "Order rejected", details: payload }, legacyResponse.status);
+    }
+
+    const order = payload.orderId ? engine.getOrder(payload.orderId) : null;
+    return jsonResponse({ order: order ? formatV3Order(order) : null, result: payload }, legacyResponse.status);
+  } catch (e) {
+    return errorResponse(e instanceof Error ? e.message : "Unknown error", 400);
+  }
+}
+
+async function handleV3CancelOrder(req: Request, orderId: string, url: URL): Promise<Response> {
+  try {
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+    const trader = String(body.trader || req.headers.get("x-dexi-trader") || url.searchParams.get("trader") || "").toLowerCase();
+    const signature = body.signature || req.headers.get("x-dexi-signature") || url.searchParams.get("signature");
+    const legacyReq = new Request(req.url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trader, signature }),
+    });
+    const legacyResponse = await handleCancelOrder(legacyReq, orderId);
+    const payload = await legacyResponse.json() as any;
+    if (!legacyResponse.ok || payload.success === false) {
+      return jsonResponse({ success: false, error: payload.error || "Cancel failed", details: payload }, legacyResponse.status);
+    }
+    const order = engine.getOrder(orderId);
+    return jsonResponse({ order: order ? formatV3Order(order) : null, result: payload });
+  } catch (e) {
+    return errorResponse(e instanceof Error ? e.message : "Unknown error", 400);
+  }
+}
+
+async function handleV3Request(req: Request, url: URL): Promise<Response | null> {
+  const path = normalizeV3Path(url.pathname);
+  if (path !== "/v3" && !path.startsWith("/v3/")) return null;
+  const method = req.method;
+
+  if (path === "/v3/markets" && method === "GET") {
+    const markets = getPublicMarkets();
+    const snapshots = await getLatestOracleSnapshots();
+    const priceMap = new Map(snapshots.map((snapshot) => [snapshot.marketId, snapshot]));
+    return jsonResponse({
+      markets: markets.map((market) => ({ ...formatV3Market(market), price: priceMap.get(market.marketId) || null })),
+      timestamp: Date.now(),
+    });
+  }
+
+  if (path === "/v3/prices/latest" && method === "GET") {
+    const marketId = url.searchParams.get("marketId") || url.searchParams.get("market");
+    if (marketId) {
+      const resolved = getV3MarketOrError(marketId);
+      if (resolved.error || !resolved.market) return errorResponse(resolved.error || "Unknown market", 404);
+      return jsonResponse({ price: await applyMarketOraclePrice(resolved.market), timestamp: Date.now() });
+    }
+    return jsonResponse({ prices: await getLatestOracleSnapshots(), timestamp: Date.now() });
+  }
+
+  if (path === "/v3/oracle/status" && method === "GET") {
+    return jsonResponse({ oracleStatus: await getOracleStatus(), timestamp: Date.now() });
+  }
+
+  if (path === "/v3/funding" && method === "GET") {
+    return jsonResponse({
+      funding: getPublicMarkets().map((market) => {
+        const token = market.indexToken.toLowerCase() as Address;
+        return {
+          market: canonicalV3Market(market),
+          rate: (currentFundingRates.get(token) || 0n).toString(),
+          nextFundingAt: nextFundingSettlement.get(token) || Date.now() + 15 * 60 * 1000,
+        };
+      }),
+      timestamp: Date.now(),
+    });
+  }
+
+  const marketPathMatch = path.match(/^\/v3\/(orderbook|trades|candles|funding)\/(.+)$/);
+  if (marketPathMatch && method === "GET") {
+    const [, resource, rawMarket] = marketPathMatch;
+    const resolved = getV3MarketOrError(decodeURIComponent(rawMarket));
+    if (resolved.error || !resolved.market) return errorResponse(resolved.error || "Unknown market", 404);
+    await applyMarketOraclePrice(resolved.market);
+    if (resource === "orderbook") return jsonResponse(getV3OrderBookContents(resolved.market));
+    if (resource === "trades") return jsonResponse(getV3TradesContents(resolved.market, parseInt(url.searchParams.get("limit") || "100")));
+    if (resource === "candles") return jsonResponse(getV3CandlesContents(resolved.market, url));
+    const token = resolved.market.indexToken.toLowerCase() as Address;
+    return jsonResponse({
+      market: canonicalV3Market(resolved.market),
+      funding: {
+        rate: (currentFundingRates.get(token) || 0n).toString(),
+        nextFundingAt: nextFundingSettlement.get(token) || Date.now() + 15 * 60 * 1000,
+      },
+    });
+  }
+
+  const accountPathMatch = path.match(/^\/v3\/accounts\/(0x[a-fA-F0-9]+)$/);
+  if (accountPathMatch && method === "GET") {
+    return jsonResponse(getV3AccountContents(accountPathMatch[1].toLowerCase() as Address));
+  }
+
+  if (path === "/v3/positions" && method === "GET") {
+    const trader = getV3TraderFromUrl(url);
+    if (!trader) return errorResponse("Missing trader/account query parameter");
+    return jsonResponse({ positions: (userPositions.get(trader) || []).map(formatV3Position) });
+  }
+
+  if (path === "/v3/orders" && method === "GET") {
+    const trader = getV3TraderFromUrl(url);
+    if (!trader) return errorResponse("Missing trader/account query parameter");
+    const marketParam = url.searchParams.get("market");
+    const market = marketParam ? getV3MarketOrError(marketParam).market : undefined;
+    const orders = engine.getUserOrders(trader)
+      .filter((order) => !market || order.token.toLowerCase() === market.indexToken.toLowerCase())
+      .map(formatV3Order);
+    return jsonResponse({ orders });
+  }
+
+  if (path === "/v3/orders" && method === "POST") {
+    return handleV3CreateOrder(req);
+  }
+
+  const cancelMatch = path.match(/^\/v3\/orders\/([^/]+)$/);
+  if (cancelMatch && method === "DELETE") {
+    return handleV3CancelOrder(req, decodeURIComponent(cancelMatch[1]), url);
+  }
+
+  if (path === "/v3/fills" && method === "GET") {
+    const trader = getV3TraderFromUrl(url);
+    if (!trader) return errorResponse("Missing trader/account query parameter");
+    const limit = parseInt(url.searchParams.get("limit") || "100");
+    const trades = (userTrades.get(trader) || []).slice(-limit).reverse().map((trade) => ({
+      id: trade.id,
+      orderId: trade.orderId,
+      market: getMarketByIndexToken(trade.token)?.marketId || `${trade.token}-BNB`,
+      side: trade.isLong ? "BUY" : "SELL",
+      liquidity: trade.isMaker ? "MAKER" : "TAKER",
+      price: trade.price,
+      size: trade.size,
+      fee: trade.fee,
+      createdAt: trade.timestamp,
+    }));
+    return jsonResponse({ fills: trades });
+  }
+
+  return errorResponse("Unknown v3 endpoint", 404);
 }
 
 // ============================================================
@@ -7861,7 +8345,9 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     const body = await req.json();
     const {
       trader,
-      token,
+      token: submittedToken,
+      marketId,
+      collateralToken = "BNB",
       isLong,
       size,
       leverage,
@@ -7875,11 +8361,44 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       timeInForce = "GTC", // P3: 订单有效期 (GTC/IOC/FOK/GTD)
       takeProfit = null,   // P2-2: 止盈价 (ETH string or null)
       stopLoss = null,     // P2-2: 止损价 (ETH string or null)
+      clientOrderId = null,
     } = body;
 
     // Validate required fields
-    if (!trader || !token || !signature) {
+    if (!trader || !submittedToken || !signature) {
       return errorResponse("Missing required fields");
+    }
+
+    const instrument = resolveMarketInstrument({
+      token: submittedToken,
+      marketId,
+    });
+    if (instrument.error || !instrument.token) {
+      return errorResponse(instrument.error || "Missing order instrument");
+    }
+    const token = instrument.token;
+    const market = instrument.market;
+    const normalizedCollateralToken = String(collateralToken).toUpperCase() as MemePerpMarket["collateralTokens"][number];
+
+    let oracleSnapshot: OraclePriceSnapshot | null = null;
+    if (market) {
+      if (!market.collateralTokens.includes(normalizedCollateralToken)) {
+        return errorResponse(`Collateral ${normalizedCollateralToken} is not enabled for ${market.marketId}`);
+      }
+      if (normalizedCollateralToken === "USDT") {
+        return errorResponse("USDT collateral is staged for wallet funding only. Trading execution currently requires BNB/WBNB collateral.");
+      }
+      if (market.status === "paused") {
+        return errorResponse(`Market ${market.marketId} is paused`);
+      }
+
+      oracleSnapshot = await applyMarketOraclePrice(market);
+      if (oracleSnapshot.status === "paused") {
+        return errorResponse(`Market ${market.marketId} is paused by oracle: ${oracleSnapshot.reason || "paused"}`);
+      }
+      if (oracleSnapshot.status === "reduce_only" && !reduceOnly) {
+        return errorResponse(`Market ${market.marketId} is reduce-only: ${oracleSnapshot.reason || "oracle degraded"}`);
+      }
     }
 
     // Parse bigint values
@@ -7908,8 +8427,10 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     // AUDIT-FIX H-07: Validate leverage against phase-specific MAX_LEVERAGE
     // 内盘阶段 2.5x, 毕业后 5x — 由 lifecycle getTokenParameters() 决定
     // ============================================================
-    const phaseParams = getTokenParameters(token.toLowerCase() as Address);
-    let maxLevForToken = phaseParams.maxLeverage;
+    const phaseParams = market ? null : getTokenParameters(token.toLowerCase() as Address);
+    let maxLevForToken = market
+      ? BigInt(Math.floor(market.maxLeverage * 10000))
+      : phaseParams!.maxLeverage;
 
     // ★ ADL WARNING 级别: 覆盖比率 150-200% 时限杠杆至 2x
     const adlState = adlRatioState.get(token.toLowerCase() as Address);
@@ -7930,9 +8451,19 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       const normalizedTraderCheck = (trader as string).toLowerCase() as Address;
 
       // 检查 token 是否允许合约交易
-      const tokenState = getTokenState(normalizedTokenCheck);
-      if (!isTradingEnabled(normalizedTokenCheck)) {
-        return errorResponse(`Token not activated for perp trading (state: ${tokenState})`);
+      if (market) {
+        if (market.status === "reduce_only") {
+          return errorResponse(`Market ${market.marketId} is reduce-only`);
+        }
+        const capError = validateMarketOpenRisk(market, normalizedTokenCheck, sizeBigInt);
+        if (capError) {
+          return errorResponse(capError);
+        }
+      } else {
+        const tokenState = getTokenState(normalizedTokenCheck);
+        if (!isTradingEnabled(normalizedTokenCheck)) {
+          return errorResponse(`Token not activated for perp trading (state: ${tokenState})`);
+        }
       }
 
       // 单账户最多持仓 5 个不同 token
@@ -8179,6 +8710,7 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       orderType as OrderType,
       signature as Hex,
       {
+        clientOrderId: typeof clientOrderId === "string" ? clientOrderId : undefined,
         reduceOnly,
         postOnly,
         timeInForce: tif,
@@ -8223,7 +8755,7 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
     try {
       // 生成交易对符号 (格式: TOKEN-ETH)
       const tokenSymbol = token.slice(0, 10).toUpperCase(); // 简化处理
-      const symbol = `${tokenSymbol}-ETH`;
+      const symbol = market?.marketId || `${tokenSymbol}-BNB`;
 
       // 映射 OrderType 枚举到字符串
       let orderTypeStr: "LIMIT" | "MARKET" | "STOP_LOSS" | "TAKE_PROFIT" | "TRAILING_STOP";
@@ -8287,7 +8819,7 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
           id: order.id,
           trader: order.trader,
           token: order.token,
-          symbol: `${(token as string).slice(0, 10).toUpperCase()}-ETH`,
+          symbol,
           is_long: order.isLong,
           size: order.size.toString(),
           price: order.price.toString(),
@@ -8499,7 +9031,7 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       && !order.postOnly
       && isPerpVaultEnabled()
       && PERP_VAULT_ADDRESS_LOCAL
-      && isTradingEnabled(token.toLowerCase() as Address)
+      && (market ? (market.status === "active" || market.status === "experimental") : isTradingEnabled(token.toLowerCase() as Address))
     ) {
       try {
         const spotPrice = engine.getOrderBook(token as Address).getCurrentPrice();
@@ -8693,6 +9225,10 @@ async function handleOrderSubmit(req: Request): Promise<Response> {
       success: true,
       orderId: order.id,
       status: order.status,
+      marketId: market?.marketId,
+      displaySymbol: market?.displaySymbol,
+      collateralToken: market ? normalizedCollateralToken : undefined,
+      oracleStatus: oracleSnapshot?.status,
       filledSize: order.filledSize.toString(),
       matches: matches.map((m) => ({
         matchPrice: m.matchPrice.toString(),
@@ -8745,14 +9281,27 @@ async function handleGetNonce(trader: string): Promise<Response> {
 }
 
 async function handleGetOrderBook(token: string): Promise<Response> {
-  const orderBook = engine.getOrderBook(token as Address);
+  const instrument = resolveMarketInstrument({
+    token: token.startsWith("0x") ? token : undefined,
+    marketId: token.startsWith("0x") ? undefined : token,
+  });
+  if (instrument.error || !instrument.token) {
+    return errorResponse(instrument.error || "Invalid orderbook instrument");
+  }
+
+  if (instrument.market) {
+    await applyMarketOraclePrice(instrument.market);
+  }
+
+  const resolvedToken = instrument.token;
+  const orderBook = engine.getOrderBook(resolvedToken);
   const depth = orderBook.getDepth(20);
   let currentPrice = orderBook.getCurrentPrice();
 
   // 如果订单簿没有价格，使用现货价格
   if (currentPrice === 0n) {
     try {
-      const spotPrice = await engine.fetchSpotPrice(token as Address);
+      const spotPrice = await engine.fetchSpotPrice(resolvedToken);
       if (spotPrice && spotPrice > 0n) {
         currentPrice = spotPrice;
       }
@@ -8773,6 +9322,8 @@ async function handleGetOrderBook(token: string): Promise<Response> {
       count: level.orders.length,
     })),
     lastPrice: currentPrice.toString(),
+    marketId: instrument.market?.marketId,
+    displaySymbol: instrument.market?.displaySymbol,
   });
 }
 
@@ -12198,11 +12749,14 @@ async function handleRequest(req: Request): Promise<Response> {
     return new Response(null, {
       headers: {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, x-dexi-trader, x-dexi-signature",
       },
     });
   }
+
+  const v3Response = await handleV3Request(req, url);
+  if (v3Response) return v3Response;
 
   // Enhanced health check
   if (path === "/health") {
@@ -12210,7 +12764,7 @@ async function handleRequest(req: Request): Promise<Response> {
     const redisOk = isRedisConnected();
     const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
     const memUsage = process.memoryUsage();
-    const status = redisOk ? "ok" : "degraded";
+    const status = redisOk ? "ok" : (LOCAL_SMOKE_MODE ? "local_smoke" : "degraded");
 
     const body = {
       status,
@@ -12236,7 +12790,7 @@ async function handleRequest(req: Request): Promise<Response> {
     };
 
     return new Response(JSON.stringify(body), {
-      status: redisOk ? 200 : 503,
+      status: redisOk || LOCAL_SMOKE_MODE ? 200 : 503,
       headers: { "Content-Type": "application/json" },
     });
   }
@@ -12297,6 +12851,56 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   // 查询毕业代币信息 (价格源切换状态)
+  // Curated meme perp markets (Binance Alpha / high-liquidity meme whitelist)
+  if (path === "/api/markets" && method === "GET") {
+    const includePrices = url.searchParams.get("includePrices") !== "false";
+    const markets = getPublicMarkets();
+    const snapshots = includePrices ? await getLatestOracleSnapshots() : [];
+    const snapshotMap = new Map(snapshots.map((snapshot) => [snapshot.marketId, snapshot]));
+    for (const market of markets) {
+      const snapshot = snapshotMap.get(market.marketId);
+      if (snapshot) applyOracleSnapshotToEngine(market, snapshot);
+    }
+    return jsonResponse({
+      success: true,
+      data: markets.map((market) => ({
+        ...market,
+        price: snapshotMap.get(market.marketId) || null,
+      })),
+      timestamp: Date.now(),
+    });
+  }
+
+  if (path.startsWith("/api/markets/") && method === "GET") {
+    const marketId = decodeURIComponent(path.replace("/api/markets/", "")).toUpperCase();
+    const market = getMarket(marketId);
+    if (!market) return errorResponse("Unknown marketId", 404);
+    const price = await applyMarketOraclePrice(market);
+    return jsonResponse({ success: true, data: { ...market, price: price || null }, timestamp: Date.now() });
+  }
+
+  if (path === "/api/prices/latest" && method === "GET") {
+    const marketId = url.searchParams.get("marketId")?.toUpperCase();
+    if (marketId) {
+      const market = getMarket(marketId);
+      if (!market) return errorResponse("Unknown marketId", 404);
+      const snapshot = await applyMarketOraclePrice(market);
+      return jsonResponse({ success: true, data: snapshot, timestamp: Date.now() });
+    }
+    const markets = getPublicMarkets();
+    const snapshots = await getLatestOracleSnapshots();
+    const snapshotMap = new Map(snapshots.map((snapshot) => [snapshot.marketId, snapshot]));
+    for (const market of markets) {
+      const snapshot = snapshotMap.get(market.marketId);
+      if (snapshot) applyOracleSnapshotToEngine(market, snapshot);
+    }
+    return jsonResponse({ success: true, data: snapshots, timestamp: Date.now() });
+  }
+
+  if (path === "/api/oracle/status" && method === "GET") {
+    return jsonResponse({ success: true, data: await getOracleStatus(), timestamp: Date.now() });
+  }
+
   if (path === "/api/graduated-tokens" && method === "GET") {
     const result: Record<string, { pairAddress: string; priceSource: string }> = {};
     for (const [token, info] of graduatedTokens.entries()) {
@@ -12975,8 +13579,8 @@ async function handleRequest(req: Request): Promise<Response> {
     return handleGetNonce(trader);
   }
 
-  if (path.match(/^\/api\/orderbook\/0x[a-fA-F0-9]+$/) && method === "GET") {
-    const token = path.split("/")[3];
+  if (path.startsWith("/api/orderbook/") && method === "GET") {
+    const token = decodeURIComponent(path.split("/")[3] || "");
     return handleGetOrderBook(token);
   }
 
@@ -13707,9 +14311,160 @@ function safeError(message: string, error?: any): void {
 // ============================================================
 
 interface WSMessage {
-  type: "subscribe" | "unsubscribe";
-  channel: "orderbook" | "trades";
-  token: Address;
+  type: string;
+  channel?: string;
+  token?: Address;
+  id?: string;
+  trader?: string;
+  signature?: string;
+  timestamp?: string | number;
+  request_id?: string;
+  data?: any;
+}
+
+function nextV3MessageId(): number {
+  return v3MessageCounter++;
+}
+
+function sendV3Message(ws: WebSocket, channel: V3Channel, id: string | undefined, contents: Record<string, unknown>): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: "channel_data",
+    channel,
+    id,
+    message_id: nextV3MessageId(),
+    contents,
+  }));
+}
+
+function addV3Subscription(ws: WebSocket, sub: V3WsSubscription): void {
+  const subs = wsV3Subscriptions.get(ws) || [];
+  const exists = subs.some((existing) =>
+    existing.channel === sub.channel &&
+    existing.id === sub.id &&
+    existing.token === sub.token &&
+    existing.trader === sub.trader
+  );
+  if (!exists) subs.push(sub);
+  wsV3Subscriptions.set(ws, subs);
+}
+
+function removeV3Subscription(ws: WebSocket, channel?: string, id?: string): void {
+  if (!channel) {
+    wsV3Subscriptions.delete(ws);
+    return;
+  }
+  const subs = wsV3Subscriptions.get(ws) || [];
+  const filtered = subs.filter((sub) => sub.channel !== channel || (id && sub.id !== id));
+  if (filtered.length > 0) wsV3Subscriptions.set(ws, filtered);
+  else wsV3Subscriptions.delete(ws);
+}
+
+function sendV3Subscribed(ws: WebSocket, channel: V3Channel, id?: string): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({
+    type: "subscribed",
+    channel,
+    id,
+    message_id: nextV3MessageId(),
+  }));
+}
+
+async function handleV3WSMessage(ws: WebSocket, msg: WSMessage): Promise<boolean> {
+  if (msg.type !== "subscribe" && msg.type !== "unsubscribe") return false;
+  const channel = msg.channel as V3Channel | undefined;
+  if (!channel || !["v3_orderbook", "v3_trades", "v3_markets", "v3_accounts"].includes(channel)) return false;
+
+  if (msg.type === "unsubscribe") {
+    removeV3Subscription(ws, channel, msg.id);
+    ws.send(JSON.stringify({ type: "unsubscribed", channel, id: msg.id, message_id: nextV3MessageId() }));
+    return true;
+  }
+
+  if (channel === "v3_markets") {
+    addV3Subscription(ws, { channel, id: "markets" });
+    sendV3Subscribed(ws, channel, "markets");
+    const snapshots = await getLatestOracleSnapshots();
+    const priceMap = new Map(snapshots.map((snapshot) => [snapshot.marketId, snapshot]));
+    sendV3Message(ws, channel, "markets", {
+      markets: getPublicMarkets().map((market) => ({ ...formatV3Market(market), price: priceMap.get(market.marketId) || null })),
+      timestamp: Date.now(),
+    });
+    return true;
+  }
+
+  if (channel === "v3_accounts") {
+    const trader = String(msg.trader || msg.id || "").toLowerCase();
+    if (!trader.startsWith("0x")) {
+      ws.send(JSON.stringify({ type: "error", channel, error: "v3_accounts requires trader or id", message_id: nextV3MessageId() }));
+      return true;
+    }
+    const normalizedTrader = trader as Address;
+    addV3Subscription(ws, { channel, id: normalizedTrader, trader: normalizedTrader });
+    sendV3Subscribed(ws, channel, normalizedTrader);
+    sendV3Message(ws, channel, normalizedTrader, getV3AccountContents(normalizedTrader));
+    return true;
+  }
+
+  const resolved = getV3MarketOrError(msg.id || msg.token);
+  if (resolved.error || !resolved.market || !resolved.token) {
+    ws.send(JSON.stringify({ type: "error", channel, id: msg.id, error: resolved.error || "Unknown market", message_id: nextV3MessageId() }));
+    return true;
+  }
+  await applyMarketOraclePrice(resolved.market);
+  const id = canonicalV3Market(resolved.market);
+  addV3Subscription(ws, { channel, id, token: resolved.token });
+  sendV3Subscribed(ws, channel, id);
+  if (channel === "v3_orderbook") sendV3Message(ws, channel, id, getV3OrderBookContents(resolved.market));
+  if (channel === "v3_trades") sendV3Message(ws, channel, id, getV3TradesContents(resolved.market));
+  return true;
+}
+
+function broadcastV3OrderBook(token: Address): void {
+  const market = getMarketByIndexToken(token);
+  if (!market) return;
+  const normalizedToken = token.toLowerCase() as Address;
+  const contents = getV3OrderBookContents(market);
+  const id = canonicalV3Market(market);
+  for (const [ws, subs] of wsV3Subscriptions) {
+    if (ws.readyState !== WebSocket.OPEN) continue;
+    if (subs.some((sub) => sub.channel === "v3_orderbook" && sub.token === normalizedToken)) {
+      sendV3Message(ws, "v3_orderbook", id, contents);
+    }
+  }
+}
+
+function broadcastV3Trade(trade: Trade): void {
+  const market = getMarketByIndexToken(trade.token);
+  if (!market) return;
+  const normalizedToken = trade.token.toLowerCase() as Address;
+  const id = canonicalV3Market(market);
+  const contents = {
+    market: id,
+    trades: [{
+      id: trade.id,
+      side: trade.side === "buy" ? "BUY" : "SELL",
+      price: trade.price.toString(),
+      size: trade.size.toString(),
+      createdAt: trade.timestamp,
+    }],
+  };
+  for (const [ws, subs] of wsV3Subscriptions) {
+    if (ws.readyState !== WebSocket.OPEN) continue;
+    if (subs.some((sub) => sub.channel === "v3_trades" && sub.token === normalizedToken)) {
+      sendV3Message(ws, "v3_trades", id, contents);
+    }
+  }
+}
+
+function broadcastV3Accounts(trader: Address): void {
+  const normalizedTrader = trader.toLowerCase() as Address;
+  for (const [ws, subs] of wsV3Subscriptions) {
+    if (ws.readyState !== WebSocket.OPEN) continue;
+    if (subs.some((sub) => sub.channel === "v3_accounts" && sub.trader === normalizedTrader)) {
+      sendV3Message(ws, "v3_accounts", normalizedTrader, getV3AccountContents(normalizedTrader));
+    }
+  }
 }
 
 function broadcastOrderBook(token: Address): void {
@@ -13742,6 +14497,7 @@ function broadcastOrderBook(token: Address): void {
       client.send(message);
     }
   }
+  broadcastV3OrderBook(token);
 }
 
 function broadcastTrade(trade: Trade): void {
@@ -13764,6 +14520,7 @@ function broadcastTrade(trade: Trade): void {
       client.send(message);
     }
   }
+  broadcastV3Trade(trade);
 }
 
 /**
@@ -14082,6 +14839,7 @@ function startMarketDataPush(): void {
 
     // ✅ 首页全量市场统计广播（内部自行节流，每 3 秒一次）
     broadcastAllMarketStats();
+    broadcastMemeMarketSnapshot();
   }, 500); // P0-3: 500ms (was 1s) — faster market data push
 }
 
@@ -14202,6 +14960,62 @@ function broadcastAllMarketStats(): void {
 /**
  * 只在市场数据变化时才广播 (避免前端无意义 re-render)
  */
+async function sendMemeMarketSnapshot(ws: WebSocket): Promise<void> {
+  const [prices, oracleStatus] = await Promise.all([
+    getLatestOracleSnapshots(),
+    getOracleStatus(),
+  ]);
+  const priceMap = new Map(prices.map((snapshot) => [snapshot.marketId, snapshot]));
+  const markets = getPublicMarkets().map((market) => ({
+    ...market,
+    price: priceMap.get(market.marketId) || null,
+  }));
+  ws.send(JSON.stringify({ type: "markets", data: markets, timestamp: Date.now() }));
+  ws.send(JSON.stringify({ type: "prices", data: prices, timestamp: Date.now() }));
+  ws.send(JSON.stringify({ type: "oracle_status", data: oracleStatus, timestamp: Date.now() }));
+}
+
+let memeMarketPushCounter = 0;
+function broadcastMemeMarketSnapshot(): void {
+  const hasV3MarketSubscribers = Array.from(wsV3Subscriptions.values())
+    .some((subs) => subs.some((sub) => sub.channel === "v3_markets"));
+  if (wsMemeMarketSubscribers.size === 0 && !hasV3MarketSubscribers) return;
+  memeMarketPushCounter++;
+  if (memeMarketPushCounter % 6 !== 0) return;
+
+  getLatestOracleSnapshots()
+    .then(async (prices) => {
+      const oracleStatus = await getOracleStatus();
+      const priceMap = new Map(prices.map((snapshot) => [snapshot.marketId, snapshot]));
+      const markets = getPublicMarkets().map((market) => ({
+        ...market,
+        price: priceMap.get(market.marketId) || null,
+      }));
+      const marketMessage = JSON.stringify({ type: "markets", data: markets, timestamp: Date.now() });
+      const pricesMessage = JSON.stringify({ type: "prices", data: prices, timestamp: Date.now() });
+      const statusMessage = JSON.stringify({ type: "oracle_status", data: oracleStatus, timestamp: Date.now() });
+
+      for (const ws of wsMemeMarketSubscribers) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(marketMessage);
+          ws.send(pricesMessage);
+          ws.send(statusMessage);
+        } else {
+          wsMemeMarketSubscribers.delete(ws);
+        }
+      }
+
+      const v3Contents = { markets: markets.map(formatV3Market), prices, oracleStatus, timestamp: Date.now() };
+      for (const [ws, subs] of wsV3Subscriptions) {
+        if (ws.readyState !== WebSocket.OPEN) continue;
+        if (subs.some((sub) => sub.channel === "v3_markets")) {
+          sendV3Message(ws, "v3_markets", "markets", v3Contents);
+        }
+      }
+    })
+    .catch((error) => console.error("[OracleWS] Failed to broadcast meme market snapshot:", error));
+}
+
 function broadcastMarketDataIfChanged(token: Address): void {
   if (!wss) return;
 
@@ -14289,6 +15103,7 @@ function broadcastOrderUpdate(order: Order): void {
       ws.send(message);
     }
   }
+  broadcastV3Accounts(trader);
 }
 
 /**
@@ -14350,6 +15165,11 @@ async function handleWSMessage(ws: WebSocket, message: string): Promise<void> {
 
   try {
     const msg = JSON.parse(message) as WSMessage & { trader?: string; data?: any; request_id?: string };
+    const msgType = String(msg.type);
+
+    if (await handleV3WSMessage(ws, msg)) {
+      return;
+    }
 
     // ✅ 新增：处理带 request_id 的 subscribe 请求（新 API 格式）
     if (msg.type === "subscribe" && msg.data && Array.isArray(msg.data.topics)) {
@@ -14689,6 +15509,17 @@ async function handleWSMessage(ws: WebSocket, message: string): Promise<void> {
       ws.send(JSON.stringify({ type: "all_market_stats", data: stats, timestamp: now }));
     }
     // ✅ 取消首页市场统计订阅
+    else if (msgType === "get_markets" || msgType === "subscribe_markets") {
+      if (msgType === "subscribe_markets") {
+        wsMemeMarketSubscribers.add(ws);
+        console.log(`[WS] Client subscribed to curated meme markets (${wsMemeMarketSubscribers.size} subscribers)`);
+      }
+      await sendMemeMarketSnapshot(ws);
+    }
+    else if (msgType === "unsubscribe_markets") {
+      wsMemeMarketSubscribers.delete(ws);
+      console.log("[WS] Client unsubscribed from curated meme markets");
+    }
     else if (msg.type === "unsubscribe_all_market_stats") {
       wsMarketStatsSubscribers.delete(ws);
       console.log(`[WS] Client unsubscribed from all_market_stats`);
@@ -14863,9 +15694,11 @@ function cleanupWSConnection(ws: WebSocket): void {
 
   // 清理全局风控订阅
   wsRiskSubscribers.delete(ws);
+  wsV3Subscriptions.delete(ws);
 
   // 清理首页市场统计订阅
   wsMarketStatsSubscribers.delete(ws);
+  wsMemeMarketSubscribers.delete(ws);
 }
 
 // ============================================================
@@ -14876,21 +15709,31 @@ async function startServer(): Promise<void> {
   // ========================================
   // 连接 Redis 数据库
   // ========================================
-  console.log("[Server] Connecting to Redis...");
-  const redisConnected = await db.connect();
-  // Also connect the new Redis module (used by spotHistory, balance, etc.)
-  await connectNewRedis();
+  let redisConnected = false;
+  if (!LOCAL_SMOKE_MODE) {
+    console.log("[Server] Connecting to Redis...");
+    redisConnected = await db.connect();
+    // Also connect the new Redis module (used by spotHistory, balance, etc.)
+    await connectNewRedis();
+  } else {
+    console.log("[Server] Local smoke mode: Redis connection disabled");
+  }
 
   // P1-5: 连接 PostgreSQL（订单镜像，非阻塞）
-  console.log("[Server] Connecting to PostgreSQL (order mirror)...");
-  const pgConnected = await connectPostgres();
+  let pgConnected = false;
+  if (!LOCAL_SMOKE_MODE) {
+    console.log("[Server] Connecting to PostgreSQL (order mirror)...");
+    pgConnected = await connectPostgres();
+  } else {
+    console.log("[Server] Local smoke mode: PostgreSQL mirror disabled");
+  }
   if (pgConnected) {
     console.log("[Server] ✅ PostgreSQL connected — order + position mirroring enabled");
     // L1: Register PG dual-write callback for event poller block cursors
     setBlockPersistPgCallback((name, block) => {
       pgMirrorWrite(SyncStateRepo.upsert(`eventPoller:lastBlock:${name}`, block.toString()), `SyncState:${name}`);
     });
-  } else {
+  } else if (!LOCAL_SMOKE_MODE) {
     console.warn("[Server] ⚠️ PostgreSQL not available — running with Redis only (orders not mirrored)");
   }
 
@@ -15156,7 +15999,7 @@ async function startServer(): Promise<void> {
 
       console.log(`[Server] Restored referral data: ${referrerOk} referrers (${referrerFail} failed), ${refereeOk} referees (${refereeFail} failed), ${referralCodes.size} codes`);
     }
-  } else {
+  } else if (!LOCAL_SMOKE_MODE) {
     console.warn("[Server] Redis connection failed, using in-memory storage only");
   }
 
@@ -15286,14 +16129,18 @@ async function startServer(): Promise<void> {
       );
     }
 
-    // 启动快照定时任务 — 每分钟生成 Merkle root 并提交到链上
-    const snapshotIntervalMs = parseInt(process.env.SNAPSHOT_INTERVAL_MS || "300000"); // 默认 5 分钟 (testnet), 生产环境设 3600000
+    // 启动快照定时任务。
+    // Local/test runs must never broadcast state-root transactions; production defaults to on.
+    const snapshotIntervalMs = parseInt(process.env.SNAPSHOT_INTERVAL_MS || "300000"); // default 5 minutes
+    const submitStateRoots =
+      process.env.SUBMIT_STATE_ROOTS === "true" ||
+      (process.env.NODE_ENV === "production" && process.env.SUBMIT_STATE_ROOTS !== "false");
     startSnapshotJob({
       intervalMs: snapshotIntervalMs,
-      submitToChain: true, // SettlementV2 已配置，启用链上提交
+      submitToChain: submitStateRoots,
       pruneAfterHours: 24,
     });
-    console.log(`[Server] Mode 2: Snapshot job started (${snapshotIntervalMs / 1000}s interval, chain submission ON)`);
+    console.log(`[Server] Mode 2: Snapshot job started (${snapshotIntervalMs / 1000}s interval, chain submission ${submitStateRoots ? "ON" : "OFF"})`);
   } else if (MATCHER_PRIVATE_KEY && SETTLEMENT_ADDRESS) {
     // --- 降级模式: 无 SettlementV2，仅生成本地快照 (不提交链上) ---
     initializeSnapshotModule({
@@ -15373,8 +16220,6 @@ async function startServer(): Promise<void> {
       vaultWalletClient,
       PERP_VAULT_ADDRESS_LOCAL
     );
-    startBatchSettlement();
-    startOIFlush();
 
     // Initialize margin batch module (derived wallet ↔ PerpVault margin)
     initMarginBatch(vaultPublicClient, vaultWalletClient);
@@ -15405,8 +16250,14 @@ async function startServer(): Promise<void> {
       if (balance.usedMargin < 0n) balance.usedMargin = 0n;
       broadcastBalanceUpdate(op.trader);
     });
-    startMarginFlush();
-    console.log(`[Server] PerpVault module initialized + batch settlement + OI flush + margin flush started (PerpVault: ${PERP_VAULT_ADDRESS_LOCAL})`);
+    if (!DISABLE_CHAIN_POLLERS) {
+      startBatchSettlement();
+      startOIFlush();
+      startMarginFlush();
+      console.log(`[Server] PerpVault module initialized + batch settlement + OI flush + margin flush started (PerpVault: ${PERP_VAULT_ADDRESS_LOCAL})`);
+    } else {
+      console.log(`[Server] Local smoke mode: PerpVault chain batch loops disabled (PerpVault: ${PERP_VAULT_ADDRESS_LOCAL})`);
+    }
   } else {
     console.log("[Server] PerpVault: No PERP_VAULT_ADDRESS set, vault mode disabled");
   }
@@ -15498,7 +16349,7 @@ async function startServer(): Promise<void> {
     const { updateKlineWithCurrentPrice } = await import("../spot/spotHistory");
 
     // 使用备用 RPC 避免限流 (publicnode 比 sepolia.base.org 限制更宽松)
-    // BUGFIX: default must match CHAIN_ID — don't hardcode mainnet when running on testnet!
+    // Default uses the explicit production RPC URL.
     const SYNC_RPC = process.env.SPOT_SYNC_RPC_URL || RPC_URL;
     const publicClient = createPublicClient({
       chain: activeChain,
@@ -15773,6 +16624,7 @@ async function startServer(): Promise<void> {
   };
 
   // 从 TokenFactory 同步支持的代币列表 (必须在 syncSpotPrices 之前)
+  if (!DISABLE_CHAIN_POLLERS) {
   await syncSupportedTokens();
 
   // 批量缓存所有代币 name/symbol (multicall, 1次RPC调用)
@@ -15784,6 +16636,9 @@ async function startServer(): Promise<void> {
   // 初始同步 (在代币列表加载后)
   console.log("[Server] Starting initial spot price sync...");
   syncSpotPrices();
+  } else {
+    console.log("[Server] Local smoke mode: chain token sync and initial spot sync disabled");
+  }
 
   // 从 Redis 加载待处理订单 (在代币列表同步后)
   await loadOrdersFromRedis();
@@ -16072,19 +16927,29 @@ async function startServer(): Promise<void> {
   console.log("[Server] Mode 2: Positions loaded from Redis, chain sync DISABLED");
 
   // 定时同步现货价格 (仍需要，供现货交易使用)
-  setInterval(syncSpotPrices, SPOT_PRICE_SYNC_INTERVAL_MS);
-  console.log(`[Server] Spot price sync interval: ${SPOT_PRICE_SYNC_INTERVAL_MS}ms`);
+  if (!DISABLE_CHAIN_POLLERS) {
+    setInterval(syncSpotPrices, SPOT_PRICE_SYNC_INTERVAL_MS);
+    console.log(`[Server] Spot price sync interval: ${SPOT_PRICE_SYNC_INTERVAL_MS}ms`);
+  } else {
+    console.log("[Server] Local smoke mode: periodic spot price sync disabled");
+  }
 
   // 定时更新 PriceFeed 合约的毕业代币价格 (每 30 秒)
-  setInterval(updatePriceFeedOnChain, PRICE_FEED_UPDATE_INTERVAL_MS);
-  console.log(`[Server] PriceFeed on-chain update interval: ${PRICE_FEED_UPDATE_INTERVAL_MS}ms`);
+  if (!DISABLE_CHAIN_POLLERS) {
+    setInterval(updatePriceFeedOnChain, PRICE_FEED_UPDATE_INTERVAL_MS);
+    console.log(`[Server] PriceFeed on-chain update interval: ${PRICE_FEED_UPDATE_INTERVAL_MS}ms`);
+  } else {
+    console.log("[Server] Local smoke mode: PriceFeed on-chain update disabled");
+  }
 
   // 定时刷新 token pool cache (60秒, 覆盖新上币/状态变化)
-  setInterval(async () => {
-    await syncSupportedTokens();
-    await syncTokenInfoCache();
-    await syncFullTokenData();
-  }, 60_000);
+  if (!DISABLE_CHAIN_POLLERS) {
+    setInterval(async () => {
+      await syncSupportedTokens();
+      await syncTokenInfoCache();
+      await syncFullTokenData();
+    }, 60_000);
+  }
 
   // NOTE: Balance snapshot already runs at line ~15112 via snapshotBalancesToPG() every 5 min
   // (removed broken duplicate that called nonexistent insertBatch/cleanup)
@@ -16092,20 +16957,30 @@ async function startServer(): Promise<void> {
   // ========================================
   // 启动链上事件监听 (实时同步链上状态)
   // ========================================
-  startEventWatching().catch((e) => {
-    console.error("[Events] Failed to start event watching:", e);
-  });
+  if (!DISABLE_CHAIN_POLLERS) {
+    startEventWatching().catch((e) => {
+      console.error("[Events] Failed to start event watching:", e);
+    });
+  } else {
+    console.log("[Events] Local smoke mode: Settlement/TokenFactory event pollers disabled");
+  }
 
   // P2-3: 为已毕业代币启动 Swap 事件监听 (K线生成)
   // 注意: detectGraduatedTokens() 已在前面执行，graduatedTokens Map 已填充
-  startAllSwapWatchers();
+  if (!DISABLE_CHAIN_POLLERS) {
+    startAllSwapWatchers();
+  }
 
   // ========================================
   // 启动时回填现货交易数据 — 已移至 syncSpotPrices piggyback (延迟 90s)
   // 旧的 backfillHistoricalTrades 有 @noble/hashes 依赖解析问题
   // 新方案使用 pollTradeEvents (静态 import viem，无依赖问题)
   // ========================================
-  console.log(`[Startup] Trade backfill will run in ~90s via syncSpotPrices (avoiding startup RPC congestion)`);
+  if (!DISABLE_CHAIN_POLLERS) {
+    console.log(`[Startup] Trade backfill will run in ~90s via syncSpotPrices (avoiding startup RPC congestion)`);
+  } else {
+    console.log("[Startup] Local smoke mode: spot trade backfill disabled");
+  }
   if (false) { // DISABLED: old backfill has @noble/hashes/crypto ENOENT bug
   (async () => {
     try {

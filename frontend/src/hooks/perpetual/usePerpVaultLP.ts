@@ -211,7 +211,7 @@ export interface UserLPPosition {
 export function usePerpVaultLP() {
   const { address: userAddress, isConnected } = useAccount();
   const vaultAddress = PERP_VAULT;
-  const enabled = !!vaultAddress && vaultAddress !== ("" as Address);
+  const enabled = isConnected && !!vaultAddress && vaultAddress !== ("" as Address);
 
   // Native BNB balance for deposit max
   const { data: nativeBalance, refetch: refetchNative } = useBalance({

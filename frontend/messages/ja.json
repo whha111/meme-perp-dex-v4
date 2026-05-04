@@ -46,19 +46,19 @@
     "invite": "招待"
   },
   "home": {
-    "badge": "✦ BSC Testnet 稼働中",
-    "heroTitle": "次の",
-    "heroSubtitle": "Meme トークンの作成、取引、無期限契約を一つのプラットフォームで。フェアローンチ、オンチェーン透明性、最大 10x レバレッジ。",
-    "createToken": "トークン作成 →",
-    "startTrading": "取引を始める",
+    "badge": "Curated meme perps",
+    "heroTitle": "Meme 現物と無期限市場をひとつの取引端末で。",
+    "heroSubtitle": "トークン作成、現物取引、無期限ポジション管理を、価格・リスク・口座状態を読み取りやすいセルフカストディ UI に統合。",
+    "createToken": "トークンを発行",
+    "startTrading": "端末を開く",
     "stats": {
       "volume24h": "24h 取引量",
       "marketCap": "総時価総額",
       "activeTokens": "アクティブトークン",
       "totalTraders": "累計トレーダー"
     },
-    "whyTitle": "なぜ MEMEPERP？",
-    "whySubtitle": "分散型、透明、パーミッションレスな Meme トークン取引インフラ",
+    "whyTitle": "本物の取引画面として設計",
+    "whySubtitle": "データ密度、リスク表示、決済モデル、抑制されたブランド表現を優先します。",
     "features": {
       "fairLaunch": {
         "title": "フェアローンチ",
@@ -87,7 +87,7 @@
     },
     "ctaTitle": "準備はできましたか？",
     "ctaSubtitle": "ウォレットを接続して、Meme トレーディングの旅を始めましょう",
-    "ctaButton": "マーケットへ →",
+    "ctaButton": "マーケットへ",
     "footer": {
       "settings": "設定",
       "invite": "招待"
@@ -95,7 +95,7 @@
   },
   "wallet": {
     "connect": "ウォレット接続",
-    "switchNetwork": "BSC Testnetに切替"
+    "switchNetwork": "BSC Mainnetに切替"
   },
   "market": {
     "new": "新規トークン",
@@ -270,7 +270,7 @@
   },
   "trading": {
     "back": "戻る",
-    "baseSepolia": "BSC Testnet",
+    "baseSepolia": "BSC Mainnet",
     "connecting": "接続中...",
     "loadingKline": "チャートデータを読み込み中...",
     "noTradeData": "取引データがありません",

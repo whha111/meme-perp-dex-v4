@@ -92,9 +92,11 @@ class WebSocketManager {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private reconnectTimeout: NodeJS.Timeout | null = null;
+  private longRetryTimeout: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private lastPong: number = Date.now();
   private isConnecting = false;
+  private shouldReconnect = false;
   private subscribedTokens: Set<Address> = new Set();
   private subscribedTraders: Set<Address> = new Set();
   private listeners: Set<(connected: boolean) => void> = new Set();
@@ -116,6 +118,7 @@ class WebSocketManager {
       return;
     }
 
+    this.shouldReconnect = true;
     this.isConnecting = true;
     const wsUrl = getWsUrl();
     // connecting
@@ -148,6 +151,9 @@ class WebSocketManager {
         // Subscribe to all_market_stats for homepage volume/traders data
         this.send({ type: "subscribe_all_market_stats" });
 
+        // Subscribe to curated meme perp markets and oracle status
+        this.send({ type: "subscribe_markets" });
+
         // Resubscribe to all tokens and traders
         this.resubscribeAll();
       };
@@ -168,7 +174,9 @@ class WebSocketManager {
         this.listeners.forEach((listener) => listener(false));
 
         // Attempt reconnection
-        this.attemptReconnect();
+        if (this.shouldReconnect) {
+          this.attemptReconnect();
+        }
       };
 
       this.ws.onerror = () => {
@@ -186,10 +194,16 @@ class WebSocketManager {
   }
 
   disconnect(): void {
+    this.shouldReconnect = false;
+    this.isConnecting = false;
     this.stopPing();
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
+    }
+    if (this.longRetryTimeout) {
+      clearTimeout(this.longRetryTimeout);
+      this.longRetryTimeout = null;
     }
     if (this.ws) {
       this.ws.close();
@@ -197,7 +211,9 @@ class WebSocketManager {
     }
     this.subscribedTokens.clear();
     this.subscribedTraders.clear();
+    this.reconnectAttempts = 0;
     useTradingDataStore.getState().setWsConnected(false);
+    useTradingDataStore.getState().setWsError(null);
   }
 
   private handleMessage(data: string): void {
@@ -214,17 +230,14 @@ class WebSocketManager {
       switch (msg.type) {
         // ── Auth ──────────────────────────────────────────────
         case "auth_success":
-          // After auth, subscribe to trader-specific data
+          // After auth, the server has already subscribed this socket to trader updates.
           if (this.pendingAuthTrader) {
             this.authenticatedTrader = this.pendingAuthTrader;
-            this.send({ type: "subscribe_trader", trader: this.pendingAuthTrader });
             // P1-4: 重连后主动拉取最新状态 — 参考 Drift DriftClient 订阅模型
             // 确保断线期间的仓位/余额/挂单变化不丢失
             this.send({ type: "get_positions", trader: this.pendingAuthTrader });
             this.send({ type: "get_balance", trader: this.pendingAuthTrader });
             this.send({ type: "get_pending_orders", trader: this.pendingAuthTrader });
-            this.pendingAuthTrader = null;
-            this.pendingAuthSignFn = null;
           }
           break;
 
@@ -248,7 +261,7 @@ class WebSocketManager {
         case "kline":
           break;
 
-        // ── Position (single update from subscribe_trader) ────
+        // ── Position (private update after auth) ──────────────
         case "position": {
           const posData = msg.data;
           if (posData && typeof posData === "object") {
@@ -282,7 +295,7 @@ class WebSocketManager {
           }
           break;
 
-        // ── Orders (single + batch from subscribe_trader) ─────
+        // ── Orders (private update after auth) ────────────────
         case "orders":
           if (msg.orders && Array.isArray(msg.orders)) {
             // Batch: full pending orders list
@@ -307,7 +320,7 @@ class WebSocketManager {
           }
           break;
 
-        // ── Balance (from subscribe_trader) ────────────────────
+        // ── Balance (private update after auth) ───────────────
         case "balance": {
           // Server format: { data: { trader, totalBalance, availableBalance, usedMargin, unrealizedPnL, equity } }
           // OR legacy: { balance: { available, locked, unrealizedPnL } }
@@ -397,6 +410,13 @@ class WebSocketManager {
             }));
             store.setTokenStatsBatch(entries);
           }
+          break;
+
+        case "markets":
+        case "prices":
+        case "oracle_status":
+          // The curated meme markets page uses REST for initial render; recognizing
+          // these WS frames keeps market/oracle streaming quiet until store wiring lands.
           break;
 
         case "funding_rate":
@@ -528,7 +548,7 @@ class WebSocketManager {
       useTradingDataStore
         .getState()
         .setWsError("Connection lost. Retrying in 60s...");
-      setTimeout(() => {
+      this.longRetryTimeout = setTimeout(() => {
         this.reconnectAttempts = 0;
         this.connect();
       }, 60_000);
@@ -554,7 +574,7 @@ class WebSocketManager {
 
     // Resubscribe to traders (risk data)
     this.subscribedTraders.forEach((trader) => {
-      this.sendSubscribeRisk(trader);
+      void this.sendSubscribeRisk(trader);
     });
 
     // Subscribe to global risk data
@@ -597,11 +617,21 @@ class WebSocketManager {
     });
   }
 
-  private sendSubscribeRisk(trader: Address): void {
-    this.send({
-      type: "subscribe_risk",
-      trader,
-    });
+  private async sendSubscribeRisk(trader: Address): Promise<void> {
+    if (!this.pendingAuthSignFn) return;
+
+    try {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signature = await this.pendingAuthSignFn(`subscribe_risk:${trader}:${timestamp}`);
+      this.send({
+        type: "subscribe_risk",
+        trader,
+        signature,
+        timestamp,
+      });
+    } catch (e) {
+      console.error("[UnifiedWS] subscribe_risk signing failed:", e);
+    }
   }
 
   private sendUnsubscribeRisk(trader: Address): void {
@@ -619,7 +649,7 @@ class WebSocketManager {
 
   /**
    * Authenticate with matching engine and subscribe to trader-specific data.
-   * Flow: auth → auth_success → subscribe_trader → position/balance/orders push
+   * Flow: auth -> auth_success -> position/balance/orders push
    */
   async authenticate(trader: Address, signMessage: (msg: string) => Promise<string>): Promise<void> {
     const normalizedTrader = trader.toLowerCase() as Address;
@@ -634,7 +664,7 @@ class WebSocketManager {
 
     try {
       const timestamp = Math.floor(Date.now() / 1000);
-      const message = `MemePerp WS Auth: ${normalizedTrader} at ${timestamp}`;
+      const message = `auth:${normalizedTrader}:${timestamp}`;
       const signature = await signMessage(message);
 
       this.send({ type: "auth", trader: normalizedTrader, signature, timestamp });
@@ -652,7 +682,7 @@ class WebSocketManager {
     if (this.pendingAuthSignFn && this.pendingAuthTrader) {
       try {
         const timestamp = Math.floor(Date.now() / 1000);
-        const message = `MemePerp WS Auth: ${this.pendingAuthTrader} at ${timestamp}`;
+        const message = `auth:${this.pendingAuthTrader}:${timestamp}`;
         const signature = await this.pendingAuthSignFn(message);
         this.send({ type: "auth", trader: this.pendingAuthTrader, signature, timestamp });
       } catch (e) {
@@ -695,7 +725,7 @@ class WebSocketManager {
     if (!this.subscribedTraders.has(normalizedTrader)) {
       this.subscribedTraders.add(normalizedTrader);
       if (this.ws?.readyState === WebSocket.OPEN) {
-        this.sendSubscribeRisk(normalizedTrader);
+        void this.sendSubscribeRisk(normalizedTrader);
       }
     }
   }
@@ -724,6 +754,7 @@ class WebSocketManager {
   forceReconnect(): void {
     this.reconnectAttempts = 0;
     this.disconnect();
+    this.shouldReconnect = true;
     this.connect();
   }
 }
@@ -770,9 +801,13 @@ export function useUnifiedWebSocket(
 
   // Initialize manager
   useEffect(() => {
-    if (!enabled) return;
-
     managerRef.current = WebSocketManager.getInstance();
+
+    if (!enabled) {
+      managerRef.current.disconnect();
+      return;
+    }
+
     managerRef.current.connect();
 
     // Listen for connection changes

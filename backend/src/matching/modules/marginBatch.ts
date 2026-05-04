@@ -14,8 +14,8 @@
 
 import { createWalletClient, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { bsc, bscTestnet } from "viem/chains";
-import { PERP_VAULT_ADDRESS, CHAIN_ID, rpcTransport } from "../config";
+import { bsc } from "viem/chains";
+import { PERP_VAULT_ADDRESS, rpcTransport } from "../config";
 import { getActiveSessionForDerived, getSigningKey } from "./wallet";
 import { isPerpVaultEnabled, txLockRef } from "./perpVault";
 import { logger } from "../utils/logger";
@@ -407,7 +407,7 @@ async function getOrCreateWalletClient(traderAddress: Address): Promise<any | nu
   }
 
   const account = privateKeyToAccount(signingKey);
-  const chain = CHAIN_ID === 56 ? bsc : bscTestnet;
+  const chain = bsc;
   const client = createWalletClient({
     account,
     chain,
@@ -432,7 +432,7 @@ export function invalidateWalletClient(traderAddress: Address): void {
 export function registerWalletKey(traderAddress: Address, privateKey: Hex): void {
   const normalized = traderAddress.toLowerCase() as Address;
   const account = privateKeyToAccount(privateKey);
-  const chain = CHAIN_ID === 56 ? bsc : bscTestnet;
+  const chain = bsc;
   const client = createWalletClient({
     account,
     chain,

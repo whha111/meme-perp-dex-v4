@@ -20,6 +20,7 @@ import "../src/perpetual/FundingRate.sol";
 import "../src/perpetual/Liquidation.sol";
 import "../src/perpetual/PerpVault.sol";
 import "../src/perpetual/InsuranceFund.sol";
+import "../src/perpetual/MarketRegistry.sol";
 
 /**
  * @title DeployBSCMainnet
@@ -46,6 +47,7 @@ import "../src/perpetual/InsuranceFund.sol";
 contract DeployBSCMainnet is Script {
     // ── BSC Mainnet Constants ──
     address constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address constant USDT = 0x55d398326f99059fF775485246999027B3197955;
     address constant PANCAKE_ROUTER_V2 = 0x10ED43c718714EB63d5aA57B78f21C9f0D0E3d9A;
 
     // ── Configuration (adjust for mainnet risk tolerance) ──
@@ -61,6 +63,7 @@ contract DeployBSCMainnet is Script {
     ContractRegistry public registry;
     RiskManager public riskManager;
     PerpVault public perpVault;
+    MarketRegistry public marketRegistry;
     InsuranceFund public insuranceFund;
     Settlement public settlement;
     TokenFactory public tokenFactory;
@@ -80,6 +83,7 @@ contract DeployBSCMainnet is Script {
         console.log("Deployer:", deployer);
         console.log("Balance:", deployer.balance / 1e18, "BNB");
         console.log("WBNB:", WBNB);
+        console.log("USDT:", USDT);
         console.log("PancakeRouter:", PANCAKE_ROUTER_V2);
         console.log("Chain ID:", block.chainid);
         require(block.chainid == 56, "Wrong chain! Must be BSC Mainnet (56)");
@@ -106,6 +110,9 @@ contract DeployBSCMainnet is Script {
 
         perpVault = new PerpVault();
         console.log("PerpVault:", address(perpVault));
+
+        marketRegistry = new MarketRegistry(deployer, WBNB, USDT);
+        console.log("MarketRegistry:", address(marketRegistry));
 
         insuranceFund = new InsuranceFund();
         console.log("InsuranceFund:", address(insuranceFund));
@@ -209,6 +216,10 @@ contract DeployBSCMainnet is Script {
         settlementV2.setDepositCapTotal(DEPOSIT_CAP_TOTAL);
         console.log("SettlementV2 configured (caps: 10/500 BNB)");
 
+        // Curated markets are intentionally not hardcoded here. The owner/multisig must upsert
+        // verified BSC mainnet index token addresses and conservative OI caps before launch.
+        console.log("MarketRegistry deployed empty; upsert curated meme markets via multisig");
+
         // --- Seed Insurance Fund ---
         (bool ok,) = address(liquidation).call{value: INSURANCE_SEED}("");
         require(ok, "Insurance seed failed");
@@ -236,6 +247,7 @@ contract DeployBSCMainnet is Script {
         console.log("Settlement (V1):  ", address(settlement));
         console.log("SettlementV2:     ", address(settlementV2));
         console.log("PerpVault:        ", address(perpVault));
+        console.log("MarketRegistry:   ", address(marketRegistry));
         console.log("RiskManager:      ", address(riskManager));
         console.log("FundingRate:      ", address(fundingRate));
         console.log("Liquidation:      ", address(liquidation));
@@ -243,6 +255,7 @@ contract DeployBSCMainnet is Script {
         console.log("");
         console.log("--- Tokens ---");
         console.log("WBNB:             ", WBNB);
+        console.log("USDT:             ", USDT);
         console.log("");
         console.log("--- PerpVault LP ---");
         console.log("Pool Value:       ", address(perpVault).balance);
@@ -253,6 +266,7 @@ contract DeployBSCMainnet is Script {
         console.log("1. Copy addresses to .env and frontend/.env.local");
         console.log("2. Verify all contracts on BscScan");
         console.log("3. Transfer ownership to multisig (Ownable2Step)");
-        console.log("4. Test deposit/withdraw flow with small amounts");
+        console.log("4. Upsert curated meme markets in MarketRegistry via multisig");
+        console.log("5. Test deposit/withdraw flow with small amounts");
     }
 }

@@ -1,8 +1,8 @@
 /**
  * Receipt-Based Trade Event Scanner (Fallback for eth_getLogs blocking)
  *
- * Problem: BSC Testnet public RPCs block eth_getLogs from datacenter IPs.
- * BSCScan V1 API is deprecated, V2 API requires paid plan for BSC Testnet.
+ * Problem: some BSC public RPCs block eth_getLogs from datacenter IPs.
+ * BSCScan V1 API is deprecated, V2 API requires authenticated access for heavier usage.
  *
  * Solution: Use eth_getBlockByNumber + eth_getTransactionReceipt instead.
  * These are cheap O(1) lookups that are NOT throttled like eth_getLogs.

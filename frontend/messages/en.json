@@ -47,19 +47,19 @@
     "vault": "Vault"
   },
   "home": {
-    "badge": "✦ BSC Testnet Live",
-    "heroTitle": "Discover the Next",
-    "heroSubtitle": "All-in-one meme token creation, trading and perpetual platform. Fair launch, on-chain transparency, up to 10x leverage.",
-    "createToken": "Create Token →",
-    "startTrading": "Start Trading",
+    "badge": "Curated meme perp markets",
+    "heroTitle": "Meme spot and perpetual markets in one trading terminal.",
+    "heroSubtitle": "Launch tokens, trade spot markets, and manage perpetual positions through a quieter self-custody interface built for scanning prices, risk, and account state.",
+    "createToken": "Launch token",
+    "startTrading": "Open terminal",
     "stats": {
       "volume24h": "24h Volume",
       "marketCap": "Total Market Cap",
       "activeTokens": "Active Tokens",
       "totalTraders": "Total Traders"
     },
-    "whyTitle": "Why MEMEPERP?",
-    "whySubtitle": "Decentralized, transparent, permissionless meme token trading infrastructure",
+    "whyTitle": "Built For Real Trading",
+    "whySubtitle": "The product should feel like a market terminal first: dense data, clear risk states, visible settlement model, and restrained brand treatment.",
     "features": {
       "fairLaunch": {
         "title": "Fair Launch",
@@ -88,7 +88,7 @@
     },
     "ctaTitle": "Ready to Start?",
     "ctaSubtitle": "Connect your wallet and start your meme trading journey",
-    "ctaButton": "Enter Market →",
+    "ctaButton": "Enter market",
     "footer": {
       "settings": "Settings",
       "invite": "Invite"
@@ -96,7 +96,7 @@
   },
   "wallet": {
     "connect": "Connect Wallet",
-    "switchNetwork": "Switch to BSC Testnet"
+    "switchNetwork": "Switch to BSC Mainnet"
   },
   "market": {
     "new": "New Tokens",
@@ -287,7 +287,7 @@
   },
   "trading": {
     "back": "Back",
-    "baseSepolia": "BSC Testnet",
+    "baseSepolia": "BSC Mainnet",
     "connecting": "Connecting...",
     "loadingKline": "Loading chart data...",
     "noTradeData": "No trade data",
@@ -1092,6 +1092,7 @@
     "billWithdraw": "Withdraw",
     "billSettlePnl": "Settle PnL",
     "billFundingFee": "Funding Fee",
+    "billTradingFee": "Trading Fee",
     "billLiquidation": "Liquidation",
     "billMarginAdd": "Add Margin",
     "billMarginRemove": "Remove Margin",

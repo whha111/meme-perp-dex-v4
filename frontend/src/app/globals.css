@@ -1,85 +1,103 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 深色主题 (默认) - DEXI 品牌风格 */
+/* 娣辫壊涓婚 (榛樿) - DEXI 鍝佺墝椋庢牸 */
 :root,
 .dark {
-  --background: #000000;
-  --foreground: #FFFFFF;
+  --background: #0A0C11;
+  --foreground: #E7EDF4;
 
-  /* DEXI 配色变量 - 深色模式 */
-  --okx-bg-primary: #000000;
-  --okx-bg-secondary: #0a0a0a;
-  --okx-bg-card: #111111;
-  --okx-bg-hover: #1a1a1a;
-  --okx-bg-active: #222222;
+  --dexi-accent: #5EEAD4;
+  --dexi-accent-strong: #8FF7E8;
+  --dexi-accent-soft: rgba(94, 234, 212, 0.16);
+  --dexi-focus: rgba(94, 234, 212, 0.32);
 
-  --okx-text-primary: #FFFFFF;
-  --okx-text-secondary: #888888;
-  --okx-text-tertiary: #555555;
+  /* DEXI 閰嶈壊鍙橀噺 - 娣辫壊妯″紡 */
+  --okx-bg-primary: #0A0C11;
+  --okx-bg-secondary: #10141B;
+  --okx-bg-card: #151A22;
+  --okx-bg-hover: #1D2430;
+  --okx-bg-active: #242D3A;
 
-  --okx-border-primary: #1a1a1a;
-  --okx-border-secondary: #2a2a2a;
-  --okx-border-hover: #3a3a3a;
+  --okx-text-primary: #F3F7F9;
+  --okx-text-secondary: #A5B0BB;
+  --okx-text-tertiary: #77838F;
 
-  /* 涨跌颜色 - Binance 标准 */
+  --okx-border-primary: #27313D;
+  --okx-border-secondary: #344150;
+  --okx-border-hover: #465565;
+
+  /* 娑ㄨ穼棰滆壊 - Binance 鏍囧噯 */
   --okx-up: #0ECB81;
   --okx-down: #F6465D;
-  --okx-accent: #BFFF00;
+  --okx-accent: var(--dexi-accent);
   --okx-warning: #F0B90B;
 
-  --scrollbar-track: #0a0a0a;
-  --scrollbar-thumb: #2a2a2a;
-  --scrollbar-thumb-hover: #3a3a3a;
+  --scrollbar-track: #10141B;
+  --scrollbar-thumb: #344150;
+  --scrollbar-thumb-hover: #465565;
 
-  /* 卡片阴影 - 深色模式禁用 */
+  /* 鍗＄墖闃村奖 - 娣辫壊妯″紡绂佺敤 */
   --card-shadow: none;
   --card-shadow-hover: none;
 
-  /* 图表专用变量 */
-  --chart-grid: rgba(255, 255, 255, 0.06);
-  --chart-separator: #1a1a1a;
-  --chart-button-hover: #1a1a1a;
+  /* 鍥捐〃涓撶敤鍙橀噺 */
+  --chart-grid: rgba(232, 237, 242, 0.055);
+  --chart-separator: #27313D;
+  --chart-button-hover: #1D2430;
 
-  /* 输入框 */
-  --input-bg: #111111;
-  --input-border: #1a1a1a;
-  --input-border-focus: #BFFF00;
+  /* 杈撳叆妗?*/
+  --input-bg: #0C131A;
+  --input-border: #344150;
+  --input-border-focus: var(--dexi-accent);
 
-  /* Tab 和导航 */
-  --tab-active-bg: #1a1a1a;
+  /* Tab 鍜屽鑸?*/
+  --tab-active-bg: #1D2430;
   --tab-inactive-bg: transparent;
-  --tab-border: #1a1a1a;
+  --tab-border: #1A242E;
 }
 
-/* 合约交易页面专属配色 - Binance Futures 风格 */
+/* 鍚堢害浜ゆ槗椤甸潰涓撳睘閰嶈壊 - DEXI terminal shell */
 .perp-theme {
-  --okx-bg-primary: #0B0E11;
-  --okx-bg-secondary: #121212;
-  --okx-bg-card: #1E2329;
-  --okx-bg-hover: #2B3139;
-  --okx-bg-active: #363C45;
+  --dexi-accent: #5EEAD4;
+  --dexi-accent-strong: #8FF7E8;
+  --dexi-accent-soft: rgba(94, 234, 212, 0.16);
+  --dexi-focus: rgba(94, 234, 212, 0.32);
 
-  --okx-border-primary: #2B3139;
-  --okx-border-secondary: #363C45;
-  --okx-border-hover: #474D57;
+  --okx-bg-primary: #0A0C11;
+  --okx-bg-secondary: #10141B;
+  --okx-bg-card: #151A22;
+  --okx-bg-hover: #1D2430;
+  --okx-bg-active: #22313A;
 
-  --okx-accent: #F0B90B;
-  --input-border-focus: #F0B90B;
+  --okx-text-primary: #F7FAFC;
+  --okx-text-secondary: #A7B2BE;
+  --okx-text-tertiary: #77838F;
 
-  --chart-grid: rgba(255, 255, 255, 0.04);
-  --chart-separator: #2B3139;
-  --chart-button-hover: #2B3139;
+  --okx-border-primary: #2B3542;
+  --okx-border-secondary: #344150;
+  --okx-border-hover: #465565;
 
-  --input-bg: #1E2329;
-  --input-border: #2B3139;
+  --okx-accent: var(--dexi-accent);
+  --input-border-focus: var(--dexi-accent);
 
-  --tab-active-bg: #2B3139;
-  --tab-border: #2B3139;
+  --okx-up: #20D7A1;
+  --okx-down: #F45B69;
+  --okx-warning: #F5B544;
+
+  --chart-grid: rgba(200, 199, 216, 0.04);
+  --chart-separator: #2B3542;
+  --chart-button-hover: #1D2430;
+
+  --input-bg: #10141B;
+  --input-border: #2B3542;
+
+  --tab-active-bg: #22313A;
+  --tab-border: #2B3542;
 }
 
-/* Light mode override for perp-theme — prevent dark hardcoded vars from overriding .light */
+/* Light mode override for perp-theme 鈥?prevent dark hardcoded vars from overriding .light */
 .light .perp-theme {
   --okx-bg-primary: #F8F9FA;
   --okx-bg-secondary: #FFFFFF;
@@ -91,8 +109,8 @@
   --okx-border-secondary: #E2E8F0;
   --okx-border-hover: #A0AEC0;
 
-  --okx-accent: #3182CE;
-  --input-border-focus: #3182CE;
+  --okx-accent: var(--dexi-accent);
+  --input-border-focus: var(--dexi-accent);
 
   --chart-grid: rgba(0, 0, 0, 0.08);
   --chart-separator: #D2D6DC;
@@ -109,6 +127,11 @@
 .light {
   --background: #F8F9FA;
   --foreground: #1A1A1A;
+
+  --dexi-accent: #B88912;
+  --dexi-accent-strong: #8F6808;
+  --dexi-accent-soft: rgba(184, 137, 18, 0.12);
+  --dexi-focus: rgba(184, 137, 18, 0.28);
 
   /* Background colors - Clean, professional layering */
   --okx-bg-primary: #F8F9FA;
@@ -130,7 +153,7 @@
   /* Trading colors - Vibrant for light backgrounds */
   --okx-up: #00B67A;
   --okx-down: #E53E3E;
-  --okx-accent: #3182CE;
+  --okx-accent: var(--dexi-accent);
   --okx-warning: #D69E2E;
 
   /* Scrollbar - Visible on light background */
@@ -150,7 +173,7 @@
   /* Input fields */
   --input-bg: #FFFFFF;
   --input-border: #D2D6DC;
-  --input-border-focus: #3182CE;
+  --input-border-focus: var(--dexi-accent);
 
   /* Tabs and navigation */
   --tab-active-bg: #FFFFFF;
@@ -175,11 +198,631 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0;
+  text-rendering: optimizeLegibility;
   /* Ensure body has background even if CSS variables fail */
   min-height: 100vh;
 }
 
-/* OKX 风格自定义滚动条 */
+.dexi-logo-mark {
+  position: relative;
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(94, 234, 212, 0.48);
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.22), rgba(16, 20, 27, 0.92));
+  color: var(--dexi-accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.dexi-logo-mark::after {
+  content: "";
+  position: absolute;
+  inset: 4px -8px auto auto;
+  height: 2px;
+  width: 30px;
+  transform: rotate(-35deg);
+  background: var(--dexi-accent-strong);
+  opacity: 0.9;
+}
+
+.dexi-chart-grid {
+  background:
+    linear-gradient(rgba(200, 199, 216, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 199, 216, 0.04) 1px, transparent 1px);
+  background-size: 72px 60px;
+  background-position: -1px -1px;
+}
+
+::selection {
+  background: var(--dexi-accent-soft);
+  color: var(--okx-text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--dexi-focus);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  letter-spacing: 0;
+}
+
+@layer components {
+  .dexi-page-shell {
+    width: 100%;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 16px 16px 32px;
+  }
+
+  @media (min-width: 768px) {
+    .dexi-page-shell {
+      padding: 20px 32px 40px;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .dexi-page-shell {
+      padding-left: 40px;
+      padding-right: 40px;
+    }
+  }
+
+  .dexi-page-header {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-bottom: 16px;
+  }
+
+  @media (min-width: 768px) {
+    .dexi-page-header {
+      flex-direction: row;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+  }
+
+  .dexi-card {
+    background: var(--okx-bg-card);
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 4px;
+    box-shadow: var(--card-shadow);
+  }
+
+  .dexi-panel {
+    background: var(--okx-bg-card);
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 4px;
+  }
+
+  .dexi-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    gap: 6px;
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 4px;
+    background: var(--okx-bg-secondary);
+    padding: 0 8px;
+    color: var(--okx-text-secondary);
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .dexi-mini-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 4px;
+    background: var(--dexi-accent-soft);
+    padding: 2px 6px;
+    color: var(--dexi-accent-strong);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .dexi-primary-action,
+  .dexi-secondary-action {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 4px;
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: 700;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  }
+
+  .dexi-primary-action {
+    background: var(--okx-text-primary);
+    color: var(--okx-bg-primary);
+  }
+
+  .dexi-primary-action:hover {
+    background: var(--dexi-accent);
+    color: #070A0D;
+  }
+
+  .dexi-secondary-action {
+    border: 1px solid var(--okx-border-secondary);
+    color: var(--okx-text-primary);
+  }
+
+  .dexi-secondary-action:hover {
+    border-color: var(--okx-border-hover);
+    background: var(--okx-bg-hover);
+  }
+
+  .dexi-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .dexi-table th {
+    background: color-mix(in srgb, var(--okx-bg-secondary) 82%, transparent);
+    color: var(--okx-text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 10px 16px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .dexi-table td {
+    border-top: 1px solid var(--okx-border-primary);
+    color: var(--okx-text-secondary);
+    padding: 12px 16px;
+    vertical-align: middle;
+  }
+
+  .dexi-table tr:hover td {
+    background: color-mix(in srgb, var(--okx-bg-hover) 72%, transparent);
+  }
+
+  .dexi-panel-header {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--okx-border-primary);
+    padding: 10px 16px;
+  }
+
+  .dexi-empty-panel {
+    display: flex;
+    min-height: 220px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px solid var(--okx-border-primary);
+    color: var(--okx-text-tertiary);
+    text-align: center;
+  }
+
+  .dexi-kv-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border-top: 1px solid var(--okx-border-primary);
+    padding: 12px 16px;
+    font-size: 13px;
+  }
+
+  .dexi-compact-tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--okx-border-primary);
+    padding: 0 12px;
+  }
+
+  .dexi-terminal-shell {
+    min-height: calc(100vh - 48px);
+    background: var(--okx-bg-primary);
+    color: var(--okx-text-primary);
+    padding: 12px;
+  }
+
+  .dexi-terminal-bar {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 10px;
+    overflow-x: auto;
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 8px;
+    padding: 0 16px;
+    background: color-mix(in srgb, var(--okx-bg-card) 86%, black 14%);
+  }
+
+  .dexi-terminal-grid {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+    background: transparent;
+  }
+
+  .dexi-terminal-panel {
+    min-width: 0;
+    background: var(--okx-bg-card);
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .dexi-terminal-titlebar {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--okx-border-primary);
+    padding: 11px 16px;
+  }
+
+  .dexi-terminal-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--okx-border-primary);
+    padding: 12px 16px;
+  }
+
+  .dexi-terminal-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--okx-text-tertiary);
+    text-transform: uppercase;
+  }
+
+  .dexi-terminal-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    color: var(--okx-text-primary);
+  }
+
+  .dexi-market-button {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--okx-border-primary);
+    padding: 12px 14px;
+    text-align: left;
+    transition: background-color 0.16s ease;
+  }
+
+  .dexi-market-button:hover {
+    background: var(--okx-bg-hover);
+  }
+
+  .dexi-terminal-action {
+    display: inline-flex;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 4px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .dexi-terminal-action-primary {
+    background: var(--dexi-accent);
+    color: #05070A;
+  }
+
+  .dexi-terminal-action-secondary {
+    border: 1px solid var(--okx-border-secondary);
+    color: var(--okx-text-primary);
+  }
+
+  .dexi-soft-surface {
+    background: color-mix(in srgb, var(--okx-bg-secondary) 70%, var(--okx-bg-card) 30%);
+    border: 1px solid var(--okx-border-primary);
+    border-radius: 8px;
+  }
+
+  .dexi-depth-bar {
+    height: 8px;
+    border-radius: 99px;
+    background: var(--okx-bg-hover);
+    overflow: hidden;
+  }
+
+  .dexi-depth-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .dydx-panel {
+    min-width: 0;
+    border: 1px solid #2B3542;
+    border-radius: 0;
+    background: #11161E;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.018);
+    overflow: hidden;
+  }
+
+  .dydx-market-strip {
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+  }
+
+  .dydx-trade-grid {
+    --dydx-orderbook-width: var(--orderbook-trades-width);
+    --dydx-side-width: var(--sidebar-width);
+    --dydx-bottom-height: var(--horizontalPanel-height);
+  }
+
+  .dydx-inner-region {
+    grid-area: Inner;
+  }
+
+  .dydx-vertical-region {
+    grid-area: Vertical;
+  }
+
+  .dydx-side-region {
+    grid-area: Side;
+  }
+
+  .dydx-horizontal-region {
+    grid-area: Horizontal;
+  }
+
+  .dydx-risk-banner {
+    grid-area: Notice;
+  }
+
+  @media (min-width: 768px) {
+    .dydx-terminal {
+      --default-border-width: 1px;
+      --market-info-row-height: 2.45rem;
+      --tabs-height: 2.675rem;
+      --account-info-section-height: 7.75rem;
+      --orderbook-trades-width: 18.75rem;
+      --sidebar-width: 20.25rem;
+      --horizontalPanel-height: 288px;
+      --dydx-orderbook-width: var(--orderbook-trades-width);
+      --dydx-side-width: var(--sidebar-width);
+      --dydx-bottom-height: var(--horizontalPanel-height);
+
+      display: grid !important;
+      grid-template:
+        "Notice Notice Notice" 2.375rem
+        "Top Top Top" var(--market-info-row-height)
+        "Inner Vertical Side" minmax(0, 1fr)
+        "Horizontal Horizontal Side" minmax(var(--tabs-height), var(--dydx-bottom-height))
+        / minmax(0, 1fr) var(--dydx-orderbook-width) var(--dydx-side-width);
+      gap: var(--default-border-width);
+      padding: 0;
+      background: #2B3542;
+    }
+
+    .dydx-main-content,
+    .dydx-trade-grid {
+      display: contents !important;
+    }
+
+    .dydx-market-strip {
+      grid-area: Top;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid #2B3542;
+      border-radius: 0;
+    }
+  }
+
+  @media (max-width: 1180px) {
+    .dydx-terminal {
+      --sidebar-width: 19rem;
+      --horizontalPanel-height: 260px;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .dydx-terminal {
+      --sidebar-width: 20.25rem;
+      --horizontalPanel-height: 288px;
+    }
+  }
+}
+
+.dydx-terminal {
+  color-scheme: dark;
+  background: #11161E;
+  color: #F3F7F9;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dydx-terminal * {
+  letter-spacing: 0;
+}
+
+.dydx-terminal .bg-okx-bg-primary {
+  background-color: #11161E;
+}
+
+.dydx-terminal .bg-okx-bg-secondary,
+.dydx-terminal .bg-okx-bg-card {
+  background-color: #151A22;
+}
+
+.dydx-terminal .bg-okx-bg-hover {
+  background-color: #222A35;
+}
+
+.dydx-terminal .border-okx-border-primary {
+  border-color: #2B3542;
+}
+
+.dydx-terminal .border-okx-border-secondary {
+  border-color: #374555;
+}
+
+.dydx-terminal .text-okx-text-primary {
+  color: #F3F7F9;
+}
+
+.dydx-terminal .text-okx-text-secondary {
+  color: #A7B2BE;
+}
+
+.dydx-terminal .text-okx-text-tertiary {
+  color: #77838F;
+}
+
+.dydx-terminal .text-okx-up {
+  color: #20D7A1;
+}
+
+.dydx-terminal .text-okx-down {
+  color: #F45B69;
+}
+
+.dydx-terminal .bg-okx-up {
+  background-color: #20D7A1;
+}
+
+.dydx-terminal .bg-okx-down {
+  background-color: #F45B69;
+}
+
+.dydx-terminal input[type="text"],
+.dydx-terminal input[type="number"] {
+  min-height: 3rem;
+  border-color: #374555;
+  border-radius: 0.5rem;
+  background-color: #222A35;
+  color: #F3F7F9;
+  font-size: 12px;
+}
+
+.dydx-terminal input[type="text"]::placeholder,
+.dydx-terminal input[type="number"]::placeholder {
+  color: #77838F;
+}
+
+.dydx-terminal button {
+  border-radius: 0.375rem;
+}
+
+.dydx-terminal .rounded-none {
+  border-radius: 0 !important;
+}
+
+.dydx-terminal .dydx-tradebox input[type="text"],
+.dydx-terminal .dydx-tradebox input[type="number"] {
+  height: 3rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.dydx-terminal .dydx-tradebox button {
+  box-shadow: none;
+}
+
+.dydx-terminal .dexi-size-slider {
+  height: 1rem;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+}
+
+.dydx-terminal .dexi-size-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dydx-terminal .dexi-size-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #5EEAD4 0 var(--dexi-slider-progress, 0%),
+    #3B3C46 var(--dexi-slider-progress, 0%) 100%
+  );
+}
+
+.dydx-terminal .dexi-size-slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  appearance: none;
+  border: 2px solid #5EEAD4;
+  border-radius: 999px;
+  background: #F3F7F9;
+  box-shadow: 0 0 0 4px rgba(94, 234, 212, 0.12);
+}
+
+.dydx-terminal .dexi-size-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: #3B3C46;
+}
+
+.dydx-terminal .dexi-size-slider::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: #5EEAD4;
+}
+
+.dydx-terminal .dexi-size-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #5EEAD4;
+  border-radius: 999px;
+  background: #F3F7F9;
+  box-shadow: 0 0 0 4px rgba(94, 234, 212, 0.12);
+}
+
+.dydx-terminal .dydx-tradebox .space-y-3 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.75rem;
+}
+
+.dydx-terminal table {
+  border-collapse: collapse;
+}
+
+.dydx-terminal th {
+  color: #77838F;
+  font-weight: 500;
+}
+
+.dydx-terminal tr {
+  border-color: #2B3542;
+}
+
+.dydx-terminal .shadow-2xl,
+.dydx-terminal .shadow-lg {
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+}
+
+/* OKX 椋庢牸鑷畾涔夋粴鍔ㄦ潯 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -198,27 +841,55 @@ body {
   background: var(--scrollbar-thumb-hover);
 }
 
-/* Firefox 滚动条 */
+/* Firefox 婊氬姩鏉?*/
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 @layer utilities {
+  .bg-dexi-accent {
+    background-color: var(--dexi-accent);
+  }
+
+  .bg-dexi-accent-soft {
+    background-color: var(--dexi-accent-soft);
+  }
+
+  .text-dexi-accent {
+    color: var(--dexi-accent);
+  }
+
+  .text-dexi-accent-strong {
+    color: var(--dexi-accent-strong);
+  }
+
+  .border-dexi-accent {
+    border-color: var(--dexi-accent);
+  }
+
+  .hover\:bg-dexi-accent-strong:hover {
+    background-color: var(--dexi-accent-strong);
+  }
+
+  .hover\:text-dexi-accent-strong:hover {
+    color: var(--dexi-accent-strong);
+  }
+
   .text-balance {
     text-wrap: balance;
   }
   
-  /* OKX 风格按钮悬停效果 */
+  /* OKX 椋庢牸鎸夐挳鎮仠鏁堟灉 */
   .okx-button-hover {
     @apply transition-all duration-200;
   }
   
   .okx-button-hover:hover {
-    @apply transform scale-[1.02] shadow-lg;
+    @apply shadow-sm;
   }
   
-  /* 价格闪烁效果 */
+  /* 浠锋牸闂儊鏁堟灉 */
   .price-up {
     color: #00D26A;
     animation: priceFlashUp 0.3s ease-in-out;
@@ -229,19 +900,19 @@ body {
     animation: priceFlashDown 0.3s ease-in-out;
   }
   
-  /* 卡片样式 */
+  /* 鍗＄墖鏍峰紡 */
   .okx-card {
     background-color: var(--okx-bg-card);
     border: 1px solid var(--okx-border-primary);
-    border-radius: 12px;
+    border-radius: 4px;
     box-shadow: var(--card-shadow);
   }
 
-  /* 输入框样式 */
+  /* 杈撳叆妗嗘牱寮?*/
   .okx-input {
     background-color: var(--okx-bg-secondary);
     border: 1px solid var(--okx-border-primary);
-    border-radius: 8px;
+    border-radius: 4px;
     color: var(--okx-text-primary);
     transition: all 0.2s;
   }
@@ -255,47 +926,52 @@ body {
     border-color: var(--input-border-focus);
   }
 
-  /* DEXI 专属卡片 */
+  /* DEXI 涓撳睘鍗＄墖 */
   .meme-card {
     background-color: var(--okx-bg-card);
     border: 1px solid var(--okx-border-primary);
-    border-radius: 16px;
-    transition: border-color 0.2s;
+    border-radius: 4px;
+    transition: background-color 0.2s, border-color 0.2s;
   }
 
   .meme-card:hover {
     border-color: var(--okx-border-hover);
+    background-color: color-mix(in srgb, var(--okx-bg-card) 86%, white 3%);
   }
 
-  /* 荧光绿输入框 */
+  /* DEXI 杈撳叆妗?*/
   .meme-input {
     background-color: var(--input-bg);
-    border: 1px solid var(--okx-border-primary);
-    border-radius: 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
     color: var(--okx-text-primary);
     transition: all 0.2s;
   }
 
   .meme-input:focus {
     outline: none;
-    border-color: #BFFF00;
-    box-shadow: 0 0 0 1px rgba(191, 255, 0, 0.2);
+    border-color: var(--input-border-focus);
+    box-shadow: 0 0 0 3px var(--dexi-focus);
   }
 
   .meme-input::placeholder {
     color: var(--okx-text-tertiary);
   }
 
-  /* 荧光绿按钮 */
+  /* DEXI 涓绘寜閽?*/
   .meme-btn-primary {
-    @apply bg-[#BFFF00] text-black font-bold rounded-xl transition-all duration-200;
+    background-color: var(--dexi-accent);
+    color: #070A0D;
+    border-radius: 4px;
+    font-weight: 600;
+    transition: background-color 0.2s, transform 0.2s, opacity 0.2s;
   }
 
   .meme-btn-primary:hover {
-    @apply opacity-90 shadow-[0_0_20px_rgba(191,255,0,0.3)];
+    background-color: var(--dexi-accent-strong);
   }
 
-  /* 状态徽章 */
+  /* 鐘舵€佸窘绔?*/
   .meme-badge {
     @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium;
   }
@@ -313,11 +989,12 @@ body {
   }
 
   .meme-badge-lime {
-    @apply bg-[#BFFF00]/15 text-[#BFFF00];
+    background-color: var(--dexi-accent-soft);
+    color: var(--dexi-accent-strong);
   }
 }
 
-/* 关键帧动画 */
+/* 鍏抽敭甯у姩鐢?*/
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);
@@ -374,7 +1051,7 @@ body {
   }
 }
 
-/* 新交易高亮动画 */
+/* 鏂颁氦鏄撻珮浜姩鐢?*/
 .trade-new {
   animation: slideInFromRight 0.3s ease-out, highlightFade 2s ease-out;
 }
@@ -388,7 +1065,7 @@ body {
   }
 }
 
-/* 数字变化动画 */
+/* 鏁板瓧鍙樺寲鍔ㄧ敾 */
 .number-change-up {
   animation: numberFlashUp 0.5s ease-out;
 }
@@ -417,7 +1094,7 @@ body {
   }
 }
 
-/* 最新成交入场动画 — 行背景短暂高亮 */
+/* 鏈€鏂版垚浜ゅ叆鍦哄姩鐢?鈥?琛岃儗鏅煭鏆傞珮浜?*/
 @keyframes tradeFlash {
   0% { background-color: rgba(255, 255, 255, 0.06); }
   100% { background-color: transparent; }
@@ -425,3 +1102,4 @@ body {
 .animate-trade-flash {
   animation: tradeFlash 0.6s ease-out;
 }
+
