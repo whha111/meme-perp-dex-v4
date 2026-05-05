@@ -93,8 +93,9 @@ export function Navbar() {
   const isWrongNetwork = !!chain && chain.id !== targetChainId;
   const formattedBalance = balance ? `${parseFloat(balance.formatted).toFixed(4)} ${balance.symbol}` : '';
 
-  const goToToken = (tokenAddress: string) => {
-    router.push(`/perp?symbol=${tokenAddress}`);
+  const goToToken = (token: { address: string; symbol?: string | null }) => {
+    const symbol = token.symbol?.toUpperCase();
+    router.push(symbol ? `/perp?marketId=${symbol}-USDT-PERP` : `/perp?symbol=${token.address}`);
     setSearchQuery('');
     setSearchFocused(false);
     setMobileMenuOpen(false);
@@ -129,7 +130,6 @@ export function Navbar() {
                   <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={false}
                   className={`relative flex h-full items-center px-3 text-[14px] transition-colors ${
                       isActive ? 'text-[#F3F7F9]' : 'text-[#A0ACB8] hover:text-[#F3F7F9]'
                     }`}
@@ -155,7 +155,7 @@ export function Navbar() {
                 onFocus={() => setSearchFocused(true)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && searchResults.length > 0) {
-                    goToToken(searchResults[0].address);
+                    goToToken(searchResults[0]);
                   }
                   if (event.key === 'Escape') setSearchFocused(false);
                 }}
@@ -168,7 +168,7 @@ export function Navbar() {
                     searchResults.map((token) => (
                       <button
                         key={token.address}
-                        onClick={() => goToToken(token.address)}
+                        onClick={() => goToToken(token)}
                         className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-[#1D2430]"
                       >
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#5EEAD4]/20 text-xs font-bold text-[#8FF7E8]">
@@ -265,7 +265,6 @@ export function Navbar() {
                 <Link
                   key={href}
                   href={href}
-                  prefetch={false}
                   className={`rounded-[0.375rem] px-3 py-1.5 text-[13px] font-medium transition-colors ${
                     isActive
                       ? 'bg-[#151A22] text-[#F7FAFC]'
@@ -289,7 +288,7 @@ export function Navbar() {
               onFocus={() => setSearchFocused(true)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && searchResults.length > 0) {
-                  goToToken(searchResults[0].address);
+                  goToToken(searchResults[0]);
                 }
                 if (event.key === 'Escape') setSearchFocused(false);
               }}
@@ -302,7 +301,7 @@ export function Navbar() {
                   searchResults.map((token) => (
                     <button
                       key={token.address}
-                      onClick={() => goToToken(token.address)}
+                      onClick={() => goToToken(token)}
                       className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-okx-bg-hover"
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-dexi-accent-soft text-xs font-bold text-meme-lime">
@@ -445,7 +444,6 @@ export function Navbar() {
                   key={href}
                   href={href}
                   onClick={() => setMobileMenuOpen(false)}
-                  prefetch={false}
                   className={`rounded-md px-3 py-3 text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-okx-bg-hover text-okx-text-primary'

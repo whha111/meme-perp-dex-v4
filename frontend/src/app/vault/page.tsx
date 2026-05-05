@@ -32,16 +32,16 @@ const protocolVaults = [
 ];
 
 const userVaults = [
-  ["[ Systemic Strategies ] HyperGrowth", "0x2b80...6f4b", "72.87%", "$11,073,850.65", "$0.00", "247", "up"],
-  ["[ Systemic Strategies ] L/S Grids", "0x2b80...6f4b", "72.28%", "$8,510,509.77", "$0.00", "466", "up"],
+  ["Systemic Meme Growth", "0x2b80...6f4b", "72.87%", "$11,073,850.65", "$0.00", "247", "up"],
+  ["Delta Neutral Grids", "0x2b80...6f4b", "72.28%", "$8,510,509.77", "$0.00", "466", "up"],
   ["Growi HF", "0x7789...f60d", "33.76%", "$7,901,349.02", "$0.00", "664", "up"],
   ["Ultron", "0x8d3f...c056", "149.66%", "$5,159,339.58", "$0.00", "151", "up"],
   ["drkmttr", "0xf4f7...239f", "728.02%", "$4,447,173.82", "$0.00", "145", "up"],
   ["Bitcoin Moving Average Long/Short", "0x1fa1...1d08", "-13.57%", "$3,354,909.66", "$0.00", "214", "down"],
   ["Orbit Value Strategies", "0xf292...9edf", "114.40%", "$3,097,298.94", "$0.00", "140", "up"],
   ["AIQuantPulse", "0xcbdf...b4b3", "-0.45%", "$2,671,948.60", "$0.00", "91", "down"],
-  ["FC Genesis - Quantum", "0x3d32...cfec", "0.23%", "$2,448,049.86", "$0.00", "233", "up"],
-  ["Long HYPE & BTC | Short Garbage", "0xa380...d939", "133.31%", "$2,056,560.45", "$0.00", "389", "up"],
+  ["FC Genesis Quantum", "0x3d32...cfec", "0.23%", "$2,448,049.86", "$0.00", "233", "up"],
+  ["Long Meme Majors", "0xa380...d939", "133.31%", "$2,056,560.45", "$0.00", "389", "up"],
 ];
 
 const sparkUp = "M6 42 L16 24 L26 31 L36 16 L46 27 L56 25 L66 30 L76 18 L86 20 L96 14";
@@ -61,15 +61,14 @@ function UserSparkline({ direction }: { direction: string }) {
 }
 
 function VaultLogo({ name, tag }: { name: string; tag: string }) {
-  const initial = tag.slice(0, 1);
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#18212B] text-[11px] font-bold text-[#5EEAD4] ring-1 ring-[#334052]">
-        {initial}
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#102B29] text-[11px] font-bold text-[#5EEAD4] ring-1 ring-[#28514D]">
+        {tag.slice(0, 1)}
       </span>
       <span className="min-w-0">
         <span className="block truncate text-[13px] font-semibold text-white">{name}</span>
-        <span className="mt-0.5 block text-[11px] text-[#77838F]">{tag}</span>
+        <span className="mt-0.5 block text-[11px] text-[#7F9A96]">{tag}</span>
       </span>
     </div>
   );
@@ -80,21 +79,22 @@ export default function VaultPage() {
   const { openConnectModal } = useConnectModal();
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#0A0C11] text-white">
-      <div className="pointer-events-none absolute -bottom-[420px] -left-[260px] h-[760px] w-[760px] rounded-full border border-[rgba(51,64,82,0.18)]" />
-      <div className="pointer-events-none absolute -bottom-[360px] -left-[210px] h-[650px] w-[650px] rounded-full border border-[rgba(51,64,82,0.12)]" />
-      <div className="pointer-events-none absolute right-[-280px] top-[180px] h-[880px] w-[880px] rounded-full border border-[rgba(51,64,82,0.16)]" />
-      <div className="pointer-events-none absolute right-[-200px] top-[250px] h-[740px] w-[740px] rounded-full border border-[rgba(51,64,82,0.10)]" />
-      <div className="relative z-10 border-b border-[#2B3542] bg-[#10141B] px-4 py-3 text-[13px] text-[#8FF7E8]">
-        欢迎来到 DEXI 金库：选择策略池，或连接钱包查看您的存款与收益。
+    <main className="relative min-h-[calc(100vh-44px)] overflow-hidden bg-[#031F1A] text-white">
+      <div className="pointer-events-none absolute -bottom-[420px] -left-[260px] h-[760px] w-[760px] rounded-full border border-[rgba(94,234,212,0.10)]" />
+      <div className="pointer-events-none absolute -bottom-[360px] -left-[210px] h-[650px] w-[650px] rounded-full border border-[rgba(94,234,212,0.07)]" />
+      <div className="pointer-events-none absolute right-[-280px] top-[180px] h-[880px] w-[880px] rounded-full border border-[rgba(94,234,212,0.09)]" />
+      <div className="pointer-events-none absolute right-[-200px] top-[250px] h-[740px] w-[740px] rounded-full border border-[rgba(94,234,212,0.06)]" />
+
+      <div className="relative z-10 border-b border-[#143A36] bg-[#5EEAD4] px-4 py-3 text-[13px] font-semibold text-[#03110F]">
+        DEXI vaults are self-custody liquidity products. Connect wallet to view your LP positions.
       </div>
 
       <div className="relative z-10 mx-auto max-w-[1312px] px-6 py-10">
         <section className="mb-7 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-[42px] font-semibold leading-none tracking-normal text-white">金库</h1>
-            <div className="mt-7 w-[360px] max-w-full rounded-[8px] bg-[#121822] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.24)]">
-              <div className="text-[13px] text-[#8E9AA7]">总锁定价值</div>
+            <h1 className="text-[42px] font-semibold leading-none tracking-normal text-white">Vaults</h1>
+            <div className="mt-7 w-[360px] max-w-full rounded-[8px] bg-[#0B171E] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.24)]">
+              <div className="text-[13px] text-[#8E9AA7]">Total locked value</div>
               <div className="mt-2 font-mono text-[31px] font-semibold leading-tight text-white">$479,025,345</div>
             </div>
           </div>
@@ -104,47 +104,47 @@ export default function VaultPage() {
             className="inline-flex h-11 items-center justify-center gap-2 rounded-[8px] bg-[#5EEAD4] px-5 text-[14px] font-semibold text-[#061215] transition-colors hover:bg-[#8FF7E8]"
           >
             <Wallet className="h-4 w-4" />
-            {isConnected ? "管理连接" : "建立连接"}
+            {isConnected ? "Manage connection" : "Connect wallet"}
           </button>
         </section>
 
-        <section className="rounded-[8px] bg-[#121822] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+        <section className="rounded-[8px] bg-[#0B171E] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex h-9 w-full items-center gap-2 rounded-[7px] border border-[#334052] bg-[#151C25] px-3 lg:max-w-[410px]">
+            <div className="flex h-9 w-full items-center gap-2 rounded-[7px] border border-[#263845] bg-[#0D1920] px-3 lg:max-w-[410px]">
               <Search className="h-4 w-4 text-[#A7B2BE]" />
               <input
                 className="h-full min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-[#77838F]"
-                placeholder="按金库地址、名称或创建者搜索..."
+                placeholder="Search by vault, manager, or address..."
               />
             </div>
             <div className="flex items-center gap-2">
-              <button className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#334052] bg-[#151C25] px-3 text-[13px] font-semibold text-white">
+              <button className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#263845] bg-[#0D1920] px-3 text-[13px] font-semibold text-white">
                 Leading, Deposited, Others
                 <ChevronDown className="h-4 w-4 text-[#8E9AA7]" />
               </button>
-              <button className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#334052] bg-[#151C25] px-3 text-[13px] font-semibold text-white">
+              <button className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#263845] bg-[#0D1920] px-3 text-[13px] font-semibold text-white">
                 30D
                 <ChevronDown className="h-4 w-4 text-[#8E9AA7]" />
               </button>
             </div>
           </div>
 
-          <section className="mb-9">
-            <h2 className="mb-5 text-[15px] font-semibold text-white">协议金库</h2>
-            <div className="grid grid-cols-[minmax(240px,1.6fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center px-0 pb-3 text-[12px] text-[#77838F]">
-              <span>金库</span>
-              <span>创建者</span>
-              <span>年利率</span>
-              <span>TVL（总锁定价值）</span>
-              <span>您的存款</span>
-              <span>年龄（天）</span>
-              <span className="text-right">快照</span>
-            </div>
-            <div>
+          <section className="mb-9 overflow-x-auto">
+            <h2 className="mb-5 text-[15px] font-semibold text-white">Protocol vaults</h2>
+            <div className="min-w-[930px]">
+              <div className="grid grid-cols-[minmax(240px,1.6fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center pb-3 text-[12px] text-[#77838F]">
+                <span>Vault</span>
+                <span>Manager</span>
+                <span>APR</span>
+                <span>TVL</span>
+                <span>Your deposit</span>
+                <span>Age days</span>
+                <span className="text-right">Snapshot</span>
+              </div>
               {protocolVaults.map((vault) => (
                 <div
                   key={vault.name}
-                  className="grid grid-cols-[minmax(240px,1.6fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center border-t border-[#2B3542] py-3 text-[13px]"
+                  className="grid grid-cols-[minmax(240px,1.6fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center border-t border-[#263845] py-3 text-[13px]"
                 >
                   <VaultLogo name={vault.name} tag={vault.tag} />
                   <span className="font-mono font-semibold text-white">{vault.manager}</span>
@@ -160,30 +160,30 @@ export default function VaultPage() {
             </div>
           </section>
 
-          <section>
+          <section className="overflow-x-auto">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold text-white">用户金库</h2>
+              <h2 className="text-[15px] font-semibold text-white">User vaults</h2>
               <button className="inline-flex items-center gap-2 text-[12px] font-semibold text-[#8E9AA7] hover:text-white">
                 <SlidersHorizontal className="h-4 w-4" />
-                筛选
+                Filter
               </button>
             </div>
-            <div className="grid grid-cols-[minmax(280px,1.7fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center px-0 pb-3 text-[12px] text-[#77838F]">
-              <span>金库</span>
-              <span>创建者</span>
-              <span>年利率</span>
-              <span>TVL（总锁定价值）</span>
-              <span>您的存款</span>
-              <span>年龄（天）</span>
-              <span className="text-right">快照</span>
-            </div>
-            <div>
+            <div className="min-w-[930px]">
+              <div className="grid grid-cols-[minmax(280px,1.7fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center pb-3 text-[12px] text-[#77838F]">
+                <span>Vault</span>
+                <span>Manager</span>
+                <span>APR</span>
+                <span>TVL</span>
+                <span>Your deposit</span>
+                <span>Age days</span>
+                <span className="text-right">Snapshot</span>
+              </div>
               {userVaults.map(([name, manager, apr, tvl, deposit, age, trend], index) => {
                 const positive = !apr.startsWith("-");
                 return (
                   <div
                     key={name}
-                    className="grid grid-cols-[minmax(280px,1.7fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center border-t border-[#2B3542] py-2.5 text-[13px]"
+                    className="grid grid-cols-[minmax(280px,1.7fr)_minmax(120px,1fr)_110px_minmax(150px,1fr)_120px_90px_110px] items-center border-t border-[#263845] py-2.5 text-[13px]"
                   >
                     <VaultLogo name={name} tag={`V${index + 1}`} />
                     <span className="font-mono font-semibold text-white">{manager}</span>
@@ -217,13 +217,13 @@ export default function VaultPage() {
       </div>
 
       <div className="fixed bottom-3 left-3 z-20 rounded-[4px] border border-[#5EEAD4]/40 bg-[#0F2528] px-2 py-1 text-[12px] text-[#5EEAD4]">
-        ● 在线
+        Online
       </div>
       <div className="fixed bottom-4 right-5 z-20 flex gap-5 text-[12px] font-semibold text-white/80">
-        <span>文档</span>
-        <span>支持</span>
-        <span>条款</span>
-        <span>隐私政策</span>
+        <span>Docs</span>
+        <span>Support</span>
+        <span>Terms</span>
+        <span>Privacy</span>
       </div>
     </main>
   );
